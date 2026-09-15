@@ -1,0 +1,361 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------ */
+/* 字体与动画（@theme：以 CSS 变量形式发出，keyframes 随动画工具类按需生成） */
+/* ------------------------------------------------------------------ */
+@theme {
+  --font-sans:
+    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-mono:
+    "Cascadia Mono", ui-monospace, SFMono-Regular, Consolas, "Courier New",
+    monospace;
+
+  /* Radix 浮层动画：只用 opacity + scale 独立属性，
+     避免和 Radix Popper 的 transform 定位、Tailwind v4 的 translate 属性冲突 */
+  --animate-overlay-show: overlay-show 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-overlay-hide: overlay-hide 0.12s ease-in;
+  --animate-content-show: content-show 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-content-hide: content-hide 0.12s ease-in;
+
+  @keyframes overlay-show {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes overlay-hide {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes content-show {
+    from {
+      opacity: 0;
+      scale: 0.96;
+    }
+  }
+  @keyframes content-hide {
+    to {
+      opacity: 0;
+      scale: 0.96;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 颜色 / 圆角令牌映射（shadcn v4 标准做法）                            */
+/* ------------------------------------------------------------------ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ------------------------------------------------------------------ */
+/* 浅色 / 深色变量（shadcn 标准 neutral 色）                            */
+/* ------------------------------------------------------------------ */
+:root {
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(240 10% 3.9%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(240 10% 3.9%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(240 10% 3.9%);
+  --primary: hsl(240 5.9% 10%);
+  --primary-foreground: hsl(0 0% 98%);
+  --secondary: hsl(240 4.8% 95.9%);
+  --secondary-foreground: hsl(240 5.9% 10%);
+  --muted: hsl(240 4.8% 95.9%);
+  --muted-foreground: hsl(240 3.8% 46.1%);
+  --accent: hsl(240 4.8% 95.9%);
+  --accent-foreground: hsl(240 5.9% 10%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 5.9% 90%);
+  --input: hsl(240 5.9% 90%);
+  --ring: hsl(240 5.9% 10%);
+  --radius: 0.625rem;
+
+  /* 滚动条 */
+  --scrollbar-thumb: hsl(240 4% 46.1% / 0.3);
+  --scrollbar-thumb-hover: hsl(240 4% 46.1% / 0.5);
+
+  color-scheme: light;
+}
+
+.dark {
+  --background: hsl(240 10% 3.9%);
+  --foreground: hsl(0 0% 98%);
+  --card: hsl(240 10% 3.9%);
+  --card-foreground: hsl(0 0% 98%);
+  --popover: hsl(240 10% 3.9%);
+  --popover-foreground: hsl(0 0% 98%);
+  --primary: hsl(0 0% 98%);
+  --primary-foreground: hsl(240 5.9% 10%);
+  --secondary: hsl(240 3.7% 15.9%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(240 3.7% 15.9%);
+  --muted-foreground: hsl(240 5% 64.9%);
+  --accent: hsl(240 3.7% 15.9%);
+  --accent-foreground: hsl(0 0% 98%);
+  --destructive: hsl(0 62.8% 30.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 3.7% 15.9%);
+  --input: hsl(240 3.7% 15.9%);
+  --ring: hsl(240 4.9% 83.9%);
+
+  --scrollbar-thumb: hsl(240 5% 84.9% / 0.22);
+  --scrollbar-thumb-hover: hsl(240 5% 84.9% / 0.4);
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------ */
+/* 全局基础                                                            */
+/* ------------------------------------------------------------------ */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* 便签窗口需要透明：不强制 body 背景，由每个窗口根容器自带上色 */
+  html,
+  body {
+    background: transparent;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  /* 统一 focus-visible 描边；带自定义 ring 的组件会用 outline-none 覆盖 */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* 细滚动条：Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  /* 细滚动条：WebKit */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Markdown 渲染样式（.md-body，深浅色经 CSS 变量自动适配）              */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .md-body {
+    color: var(--foreground);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    word-break: break-word;
+  }
+  .md-body > :first-child {
+    margin-top: 0;
+  }
+  .md-body > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* 标题 */
+  .md-body h1 {
+    font-size: 1.5em;
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 1.2em 0 0.5em;
+  }
+  .md-body h2 {
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 1.1em 0 0.45em;
+  }
+  .md-body h3 {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 1em 0 0.4em;
+  }
+  .md-body h4,
+  .md-body h5,
+  .md-body h6 {
+    font-size: 1em;
+    font-weight: 600;
+    margin: 0.9em 0 0.35em;
+  }
+
+  /* 段落 */
+  .md-body p {
+    margin: 0.5em 0;
+  }
+
+  /* 列表 */
+  .md-body ul,
+  .md-body ol {
+    margin: 0.5em 0;
+    padding-inline-start: 1.5em;
+  }
+  .md-body ul {
+    list-style: disc;
+  }
+  .md-body ol {
+    list-style: decimal;
+  }
+  .md-body li {
+    margin: 0.25em 0;
+  }
+  .md-body li > ul,
+  .md-body li > ol {
+    margin: 0.25em 0;
+  }
+  .md-body li > ul {
+    list-style: circle;
+  }
+
+  /* 引用 */
+  .md-body blockquote {
+    margin: 0.75em 0;
+    padding-inline-start: 0.75em;
+    border-left: 3px solid var(--border);
+    color: var(--muted-foreground);
+  }
+
+  /* 行内代码 / 代码块 */
+  .md-body code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--secondary);
+    color: var(--foreground);
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+  }
+  .md-body pre {
+    margin: 0.75em 0;
+    padding: 0.75em 1em;
+    overflow-x: auto;
+    background: hsl(240 10% 10%);
+    color: hsl(0 0% 93%);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    font-size: 0.85em;
+    line-height: 1.6;
+  }
+  .md-body pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+    border-radius: 0;
+  }
+
+  /* 表格：边框 + 斑马纹 */
+  .md-body table {
+    width: 100%;
+    margin: 0.75em 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+  }
+  .md-body th,
+  .md-body td {
+    border: 1px solid var(--border);
+    padding: 0.35em 0.65em;
+    text-align: left;
+    vertical-align: top;
+  }
+  .md-body th {
+    background: var(--muted);
+    font-weight: 600;
+  }
+  .md-body tbody tr:nth-child(2n) {
+    background: var(--secondary);
+  }
+
+  /* 分割线 */
+  .md-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.25em 0;
+  }
+
+  /* 图片 */
+  .md-body img {
+    max-width: 100%;
+    height: auto;
+    margin: 0.5em 0;
+    border-radius: var(--radius);
+  }
+
+  /* 链接 */
+  .md-body a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* 任务列表（remark-gfm） */
+  .md-body ul.contains-task-list,
+  .md-body ul:has(> li.task-list-item) {
+    list-style: none;
+    padding-inline-start: 0.25em;
+  }
+  .md-body li.task-list-item {
+    list-style: none;
+  }
+  .md-body li.task-list-item input[type="checkbox"] {
+    width: 0.9em;
+    height: 0.9em;
+    margin-right: 0.4em;
+    vertical-align: middle;
+    cursor: pointer;
+    accent-color: var(--primary);
+  }
+}

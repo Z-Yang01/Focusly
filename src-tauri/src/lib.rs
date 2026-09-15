@@ -1,0 +1,149 @@
+//! Focusly 应用组装：插件注册、setup 初始化顺序、窗口事件与命令表。
+
+mod commands;
+mod db;
+mod error;
+mod export;
+mod filesystem;
+mod logger;
+mod notes;
+mod reminder;
+mod shortcut;
+mod state;
+mod tray;
+mod vdesktop;
+mod window;
+
+use tauri::Manager;
+
+use state::AppState;
+
+pub fn run() {
+    tauri::Builder::default()
+        // 单实例：必须最先注册，二次启动时唤起已有实例的管理器
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            window::show_manager(app);
+        }))
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        // shortcut.to_string() 与注册串格式不一致，
+                        // 用 mods/key 的稳定规范化键匹配（见 shortcut.rs）
+                        if let Some(action) = shortcut::action_for_key(app, shortcut) {
+                            shortcut::dispatch_action(app, &action);
+                        }
+                    }
+                })
+                .build(),
+        )
+        .setup(|app| {
+            // 1. 数据目录与日志
+            let data_dir = app.path().app_data_dir()?;
+            let paths = filesystem::AppPaths::init(data_dir).expect("无法初始化应用数据目录");
+            logger::init(&paths.logs);
+            log::info!(
+                "Focusly v{} 启动，数据目录 {}",
+                env!("CARGO_PKG_VERSION"),
+                paths.root.display()
+            );
+
+            // 2. 数据库：打开 → 迁移 → 启动备份
+            let app_db = db::Db::open(&paths.db)?;
+            app_db.with(db::migrations::run)?;
+            if let Err(e) = filesystem::backup_database(&paths) {
+                log::warn!("启动备份数据库失败: {e}");
+            }
+
+            // 3. 共享状态（先 manage，后续模块才能 app.state::<AppState>()）
+            let (scheduler, scheduler_rx) = reminder::channel();
+            app.manage(AppState {
+                db: app_db,
+                paths,
+                scheduler,
+                shortcut_map: std::sync::Mutex::new(std::collections::HashMap::new()),
+                fullscreen_hidden: std::sync::Mutex::new(std::collections::HashSet::new()),
+                geometry_gens: std::sync::Mutex::new(std::collections::HashMap::new()),
+            });
+
+            // 4. 托盘（失败仅日志，不阻断启动）
+            if let Err(e) = tray::create_tray(app.handle()) {
+                log::error!("托盘图标创建失败: {e}");
+            }
+
+            // 5. 全局快捷键
+            if let Err(e) = shortcut::register_all(app.handle()) {
+                log::error!("全局快捷键注册失败: {e}");
+            }
+
+            // 6. 启动窗口（便签恢复 / 管理器是否显示）
+            window::startup_windows(app.handle())?;
+
+            // 7. 全屏检测 + 提醒调度器（依赖已 manage 的状态）
+            window::foreground::spawn(app.handle().clone());
+            reminder::spawn_loop(app.handle().clone(), scheduler_rx);
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            window::handle_window_event(window.app_handle(), window.label(), event);
+        })
+        .invoke_handler(tauri::generate_handler![
+            // 便签
+            commands::notes_cmd::create_note,
+            commands::notes_cmd::new_note,
+            commands::notes_cmd::open_note_window,
+            commands::notes_cmd::get_note,
+            commands::notes_cmd::list_notes,
+            commands::notes_cmd::update_note_content,
+            commands::notes_cmd::set_note_flag,
+            commands::notes_cmd::set_note_fullscreen_behavior,
+            commands::notes_cmd::archive_note,
+            commands::notes_cmd::restore_note,
+            commands::notes_cmd::delete_note,
+            commands::notes_cmd::search_notes,
+            commands::notes_cmd::set_note_tags,
+            commands::notes_cmd::get_tags,
+            // 图片
+            commands::images_cmd::add_image,
+            commands::images_cmd::add_image_data,
+            commands::images_cmd::remove_image,
+            commands::images_cmd::image_exists,
+            // 提醒
+            commands::reminders_cmd::set_reminder,
+            commands::reminders_cmd::cancel_reminder,
+            commands::reminders_cmd::complete_reminder,
+            commands::reminders_cmd::snooze_reminder,
+            commands::reminders_cmd::list_reminders,
+            // 设置
+            commands::settings_cmd::get_all_settings,
+            commands::settings_cmd::set_setting,
+            commands::settings_cmd::get_shortcuts,
+            commands::settings_cmd::set_shortcut,
+            commands::settings_cmd::reset_shortcuts,
+            // 系统
+            commands::system_cmd::show_all_notes,
+            commands::system_cmd::hide_all_notes,
+            commands::system_cmd::toggle_all_notes,
+            commands::system_cmd::show_manager,
+            commands::system_cmd::hide_manager,
+            commands::system_cmd::quit_app,
+            commands::system_cmd::note_window_ready,
+            commands::system_cmd::close_note_window,
+            commands::system_cmd::export_data,
+            commands::system_cmd::import_data,
+            commands::system_cmd::open_external,
+            commands::system_cmd::reveal_data_dir,
+            commands::system_cmd::get_app_info,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running focusly");
+}

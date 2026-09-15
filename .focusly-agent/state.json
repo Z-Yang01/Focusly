@@ -1,0 +1,12 @@
+{
+  "started_at": "2026-09-16T01:19:53",
+  "deadline": "2026-09-16T08:00:00",
+  "hard_stop": "2026-09-16T08:15:00",
+  "phase": "P0-并行开发",
+  "in_progress": ["A-数据层迁移", "B-FTS5搜索", "D-自然语言提醒", "G-回收站版本UI"],
+  "completed": ["基线git提交"],
+  "blocked": ["MSVC未安装→Rust无法链接验证(等待用户或PortableBuildTools备选)"],
+  "last_commit": null,
+  "test_status": { "tsc": "pass", "vitest": "41/41", "cargo": "BLOCKED_NO_LINKER" },
+  "updated_at": "2026-09-16T01:20:00"
+}
