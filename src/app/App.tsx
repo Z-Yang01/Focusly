@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/app/theme";
 import { getWindowRole } from "@/lib/tauri";
 import { ManagerWindow } from "@/features/notes/ManagerWindow";
 import { NoteWindow } from "@/features/notes/NoteWindow";
+import { QuickCaptureWindow } from "@/features/quick-capture/QuickCaptureWindow";
 
 export default function App() {
   const [role] = useState(getWindowRole);
@@ -13,6 +14,8 @@ export default function App() {
     <ThemeProvider>
       {role.kind === "manager" ? (
         <ManagerWindow />
+      ) : role.kind === "quick-capture" ? (
+        <QuickCaptureWindow />
       ) : (
         <NoteWindow noteId={role.noteId} />
       )}

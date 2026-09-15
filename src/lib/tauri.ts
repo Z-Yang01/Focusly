@@ -12,11 +12,13 @@ import { EVENTS } from "@/types";
 /** 当前窗口角色 */
 export type WindowRole =
   | { kind: "manager" }
-  | { kind: "note"; noteId: string };
+  | { kind: "note"; noteId: string }
+  | { kind: "quick-capture" };
 
 export function getWindowRole(): WindowRole {
   const label = getCurrentWebviewWindow().label;
   if (label === "manager") return { kind: "manager" };
+  if (label === "quick-capture") return { kind: "quick-capture" };
   const noteId = label.replace(/^note-/, "");
   return noteId ? { kind: "note", noteId } : { kind: "manager" };
 }
