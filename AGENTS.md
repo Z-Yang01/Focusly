@@ -44,8 +44,13 @@ Focusly/
 │       ├── state.rs            # AppState（db/paths/scheduler/快捷键映射/全屏隐藏集）
 │       ├── error.rs            # AppError 统一错误（序列化为 {kind,message}）
 │       ├── db/                 # SQLite 层：连接 + migrations + DAO（SQL 只在这里）
-│       │   ├── migrations.rs   #   PRAGMA user_version 迁移，7 张表
-│       │   └── notes.rs / reminders.rs / images.rs / tags.rs / settings.rs / shortcuts.rs
+│       │   ├── migrations.rs   #   PRAGMA user_version 迁移（v1 基础7表 / v2 回收站·版本·私密·FTS5 / v3 布局预设）
+│       │   ├── notes.rs / reminders.rs / images.rs / tags.rs / settings.rs / shortcuts.rs
+│       │   ├── versions.rs     #   便签版本历史（每签上限50，恢复前自动快照）
+│       │   ├── search.rs       #   FTS5 trigram 索引同步 + 全文搜索（<3字符降级LIKE，防注入）
+│       │   ├── todos_view.rs   #   今日/逾期/未来7天视图聚合
+│       │   ├── clipboard.rs    #   剪贴板历史（上限100，pinned 不淘汰）
+│       │   ├── saved_searches.rs / layouts.rs / missed.rs
 │       ├── commands/           # #[tauri::command] 薄层（无业务逻辑）
 │       ├── notes.rs            # 便签业务编排（DB + 窗口 + 事件）
 │       ├── export.rs           # JSON 导出/导入（ExportData 结构 + 事务 upsert）
@@ -53,6 +58,13 @@ Focusly/
 │       │   ├── monitor.rs      #   Win32 枚举显示器、全屏前台检测
 │       │   └── foreground.rs   #   SetWinEventHook 事件驱动全屏跟随
 │       ├── vdesktop.rs         # Windows 虚拟桌面 Pin（IVirtualDesktopPinnedApps COM）
+│       ├── privacy.rs          # 私密便签防线：通知脱敏/摘要掩码/导出过滤（纯函数）
+│       ├── quickcapture.rs     # 快速捕获窗 + 剪贴板历史服务
+│       ├── imagemgr.rs         # 图片去重(sha256)/孤儿清理/缩略图
+│       ├── daily.rs            # 每日笔记 get_or_create
+│       ├── timeparse.rs        # 中文自然语言时间解析（明天下午3点/每周一10点/工作日9点…）
+│       ├── dnd.rs              # 通知勿扰时段（跨午夜）+ 错过提醒汇总
+│       ├── export.rs           # JSON 导出/导入（默认排除私密便签）
 │       ├── reminder.rs         # tokio sleep_until 事件驱动提醒调度器（无轮询）
 │       ├── shortcut.rs         # 全局快捷键注册/冲突/重载
 │       ├── tray.rs             # 系统托盘
