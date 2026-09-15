@@ -175,3 +175,10 @@ pub fn list_private_notes(state: State<'_, AppState>) -> AppResult<Vec<NoteSumma
 pub fn get_due_view(state: State<'_, AppState>) -> AppResult<crate::db::todos_view::TodoView> {
     state.db.with(|c| crate::db::todos_view::get_due_view(c))
 }
+
+// ---------- 每日笔记（批3） ----------
+
+#[tauri::command]
+pub fn daily_get_or_create(app: AppHandle) -> AppResult<Note> {
+    crate::daily::get_or_create_daily(&app)
+}

@@ -1,10 +1,12 @@
 //! Focusly 应用组装：插件注册、setup 初始化顺序、窗口事件与命令表。
 
 mod commands;
+mod daily;
 mod db;
 mod error;
 mod export;
 mod filesystem;
+mod imagemgr;
 mod logger;
 mod notes;
 mod privacy;
@@ -177,6 +179,12 @@ pub fn run() {
             commands::layout_cmd::layout_arrange_grid,
             // 今日/逾期视图（中文自然语言提醒解析 parse_time_nl 由提醒设置 UI 后续接入）
             commands::notes_cmd::get_due_view,
+            // 图片管理
+            commands::imagemgr_cmd::image_find_duplicates,
+            commands::imagemgr_cmd::image_cleanup_orphans,
+            commands::imagemgr_cmd::image_make_thumbnails,
+            // 模板与每日笔记
+            commands::notes_cmd::daily_get_or_create,
         ])
         .run(tauri::generate_context!())
         .expect("error while running focusly");
