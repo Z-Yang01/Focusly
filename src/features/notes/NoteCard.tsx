@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { archiveNote, deleteNote, restoreNote, setNoteFlag } from "@/lib/api";
+import { archiveNote, restoreNote, setNoteFlag, trashNote } from "@/lib/api";
 import { describeTime, snippetOf } from "@/lib/format";
 import type { NoteSummary } from "@/types";
 
@@ -42,9 +42,10 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
   };
 
   const handleDelete = async () => {
-    if (!confirm(`确定永久删除「${note.title || "无标题"}」？此操作不可恢复。`)) return;
+    // 契约审计修复：删除改为移入回收站（trash_note），永久删除走回收站视图的 purge
+    if (!confirm(`确定将「${note.title || "无标题"}」移入回收站？可在回收站中恢复。`)) return;
     try {
-      await deleteNote(note.id);
+      await trashNote(note.id);
     } catch (err) {
       console.error("删除失败", err);
       alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);

@@ -35,8 +35,10 @@ export interface NoteVersion {
 export const listDeletedNotes = () => invoke<TrashItem[]>("list_deleted_notes");
 export const restoreFromTrash = (noteId: string) =>
   invoke<void>("restore_from_trash", { noteId });
-/** 永久删除（调用方需先 confirm） */
-export const purgeNote = (noteId: string) => invoke<void>("purge_note", { noteId });
+/** 永久删除（调用方需先 confirm）。
+ *  契约审计修复：Rust 端无 purge_note 命令，永久删除复用已注册的 delete_note
+ *  （notes::delete_permanently：关窗 + FTS 清理 + 删除记录与图片文件）。 */
+export const purgeNote = (noteId: string) => invoke<void>("delete_note", { noteId });
 export const emptyTrash = () => invoke<void>("empty_trash");
 
 // ---------- 版本历史 ----------

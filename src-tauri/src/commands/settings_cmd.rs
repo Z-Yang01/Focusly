@@ -15,6 +15,9 @@ const SETTING_KEYS: &[&str] = &[
     "autostart",
     "start_minimized",
     "launch_show_notes",
+    // 勿扰时段（"HH:MM"，空串 = 关闭；读取端见 src-tauri/src/dnd.rs）
+    "dnd_start",
+    "dnd_end",
 ];
 
 const SHORTCUT_ACTIONS: &[&str] = &["toggle_notes", "new_note", "focus_search"];

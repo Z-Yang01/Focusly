@@ -32,6 +32,8 @@ export const setNoteFullscreenBehavior = (noteId: string, behavior: FullscreenBe
 export const archiveNote = (noteId: string) => invoke<Note>("archive_note", { noteId });
 export const restoreNote = (noteId: string) => invoke<Note>("restore_note", { noteId });
 export const deleteNote = (noteId: string) => invoke<void>("delete_note", { noteId });
+/** 移入回收站（软删除，可恢复）；回收站 UI 见 features/archive */
+export const trashNote = (noteId: string) => invoke<Note>("trash_note", { noteId });
 export const searchNotes = (query: string) => invoke<NoteSummary[]>("search_notes", { query });
 export const setNoteTags = (noteId: string, tags: string[]) =>
   invoke<string[]>("set_note_tags", { noteId, tags });

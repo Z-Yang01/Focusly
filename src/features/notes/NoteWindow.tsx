@@ -20,13 +20,13 @@ import {
   cancelReminder,
   closeNoteWindow,
   completeReminder,
-  deleteNote,
   getNote,
   noteWindowReady,
   setNoteFlag,
   setNoteFullscreenBehavior,
   showManager,
   snoozeReminder,
+  trashNote,
 } from "@/lib/api";
 import { onNotesChanged, onReminderFired, type UnlistenFn } from "@/lib/tauri";
 import { savedAtText } from "@/lib/format";
@@ -387,9 +387,10 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   };
 
   const handleDelete = async () => {
-    if (!confirm("确定永久删除该便签？此操作不可恢复。")) return;
+    // 契约审计修复：删除改为移入回收站（trash_note），永久删除走回收站视图的 purge
+    if (!confirm("确定将该便签移入回收站？可在回收站中恢复。")) return;
     try {
-      await deleteNote(noteId);
+      await trashNote(noteId);
       await closeNoteWindow(noteId);
     } catch (err) {
       console.error("删除失败", err);
