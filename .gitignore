@@ -3,21 +3,32 @@ node_modules/
 
 # Build output
 dist/
+dist-ssr/
 src-tauri/target/
 src-tauri/gen/schemas/
 
-# Setup downloads
+# Agent 控制面（运行时状态，本地保留不入库）
+.focusly-agent/
+
+# 会话工具
+.zcode/
+
+# 本地下载
 .setup/
 
 # Local data
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+*.sqlite.bak
 *.bak
 
 # Logs
 *.log
 
-# Editor
+# Editor / OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
