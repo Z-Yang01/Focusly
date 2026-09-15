@@ -2,11 +2,17 @@
   "started_at": "2026-09-16T01:19:53",
   "deadline": "2026-09-16T08:00:00",
   "hard_stop": "2026-09-16T08:15:00",
-  "phase": "P0-并行开发",
-  "in_progress": ["A-数据层迁移", "B-FTS5搜索", "D-自然语言提醒", "G-回收站版本UI"],
-  "completed": ["基线git提交"],
-  "blocked": ["MSVC未安装→Rust无法链接验证(等待用户或PortableBuildTools备选)"],
-  "last_commit": null,
+  "phase": "P0-批1并行开发",
+  "in_progress": {
+    "A-数据层迁移": "migrations v2/FTS5/版本/剪贴板/保存搜索",
+    "B-搜索语法命令面板": "query-parser/SearchBar v2/Ctrl+K",
+    "D-自然语言时间": "timeparse.rs/todos_view.rs/DueViews",
+    "G-回收站版本UI": "TrashView/VersionHistoryPanel/diff.ts"
+  },
+  "completed": ["git基线提交", "控制面建立", "任务图与契约冻结"],
+  "blocked": ["MSVC未安装→Rust编译验证等待（用户已收到命令，等待执行）"],
+  "last_commit": "baseline (main)",
   "test_status": { "tsc": "pass", "vitest": "41/41", "cargo": "BLOCKED_NO_LINKER" },
-  "updated_at": "2026-09-16T01:20:00"
+  "next": "批1合并→批2(C快速捕获/E私密/F窗口布局)→批3(P1)→接线(lib.rs/api.ts/ManagerWindow由总控)→MSVC后全量编译修复",
+  "updated_at": "2026-09-16T01:28:00"
 }
