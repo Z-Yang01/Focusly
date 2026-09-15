@@ -3,6 +3,7 @@
 mod commands;
 mod daily;
 mod db;
+mod dnd;
 mod error;
 mod export;
 mod filesystem;

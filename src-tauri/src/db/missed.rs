@@ -8,8 +8,7 @@
 //! 两端都用 SQLite `datetime()` 规整成 UTC 秒级字符串再比较，
 //! 对 RFC3339 格式差异（`+00:00` / `Z`、精度）鲁棒。
 
-use chrono::SecondsFormat;
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 
 use crate::error::AppResult;
 
@@ -20,7 +19,7 @@ pub fn count_missed(conn: &Connection) -> AppResult<i64> {
          WHERE status = 'cancelled' \
            AND triggered_at IS NULL \
            AND datetime(remind_at) >= datetime('now', '-7 days')",
-        params![],
+        [],
         |r| r.get(0),
     )?;
     Ok(n)
@@ -29,6 +28,7 @@ pub fn count_missed(conn: &Connection) -> AppResult<i64> {
 /// 测试与日志用：与 fmt（reminder::fmt）一致的 remind_at 字符串。
 #[cfg(test)]
 pub(crate) fn rfc3339(t: chrono::DateTime<chrono::Utc>) -> String {
+    use chrono::SecondsFormat;
     t.to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 

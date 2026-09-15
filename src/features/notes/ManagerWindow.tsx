@@ -54,6 +54,7 @@ import { TemplatePicker } from "@/features/templates/TemplatePicker";
 import { applyTemplate, type NoteTemplate } from "@/features/templates/templates";
 import { DailyNoteButton } from "@/features/templates/DailyNoteButton";
 import { ImageManagerDialog } from "@/features/gallery/ImageManagerDialog";
+import { DndSettingsCard } from "@/features/dnd/DndSettingsCard";
 import { cn } from "@/lib/utils";
 
 type ViewKey = "all" | "todo" | "archived" | "today" | "trash" | "private";
@@ -278,6 +279,10 @@ function ManagerContent() {
           {/* 布局工具条（网格排列 / 布局预设） */}
           <div className="mt-3 border-t pt-2">
             <LayoutToolbar />
+          </div>
+          {/* 通知勿扰时段 */}
+          <div className="mt-2 border-t pt-2">
+            <DndSettingsCard />
           </div>
         </aside>
 

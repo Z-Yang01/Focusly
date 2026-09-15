@@ -51,6 +51,21 @@ pub fn spawn(app: AppHandle) -> SchedulerHandle {
 }
 
 pub fn spawn_loop(app: AppHandle, mut rx: UnboundedReceiver<()>) {
+    // 启动时错过提醒汇总（静默失败）
+    {
+        let state = app.state::<AppState>();
+        let summary = state
+            .db
+            .with(|c| crate::db::missed::count_missed(c))
+            .ok()
+            .and_then(|n| crate::dnd::missed_summary_text(n));
+        if let Some(text) = summary {
+            use tauri_plugin_notification::NotificationExt;
+            if let Err(e) = app.notification().builder().title("Focusly").body(&text).show() {
+                log::warn!("错过提醒汇总通知发送失败: {e}");
+            }
+        }
+    }
     tauri::async_runtime::spawn(loop_task(app, rx));
 }
 
@@ -132,6 +147,17 @@ fn fire_due(app: &AppHandle) {
         return;
     }
 
+    // 勿扰时段：一次读取（空键 = 关闭勿扰，fail-open）
+    let settings = state
+        .db
+        .with(|c| crate::db::settings::get_all(c))
+        .unwrap_or_default();
+    let dnd_window = crate::dnd::parse_window(
+        settings.get("dnd_start").map(String::as_str).unwrap_or(""),
+        settings.get("dnd_end").map(String::as_str).unwrap_or(""),
+    );
+    let now_local = chrono::Local::now().naive_local();
+
     for r in due {
         let Ok(t) = parse(&r.remind_at) else { continue };
 
@@ -151,6 +177,22 @@ fn fire_due(app: &AppHandle) {
                 "用户不会收到该条提醒",
                 "如仍需要，请重新设置提醒时间",
             );
+            continue;
+        }
+
+        // 勿扰时段：不发通知、保持 pending，推迟到勿扰结束时刻
+        if !crate::dnd::should_notify(&settings, now_local) {
+            if let Some(w) = &dnd_window {
+                let exit_utc = crate::dnd::next_exit_utc(now, w);
+                if let Err(e) = state
+                    .db
+                    .with(|c| crate::db::reminders::snooze_to(c, &r.id, &crate::reminder::fmt(exit_utc)))
+                {
+                    log::error!("勿扰推迟提醒 {} 失败: {e}", r.id);
+                } else {
+                    log::info!("提醒 {} 处于勿扰时段，推迟到 {}", r.id, exit_utc);
+                }
+            }
             continue;
         }
 

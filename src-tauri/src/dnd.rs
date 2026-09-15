@@ -146,7 +146,7 @@ pub fn next_exit_local(_now_local: chrono::NaiveTime, w: &DndWindow) -> chrono::
 pub fn next_exit_utc(now_utc: DateTime<Utc>, w: &DndWindow) -> DateTime<Utc> {
     let now_naive = now_utc.with_timezone(&Local).naive_local();
     let exit = next_exit_local(now_naive.time(), w);
-    let mut target = now_naive.date_naive().and_time(exit);
+    let mut target = now_naive.date().and_time(exit);
     if target <= now_naive {
         target += chrono::Duration::days(1);
     }
