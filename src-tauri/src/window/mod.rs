@@ -1,6 +1,7 @@
 //! 窗口服务：便签多窗口创建/显隐/几何持久化、管理器窗口、全屏策略应用。
 
 pub mod foreground;
+pub mod layout;
 pub mod monitor;
 
 use std::collections::{HashMap, HashSet};

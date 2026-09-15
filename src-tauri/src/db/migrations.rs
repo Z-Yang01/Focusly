@@ -116,6 +116,15 @@ CREATE TABLE saved_searches (
 );
 CREATE VIRTUAL TABLE notes_fts USING fts5(note_id UNINDEXED, title, body, tags, tokenize='trigram');
 "#,
+    // v3: 窗口布局预设（name 唯一，data 为窗口快照 JSON：[[noteId,x,y,w,h],...]）
+    r#"
+CREATE TABLE layout_presets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  data TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+"#,
 ];
 
 use rusqlite::Connection;
@@ -266,5 +275,59 @@ mod tests {
         assert!(!list[0].note.readonly);
         assert!(list[0].note.deleted_at.is_none());
         assert_eq!(crate::db::notes::list(&conn, "trash").unwrap().len(), 0);
+    }
+
+    /// 模拟 v2 旧库：跑前两条迁移并手工把 user_version 置为 2。
+    fn setup_v2(conn: &Connection) {
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.execute_batch(MIGRATIONS[1]).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+    }
+
+    #[test]
+    fn v2_to_v3_upgrade_creates_layout_presets() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_v2(&conn);
+
+        // v2 时代的旧行数据
+        conn.execute(
+            "INSERT INTO notes (id, title, content, created_at, updated_at) \
+             VALUES ('n1', '旧便签', '内容', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        run(&conn).unwrap();
+
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64);
+
+        // layout_presets 表存在
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'layout_presets'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1);
+
+        // 表结构可用：插入 + name 唯一约束生效
+        conn.execute(
+            "INSERT INTO layout_presets (id, name, data, created_at) VALUES ('p1', '工作', '[]', '')",
+            [],
+        )
+        .unwrap();
+        let dup = conn.execute(
+            "INSERT INTO layout_presets (id, name, data, created_at) VALUES ('p2', '工作', '[]', '')",
+            [],
+        );
+        assert!(dup.is_err(), "name 唯一约束应生效");
+
+        // 旧数据完整
+        let title: String = conn
+            .query_row("SELECT title FROM notes WHERE id = 'n1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(title, "旧便签");
     }
 }

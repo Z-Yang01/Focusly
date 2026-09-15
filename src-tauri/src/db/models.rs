@@ -187,6 +187,9 @@ pub struct ExportData {
     pub tags: Vec<(String, String)>, // note_id, tag_name
     pub shortcuts: Vec<ShortcutEntry>,
     pub settings: Vec<(String, String)>,
+    /// 本次导出是否包含私密便签；旧导出文件缺省按 false 处理（导入不受影响）
+    #[serde(default)]
+    pub includes_private: bool,
 }
 
 /// 全文搜索命中项（snippet 内含 <mark> 高亮标记）。
@@ -238,4 +241,14 @@ pub struct ClipboardEntry {
     pub kind: String,
     pub created_at: String,
     pub pinned: bool,
+}
+
+/// 窗口布局预设（layout_presets 表，name 唯一；data 为窗口快照 JSON：[[noteId,x,y,w,h],...]）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutPreset {
+    pub id: String,
+    pub name: String,
+    pub data: String,
+    pub created_at: String,
 }
