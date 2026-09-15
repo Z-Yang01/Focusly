@@ -154,22 +154,23 @@ fn fire_due(app: &AppHandle) {
             continue;
         }
 
-        // 便签标题与摘要
-        let (title, content) = match state
+        // 便签标题与摘要（私密便签通知脱敏：不下发原文标题与内容）
+        let (title, content, is_private) = match state
             .db
             .with(|c| crate::db::notes::get(c, &r.note_id))
         {
-            Ok(n) => (n.title, n.content),
+            Ok(n) => (n.title, n.content, n.is_private),
             Err(e) => {
                 log::warn!("提醒 {} 关联的便签 {} 不存在: {e}", r.id, r.note_id);
-                ("提醒".to_string(), String::new())
+                ("提醒".to_string(), String::new(), false)
             }
         };
-        let snippet = markdown_snippet(&content, 80);
+        let (notice_title, _) = crate::privacy::notification_text(&title, &content, is_private);
+        let snippet = crate::privacy::mask_snippet(&markdown_snippet(&content, 80), is_private);
         if let Err(e) = app
             .notification()
             .builder()
-            .title(format!("🔔 {title}"))
+            .title(format!("🔔 {notice_title}"))
             .body(snippet)
             .show()
         {
@@ -189,7 +190,7 @@ fn fire_due(app: &AppHandle) {
             json!({
                 "reminderId": r.id,
                 "noteId": r.note_id,
-                "noteTitle": title,
+                "noteTitle": notice_title,
                 "remindAt": r.remind_at,
             }),
         );

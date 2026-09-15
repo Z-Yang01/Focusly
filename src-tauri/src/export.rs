@@ -22,18 +22,31 @@ pub struct ImportSummary {
     pub skipped: usize,
 }
 
-/// 构建导出数据：全部便签（不过滤状态）、图片记录、提醒、标签、快捷键、设置。
-pub fn build_export(db: &Db) -> AppResult<ExportData> {
+/// 构建导出数据：全部便签（不过滤归档状态）、图片记录、提醒、标签、快捷键、设置。
+///
+/// 隐私防线：`include_private=false`（默认）时排除私密便签（is_private=1），
+/// 其图片/提醒/标签行一并过滤；`includes_private` 字段如实记录本次导出是否含私密内容。
+pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
     db.with(|c| -> AppResult<ExportData> {
-        let notes: Vec<_> = crate::db::notes::list(c, "all")?.into_iter().map(|s| s.note).collect();
+        // 私密过滤谓词（与 privacy::export_filter_note 同义；privacy 模块接线前先内联）
+        let keep = |is_private: bool| include_private || !is_private;
+        let notes: Vec<_> = crate::db::notes::list(c, "all")?
+            .into_iter()
+            .map(|s| s.note)
+            .filter(|n| keep(n.is_private))
+            .collect();
 
         let mut note_images: Vec<NoteImage> = Vec::new();
         {
+            // LEFT JOIN 过滤被排除便签的图片行；孤儿行（无对应便签）保持原语义保留
             let mut stmt = c.prepare(
-                "SELECT id, note_id, path, filename, width, height, created_at \
-                 FROM note_images ORDER BY created_at ASC",
+                "SELECT ni.id, ni.note_id, ni.path, ni.filename, ni.width, ni.height, ni.created_at \
+                 FROM note_images ni \
+                 LEFT JOIN notes n ON n.id = ni.note_id \
+                 WHERE ?1 OR COALESCE(n.is_private, 0) = 0 \
+                 ORDER BY ni.created_at ASC",
             )?;
-            let rows = stmt.query_map([], |r| {
+            let rows = stmt.query_map(params![include_private], |r| {
                 Ok(NoteImage {
                     id: r.get(0)?,
                     note_id: r.get(1)?,
@@ -51,11 +64,15 @@ pub fn build_export(db: &Db) -> AppResult<ExportData> {
 
         let mut reminders: Vec<Reminder> = Vec::new();
         {
+            // 同步过滤被排除便签的提醒行（避免通过提醒得知私密便签的存在）
             let mut stmt = c.prepare(
-                "SELECT id, note_id, remind_at, repeat_type, status, created_at, triggered_at \
-                 FROM reminders ORDER BY remind_at ASC",
+                "SELECT r.id, r.note_id, r.remind_at, r.repeat_type, r.status, r.created_at, r.triggered_at \
+                 FROM reminders r \
+                 LEFT JOIN notes n ON n.id = r.note_id \
+                 WHERE ?1 OR COALESCE(n.is_private, 0) = 0 \
+                 ORDER BY r.remind_at ASC",
             )?;
-            let rows = stmt.query_map([], |r| {
+            let rows = stmt.query_map(params![include_private], |r| {
                 Ok(Reminder {
                     id: r.get(0)?,
                     note_id: r.get(1)?,
@@ -73,11 +90,15 @@ pub fn build_export(db: &Db) -> AppResult<ExportData> {
 
         let mut tags: Vec<(String, String)> = Vec::new();
         {
+            // 标签名可能泄露私密便签内容，同样过滤被排除便签的标签行
             let mut stmt = c.prepare(
                 "SELECT nt.note_id, t.name FROM note_tags nt \
-                 JOIN tags t ON t.id = nt.tag_id ORDER BY nt.note_id ASC, t.name ASC",
+                 JOIN tags t ON t.id = nt.tag_id \
+                 LEFT JOIN notes n ON n.id = nt.note_id \
+                 WHERE ?1 OR COALESCE(n.is_private, 0) = 0 \
+                 ORDER BY nt.note_id ASC, t.name ASC",
             )?;
-            let rows = stmt.query_map([], |r| {
+            let rows = stmt.query_map(params![include_private], |r| {
                 Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
             })?;
             for row in rows {
@@ -100,6 +121,7 @@ pub fn build_export(db: &Db) -> AppResult<ExportData> {
             tags,
             shortcuts,
             settings,
+            includes_private: include_private,
         })
     })
 }
@@ -240,6 +262,52 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
 mod tests {
     use super::*;
     use crate::db::models::RepeatType;
+    use crate::db::notes::NoteUpdate;
+
+    /// 建一条私密便签，并挂上图片行、提醒、标签（用于过滤测试）。
+    fn create_private_note_with_attachments(db: &Db) -> String {
+        let note = db
+            .with(|c| crate::db::notes::create(c, "私密便签", "绝密内容"))
+            .unwrap();
+        db.with(|c| {
+            crate::db::notes::update(
+                c,
+                &NoteUpdate {
+                    id: note.id.clone(),
+                    title: None,
+                    content: None,
+                    is_pinned: None,
+                    is_always_on_top: None,
+                    show_on_all_desktops: None,
+                    desktop_pin_state: None,
+                    fullscreen_behavior: None,
+                    monitor_id: None,
+                    is_private: Some(true),
+                    locked: None,
+                    readonly_flag: None,
+                    scale: None,
+                    touch: false,
+                },
+            )
+        })
+        .unwrap();
+        db.with(|c| {
+            c.execute(
+                "INSERT INTO note_images (id, note_id, path, filename, width, height, created_at) \
+                 VALUES ('img-p', ?1, 'p', 'f', 1, 1, '')",
+                params![note.id],
+            )?;
+            crate::db::reminders::create(
+                c,
+                &note.id,
+                "2026-10-01T09:00:00+00:00",
+                RepeatType::Once,
+            )?;
+            crate::db::tags::attach_tag(c, &note.id, "绝密标签")
+        })
+        .unwrap();
+        note.id
+    }
 
     #[test]
     fn export_import_roundtrip() {
@@ -253,10 +321,11 @@ mod tests {
         })
         .unwrap();
 
-        let data = build_export(&src).unwrap();
+        let data = build_export(&src, false).unwrap();
         assert_eq!(data.notes.len(), 1);
         assert_eq!(data.tags.len(), 1);
         assert_eq!(data.app, "focusly");
+        assert!(!data.includes_private, "默认导出不含私密便签");
 
         // 写文件再读回，验证完整往返
         let dir = tempfile::tempdir().unwrap();
@@ -282,6 +351,52 @@ mod tests {
             .unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].repeat_type, "daily");
+    }
+
+    #[test]
+    fn export_excludes_private_by_default() {
+        let src = Db::in_memory().unwrap();
+        src.with(|c| crate::db::notes::create(c, "普通便签", "公开内容"))
+            .unwrap();
+        let private_id = create_private_note_with_attachments(&src);
+
+        let data = build_export(&src, false).unwrap();
+        assert!(!data.includes_private);
+        assert_eq!(data.notes.len(), 1, "只应导出非私密便签");
+        assert_eq!(data.notes[0].title, "普通便签");
+        assert!(
+            !serde_json::to_string(&data).unwrap().contains("绝密内容"),
+            "导出 JSON 不得包含私密便签正文"
+        );
+        assert!(data.note_images.is_empty(), "私密便签的图片行应被过滤");
+        assert!(data.reminders.is_empty(), "私密便签的提醒应被过滤");
+        assert!(data.tags.is_empty(), "私密便签的标签行应被过滤");
+        assert!(data.tags.iter().all(|(nid, _)| nid != &private_id));
+
+        // 导出文件导入后也不应出现该私密便签
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("no-private.json");
+        write_to_file(&data, file.to_str().unwrap()).unwrap();
+        let dst = Db::in_memory().unwrap();
+        let summary = import_from_file(&dst, file.to_str().unwrap()).unwrap();
+        assert_eq!(summary.imported_notes, 1);
+        assert!(dst.with(|c| crate::db::notes::get(c, &private_id)).is_err());
+    }
+
+    #[test]
+    fn export_includes_private_when_opted_in() {
+        let src = Db::in_memory().unwrap();
+        src.with(|c| crate::db::notes::create(c, "普通便签", "公开内容"))
+            .unwrap();
+        create_private_note_with_attachments(&src);
+
+        let data = build_export(&src, true).unwrap();
+        assert!(data.includes_private, "应如实记录本次导出包含私密便签");
+        assert_eq!(data.notes.len(), 2);
+        assert!(data.notes.iter().any(|n| n.is_private));
+        assert_eq!(data.note_images.len(), 1);
+        assert_eq!(data.reminders.len(), 1);
+        assert_eq!(data.tags.len(), 1);
     }
 
     #[test]

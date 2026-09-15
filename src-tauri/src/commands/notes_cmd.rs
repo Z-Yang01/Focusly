@@ -110,3 +110,68 @@ pub fn get_tags(state: State<'_, AppState>) -> AppResult<Vec<TagCount>> {
         .map(|(name, count)| TagCount { name, count })
         .collect())
 }
+
+// ---------- 回收站 / 版本历史 / 私密 / FTS 搜索（批1新增） ----------
+
+#[tauri::command]
+pub fn list_deleted_notes(state: State<'_, AppState>) -> AppResult<Vec<NoteSummary>> {
+    state.db.with(|c| crate::db::notes::list(c, "trash"))
+}
+
+#[tauri::command]
+pub fn trash_note(app: AppHandle, note_id: String) -> AppResult<Note> {
+    notes::move_to_trash(&app, &note_id)
+}
+
+#[tauri::command]
+pub fn restore_from_trash(app: AppHandle, note_id: String) -> AppResult<Note> {
+    notes::restore_from_trash(&app, &note_id)
+}
+
+#[tauri::command]
+pub fn empty_trash(app: AppHandle) -> AppResult<usize> {
+    notes::empty_trash(&app)
+}
+
+#[tauri::command]
+pub fn list_versions(
+    state: State<'_, AppState>,
+    note_id: String,
+    limit: Option<i64>,
+) -> AppResult<Vec<crate::db::models::NoteVersion>> {
+    state
+        .db
+        .with(|c| crate::db::versions::list_versions(c, &note_id, limit.unwrap_or(50)))
+}
+
+#[tauri::command]
+pub fn restore_version(app: AppHandle, version_id: String) -> AppResult<Note> {
+    notes::restore_note_version(&app, &version_id)
+}
+
+#[tauri::command]
+pub fn set_note_privacy(app: AppHandle, note_id: String, flag: String, value: bool) -> AppResult<Note> {
+    notes::set_privacy_flag(&app, &note_id, &flag, value)
+}
+
+#[tauri::command]
+pub fn search_notes_v2(
+    state: State<'_, AppState>,
+    query: String,
+    include_private: Option<bool>,
+) -> AppResult<Vec<crate::db::models::SearchHit>> {
+    // 只读查询，直接走 db 层（无需 AppHandle 发事件）
+    state
+        .db
+        .with(|c| crate::db::search::search(c, &query, include_private.unwrap_or(false)))
+}
+
+#[tauri::command]
+pub fn list_private_notes(state: State<'_, AppState>) -> AppResult<Vec<NoteSummary>> {
+    state.db.with(|c| crate::db::notes::list_private(c))
+}
+
+#[tauri::command]
+pub fn get_due_view(state: State<'_, AppState>) -> AppResult<crate::db::todos_view::TodoView> {
+    state.db.with(|c| crate::db::todos_view::get_due_view(c))
+}

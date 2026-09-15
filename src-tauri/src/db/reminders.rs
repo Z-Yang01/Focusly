@@ -173,8 +173,7 @@ mod tests {
     #[test]
     fn create_and_status_flow() {
         let conn = setup();
-        let notes = super::super::notes;
-        let n = notes::create(&conn, "t", "c").unwrap();
+        let n = super::super::notes::create(&conn, "t", "c").unwrap();
         let r = create(&conn, &n.id, "2026-09-16T09:00:00Z", RepeatType::Once).unwrap();
         assert_eq!(r.status, "pending");
         assert_eq!(pending_for_note(&conn, &n.id).unwrap().len(), 1);

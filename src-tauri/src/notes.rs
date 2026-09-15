@@ -331,10 +331,10 @@ pub fn set_note_tags(app: &AppHandle, id: &str, tags: Vec<String>) -> AppResult<
     Ok(final_tags)
 }
 
-/// 导出全部数据到 JSON 文件。
+/// 导出全部数据到 JSON 文件（隐私防线：默认排除私密便签，include_private=false）。
 pub fn export_data(app: &AppHandle, path: &str) -> AppResult<()> {
     let state = app.state::<AppState>();
-    let data = crate::export::build_export(&state.db)?;
+    let data = crate::export::build_export(&state.db, false)?;
     crate::export::write_to_file(&data, path)?;
     log::info!("数据已导出: {path}");
     Ok(())

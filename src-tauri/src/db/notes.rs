@@ -214,9 +214,10 @@ pub fn update(conn: &Connection, u: &NoteUpdate) -> AppResult<Note> {
         if i > 0 {
             assigns.push_str(", ");
         }
-        assigns.push_str(&format!("{s} = {placeholders[i]}"));
+        assigns.push_str(&format!("{s} = {}", placeholders[i]));
     }
-    let sql = format!("UPDATE notes SET {assigns} WHERE id = {placeholders[vals.len() - 1]}");
+    let where_ph = placeholders[vals.len() - 1].clone();
+    let sql = format!("UPDATE notes SET {assigns} WHERE id = {where_ph}");
     let refs: Vec<&dyn rusqlite::ToSql> = vals.iter().map(|b| b.as_ref()).collect();
     conn.execute(&sql, refs.as_slice())?;
     get(conn, &u.id)
@@ -302,8 +303,8 @@ pub fn snapshot_version(conn: &Connection, note_id: &str, source: &str) -> AppRe
 pub fn delete(conn: &Connection, id: &str) -> AppResult<Vec<String>> {
     let paths: Vec<String> = {
         let mut stmt = conn.prepare("SELECT path FROM note_images WHERE note_id=?1")?;
-        stmt.query_map(params![id], |r| r.get(0))?
-            .collect::<rusqlite::Result<_>>()?
+        let rows = stmt.query_map(params![id], |r| r.get(0))?;
+        rows.collect::<rusqlite::Result<Vec<String>>>()?
     };
     conn.execute("DELETE FROM notes WHERE id=?1", params![id])?;
     Ok(paths)
@@ -326,11 +327,23 @@ pub fn search(conn: &Connection, query: &str) -> AppResult<Vec<NoteSummary>> {
 
 pub fn all_active_with_windows(conn: &Connection) -> AppResult<Vec<Note>> {
     let sql = format!(
-        "SELECT {NOTE_COLS} FROM notes WHERE status='active' ORDER BY created_at ASC"
+        "SELECT {NOTE_COLS} FROM notes WHERE status='active' AND deleted_at IS NULL ORDER BY created_at ASC"
     );
     let mut stmt = conn.prepare(&sql)?;
     let notes = stmt.query_map([], row_to_note)?.collect::<rusqlite::Result<_>>()?;
     Ok(notes)
+}
+
+/// 私密便签列表（活跃、未删除）。内容仍返回，但前端只展示标题。
+pub fn list_private(conn: &Connection) -> AppResult<Vec<NoteSummary>> {
+    let sql = format!(
+        "SELECT {NOTE_COLS} FROM notes \
+         WHERE status='active' AND deleted_at IS NULL AND is_private=1 \
+         ORDER BY updated_at DESC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let notes = stmt.query_map([], row_to_note)?.collect::<rusqlite::Result<_>>()?;
+    notes.into_iter().map(|n| to_summary(conn, n)).collect()
 }
 
 pub fn count(conn: &Connection, status: &str) -> AppResult<i64> {

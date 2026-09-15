@@ -49,7 +49,7 @@ pub struct NoteSummary {
     pub todo_done: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteImage {
     pub id: String,

@@ -7,9 +7,12 @@ mod export;
 mod filesystem;
 mod logger;
 mod notes;
+mod privacy;
+mod quickcapture;
 mod reminder;
 mod shortcut;
 mod state;
+mod timeparse;
 mod tray;
 mod vdesktop;
 mod window;
@@ -143,6 +146,37 @@ pub fn run() {
             commands::system_cmd::open_external,
             commands::system_cmd::reveal_data_dir,
             commands::system_cmd::get_app_info,
+            // 回收站 / 版本历史 / 私密 / FTS 搜索
+            commands::notes_cmd::list_deleted_notes,
+            commands::notes_cmd::trash_note,
+            commands::notes_cmd::restore_from_trash,
+            commands::notes_cmd::empty_trash,
+            commands::notes_cmd::list_versions,
+            commands::notes_cmd::restore_version,
+            commands::notes_cmd::set_note_privacy,
+            commands::notes_cmd::search_notes_v2,
+            commands::notes_cmd::list_private_notes,
+            // 保存的搜索
+            commands::settings_cmd::save_search,
+            commands::settings_cmd::list_saved_searches,
+            commands::settings_cmd::delete_saved_search,
+            // 快速捕获 / 剪贴板历史
+            commands::quickcapture_cmd::quickcapture_toggle,
+            commands::quickcapture_cmd::quickcapture_hide,
+            commands::quickcapture_cmd::quickcapture_ready,
+            commands::quickcapture_cmd::clipboard_add,
+            commands::quickcapture_cmd::clipboard_list,
+            commands::quickcapture_cmd::clipboard_remove,
+            commands::quickcapture_cmd::clipboard_clear,
+            commands::quickcapture_cmd::clipboard_pin,
+            // 窗口布局
+            commands::layout_cmd::layout_save_preset,
+            commands::layout_cmd::layout_list_presets,
+            commands::layout_cmd::layout_apply_preset,
+            commands::layout_cmd::layout_delete_preset,
+            commands::layout_cmd::layout_arrange_grid,
+            // 今日/逾期视图（中文自然语言提醒解析 parse_time_nl 由提醒设置 UI 后续接入）
+            commands::notes_cmd::get_due_view,
         ])
         .run(tauri::generate_context!())
         .expect("error while running focusly");

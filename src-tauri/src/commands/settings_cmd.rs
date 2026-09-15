@@ -176,3 +176,24 @@ mod tests {
         assert!(validate_accelerator("ctrl++n").is_err(), "空段非法");
     }
 }
+
+// ---------- 保存的搜索（批1新增） ----------
+
+#[tauri::command]
+pub fn save_search(
+    state: State<'_, AppState>,
+    name: String,
+    query: String,
+) -> AppResult<crate::db::models::SavedSearch> {
+    state.db.with(|c| crate::db::saved_searches::save(c, &name, &query))
+}
+
+#[tauri::command]
+pub fn list_saved_searches(state: State<'_, AppState>) -> AppResult<Vec<crate::db::models::SavedSearch>> {
+    state.db.with(|c| crate::db::saved_searches::list(c))
+}
+
+#[tauri::command]
+pub fn delete_saved_search(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.db.with(|c| crate::db::saved_searches::delete(c, &id))
+}

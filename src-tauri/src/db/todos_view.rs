@@ -4,12 +4,12 @@
 //! 任务行语法（与前端 src/features/todo/due.ts 保持一致）：
 //!   `- [ ] 任务文本 ^2026-09-20`（行尾到期日，可有 `!高/!中/!低` 优先级标记）
 //!
-//! 注意：SQL 中 `AND deleted_at IS NULL` 依赖 v2 迁移新增的软删除列
-//! （由并行 agent 落地）；v2 迁移合并前，生产库查询会因缺列报错，
-//! 本文件测试里带了补列垫片（见 tests::setup）。
+//! 注意：SQL 中 `AND deleted_at IS NULL AND is_private = 0` 依赖 v2 迁移新增的列
+//! （软删除列 deleted_at、私密标记 is_private，见 migrations v2）；
+//! 测试里带了补列垫片（见 tests::setup），v2 落地后垫片自动跳过。
 
 use chrono::{Duration, Local, NaiveDate};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{Connection, Row};
 use serde::Serialize;
 
 use super::models::{Note, NoteSummary};
@@ -34,10 +34,12 @@ pub struct TodoView {
     pub next7days: Vec<DueNoteSummary>,
 }
 
-// notes.rs 的 row_to_note/NOTE_COLS 是私有的，为了不动那个文件这里本地保留一份。
+// notes.rs 的 row_to_note/NOTE_COLS 是私有的，为了不动那个文件这里本地保留一份
+// （列清单与 v2 迁移后的 notes 表一致：deleted_at/is_private/locked/readonly_flag/scale）。
 const NOTE_COLS: &str =
     "id, title, content, content_format, status, is_pinned, is_always_on_top, show_on_all_desktops, \
-     desktop_pin_state, fullscreen_behavior, x, y, width, height, monitor_id, created_at, updated_at, archived_at";
+     desktop_pin_state, fullscreen_behavior, x, y, width, height, monitor_id, created_at, updated_at, archived_at, \
+     deleted_at, is_private, locked, readonly_flag, scale";
 
 fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
     Ok(Note {
@@ -59,6 +61,11 @@ fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
         created_at: r.get("created_at")?,
         updated_at: r.get("updated_at")?,
         archived_at: r.get("archived_at")?,
+        deleted_at: r.get("deleted_at")?,
+        is_private: r.get::<_, i64>("is_private")? != 0,
+        locked: r.get::<_, i64>("locked")? != 0,
+        readonly: r.get::<_, i64>("readonly_flag")? != 0,
+        scale: r.get("scale")?,
     })
 }
 
@@ -119,10 +126,10 @@ fn count_due_buckets(content: &str, today: NaiveDate) -> (i64, i64, i64) {
 /// 待办到期视图。只看 active 且未软删除的便签；同一便签可出现在多个分区
 /// （各区独立去重），区向量按 updated_at DESC（SQL 顺序透传）。
 pub fn get_due_view(conn: &Connection) -> AppResult<TodoView> {
-    // 依赖 v2 迁移的 deleted_at 列（软删除）
+    // 依赖 v2 迁移的 deleted_at 列（软删除）；私密便签不出现在到期视图
     let sql = format!(
         "SELECT {NOTE_COLS} FROM notes \
-         WHERE status = 'active' AND deleted_at IS NULL \
+         WHERE status = 'active' AND deleted_at IS NULL AND is_private = 0 \
          ORDER BY updated_at DESC"
     );
     let mut stmt = conn.prepare(&sql)?;
@@ -254,6 +261,16 @@ mod tests {
         assert!(v.overdue.is_empty());
         assert!(v.today.is_empty());
         assert!(v.next7days.is_empty());
+    }
+
+    #[test]
+    fn excludes_private_notes() {
+        let conn = setup();
+        notes::create(&conn, "私密便签", &format!("- [ ] x ^{}", offset_date(-1))).unwrap();
+        conn.execute("UPDATE notes SET is_private = 1 WHERE title = '私密便签'", params![])
+            .unwrap();
+        let v = get_due_view(&conn).unwrap();
+        assert!(v.overdue.is_empty(), "私密便签不应出现在到期视图");
     }
 
     #[test]
