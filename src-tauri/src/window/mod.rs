@@ -116,6 +116,10 @@ fn apply_desktop_pin(app: &AppHandle, win: &tauri::WebviewWindow, note: &Note, p
                     desktop_pin_state: Some(new_state.into()),
                     fullscreen_behavior: None,
                     monitor_id: None,
+                    is_private: None,
+                    locked: None,
+                    readonly_flag: None,
+                    scale: None,
                     touch: false,
                 },
             )

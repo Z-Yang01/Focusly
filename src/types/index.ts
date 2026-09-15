@@ -31,9 +31,60 @@ export interface Note {
   width: number | null;
   height: number | null;
   monitorId: string | null;
+  /** 回收站：非 null = 在回收站 */
+  deletedAt: string | null;
+  isPrivate: boolean;
+  locked: boolean;
+  readonly: boolean;
+  /** 恢复窗口时的显示器缩放 (1.0 / 1.25 / 1.5) */
+  scale: number | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
+}
+
+/** FTS 全文搜索结果 */
+export interface SearchHit {
+  id: string;
+  title: string;
+  /** 含 <mark>高亮</mark> 的正文摘要 */
+  snippet: string;
+  tags: string[];
+  todoTotal: number;
+  todoDone: number;
+  updatedAt: string;
+  isPinned: boolean;
+  isPrivate: boolean;
+  status: NoteStatus;
+}
+
+/** 便签历史版本 */
+export interface NoteVersion {
+  id: string;
+  noteId: string;
+  title: string;
+  content: string;
+  /** auto | manual | pre-restore */
+  source: string;
+  createdAt: string;
+}
+
+/** 保存的搜索 */
+export interface SavedSearch {
+  id: string;
+  name: string;
+  query: string;
+  createdAt: string;
+}
+
+/** 剪贴板历史条目 */
+export interface ClipboardEntry {
+  id: string;
+  content: string;
+  /** text | image_path */
+  kind: string;
+  createdAt: string;
+  pinned: boolean;
 }
 
 export interface NoteSummary extends Note {

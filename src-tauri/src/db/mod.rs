@@ -1,11 +1,16 @@
+pub mod clipboard;
 pub mod images;
 pub mod migrations;
 pub mod models;
 pub mod notes;
 pub mod reminders;
+pub mod saved_searches;
+pub mod search;
 pub mod settings;
 pub mod shortcuts;
 pub mod tags;
+pub mod todos_view;
+pub mod versions;
 
 use rusqlite::Connection;
 use std::path::Path;

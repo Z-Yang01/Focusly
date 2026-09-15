@@ -8,6 +8,11 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
+/// v2 起新功能（版本快照、软删除）统一秒级精度时间戳，便于同秒排序时用 rowid 决胜。
+fn now_secs() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
+}
+
 fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
     Ok(Note {
         id: r.get("id")?,
@@ -28,12 +33,18 @@ fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
         created_at: r.get("created_at")?,
         updated_at: r.get("updated_at")?,
         archived_at: r.get("archived_at")?,
+        deleted_at: r.get("deleted_at")?,
+        is_private: r.get::<_, i64>("is_private")? != 0,
+        locked: r.get::<_, i64>("locked")? != 0,
+        readonly: r.get::<_, i64>("readonly_flag")? != 0,
+        scale: r.get("scale")?,
     })
 }
 
 const NOTE_COLS: &str =
     "id, title, content, content_format, status, is_pinned, is_always_on_top, show_on_all_desktops, \
-     desktop_pin_state, fullscreen_behavior, x, y, width, height, monitor_id, created_at, updated_at, archived_at";
+     desktop_pin_state, fullscreen_behavior, x, y, width, height, monitor_id, created_at, updated_at, archived_at, \
+     deleted_at, is_private, locked, readonly_flag, scale";
 
 pub fn create(conn: &Connection, title: &str, content: &str) -> AppResult<Note> {
     let id = Uuid::new_v4().to_string();
@@ -62,16 +73,22 @@ pub fn exists(conn: &Connection, id: &str) -> AppResult<bool> {
     Ok(n > 0)
 }
 
-/// filter: all | active | archived | todo
+/// filter: all | active | archived | todo | trash
+/// - active/archived/todo 均要求 deleted_at IS NULL（回收站内容不进入常规视图）
+/// - trash: deleted_at IS NOT NULL（任意 status）
+/// - all: 未删除的全部
 pub fn list(conn: &Connection, filter: &str) -> AppResult<Vec<NoteSummary>> {
     let (where_clause, params_slice): (String, Vec<&dyn rusqlite::ToSql>) = match filter {
-        "archived" => ("WHERE status = 'archived'".into(), vec![]),
+        "archived" => ("WHERE status = 'archived' AND deleted_at IS NULL".into(), vec![]),
         "todo" => (
-            "WHERE status = 'active' AND (content LIKE '%- [ ]%' OR content LIKE '%- [x]%')".into(),
+            "WHERE status = 'active' AND deleted_at IS NULL \
+             AND (content LIKE '%- [ ]%' OR content LIKE '%- [x]%')"
+                .into(),
             vec![],
         ),
-        "all" => (String::new(), vec![]),
-        _ => ("WHERE status = 'active'".into(), vec![]),
+        "trash" => ("WHERE deleted_at IS NOT NULL".into(), vec![]),
+        "all" => ("WHERE deleted_at IS NULL".into(), vec![]),
+        _ => ("WHERE status = 'active' AND deleted_at IS NULL".into(), vec![]),
     };
     let sql = format!(
         "SELECT {NOTE_COLS} FROM notes {where_clause} \
@@ -131,6 +148,11 @@ pub struct NoteUpdate {
     pub desktop_pin_state: Option<String>,
     pub fullscreen_behavior: Option<String>,
     pub monitor_id: Option<String>,
+    pub is_private: Option<bool>,
+    pub locked: Option<bool>,
+    /// 数据库列 readonly_flag（serde 输出名 readonly）
+    pub readonly_flag: Option<bool>,
+    pub scale: Option<f64>,
     /// 几何与隐藏类更新不刷新 updated_at，避免列表频繁重排
     pub touch: bool,
 }
@@ -165,6 +187,18 @@ pub fn update(conn: &Connection, u: &NoteUpdate) -> AppResult<Note> {
     }
     if let Some(ref v) = u.monitor_id {
         bind("monitor_id = ?", Box::new(v.clone()));
+    }
+    if let Some(v) = u.is_private {
+        bind("is_private = ?", Box::new(v as i64));
+    }
+    if let Some(v) = u.locked {
+        bind("locked = ?", Box::new(v as i64));
+    }
+    if let Some(v) = u.readonly_flag {
+        bind("readonly_flag = ?", Box::new(v as i64));
+    }
+    if let Some(v) = u.scale {
+        bind("scale = ?", Box::new(v));
     }
     if u.touch {
         bind("updated_at = ?", Box::new(now()));
@@ -218,6 +252,52 @@ pub fn restore(conn: &Connection, id: &str) -> AppResult<Note> {
     get(conn, id)
 }
 
+/// 移入回收站（软删除）：仅置 deleted_at，status 与数据保持不变。
+pub fn soft_delete(conn: &Connection, id: &str) -> AppResult<Note> {
+    conn.execute(
+        "UPDATE notes SET deleted_at=?2 WHERE id=?1 AND deleted_at IS NULL",
+        params![id, now_secs()],
+    )?;
+    get(conn, id)
+}
+
+/// 从回收站恢复（清空 deleted_at）。
+pub fn restore_from_trash(conn: &Connection, id: &str) -> AppResult<Note> {
+    conn.execute("UPDATE notes SET deleted_at=NULL WHERE id=?1", params![id])?;
+    get(conn, id)
+}
+
+/// 版本快照钩子：把便签当前 title/content 插入 note_versions 一行，
+/// 并清理该便签超过 50 条的旧版本（保留最近 50 条）。
+/// 服务层在更新内容前调用（source: auto | manual | pre-restore …）。
+pub fn snapshot_version(conn: &Connection, note_id: &str, source: &str) -> AppResult<()> {
+    let (title, content): (String, String) = conn
+        .query_row(
+            "SELECT title, content FROM notes WHERE id = ?1",
+            params![note_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::Invalid(format!("便签不存在: {note_id}")),
+            other => AppError::Db(other.to_string()),
+        })?;
+    let version_id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO note_versions (id, note_id, title, content, source, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![version_id, note_id, title, content, source, now_secs()],
+    )?;
+    // 同秒创建的版本按 rowid（插入顺序）决胜，保留最新的 50 条
+    conn.execute(
+        "DELETE FROM note_versions WHERE note_id = ?1 AND id NOT IN (\
+             SELECT id FROM note_versions WHERE note_id = ?1 \
+             ORDER BY created_at DESC, rowid DESC LIMIT 50\
+         )",
+        params![note_id],
+    )?;
+    Ok(())
+}
+
 /// 永久删除。返回该便签的图片文件路径列表（调用方负责删除物理文件）。
 pub fn delete(conn: &Connection, id: &str) -> AppResult<Vec<String>> {
     let paths: Vec<String> = {
@@ -233,7 +313,8 @@ pub fn search(conn: &Connection, query: &str) -> AppResult<Vec<NoteSummary>> {
     let q = format!("%{}%", query.replace('%', "\\%").replace('_', "\\_"));
     let sql = format!(
         "SELECT {NOTE_COLS} FROM notes \
-         WHERE status='active' AND (title LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\') \
+         WHERE status='active' AND deleted_at IS NULL \
+         AND (title LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\') \
          ORDER BY is_pinned DESC, updated_at DESC LIMIT 50"
     );
     let mut stmt = conn.prepare(&sql)?;
@@ -267,6 +348,8 @@ mod tests {
 
     fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
+        // 与 Db::open 一致：级联删除语义依赖外键约束
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
         super::super::migrations::run(&conn).unwrap();
         conn
     }
@@ -296,6 +379,10 @@ mod tests {
                 desktop_pin_state: None,
                 fullscreen_behavior: None,
                 monitor_id: None,
+                is_private: Some(true),
+                locked: Some(true),
+                readonly_flag: Some(true),
+                scale: Some(1.25),
                 touch: true,
             },
         )
@@ -303,6 +390,10 @@ mod tests {
         let n3 = get(&conn, &n.id).unwrap();
         assert_eq!(n3.title, "新标题");
         assert!(n3.is_pinned);
+        assert!(n3.is_private);
+        assert!(n3.locked);
+        assert!(n3.readonly);
+        assert_eq!(n3.scale, Some(1.25));
         assert_eq!(n3.x, Some(100), "几何不应被内容更新覆盖");
 
         let a = archive(&conn, &n.id).unwrap();
@@ -310,6 +401,75 @@ mod tests {
         let r = restore(&conn, &n.id).unwrap();
         assert_eq!(r.status, "active");
         assert!(r.archived_at.is_none());
+    }
+
+    #[test]
+    fn trash_flow() {
+        let conn = setup();
+        let a = create(&conn, "A", "c").unwrap();
+        create(&conn, "B", "c").unwrap();
+
+        let deleted = soft_delete(&conn, &a.id).unwrap();
+        assert!(deleted.deleted_at.is_some());
+        assert_eq!(deleted.status, "active", "软删除不改 status");
+
+        assert_eq!(list(&conn, "active").unwrap().len(), 1);
+        assert_eq!(list(&conn, "all").unwrap().len(), 1, "回收站不进 all");
+        assert_eq!(list(&conn, "todo").unwrap().len(), 0);
+        assert_eq!(list(&conn, "trash").unwrap().len(), 1);
+
+        // 回收站里归档过的便签也不进 archived 视图
+        archive(&conn, &a.id).unwrap();
+        assert_eq!(list(&conn, "archived").unwrap().len(), 0);
+        restore_from_trash(&conn, &a.id).unwrap();
+        restore(&conn, &a.id).unwrap();
+        assert_eq!(list(&conn, "active").unwrap().len(), 2);
+        assert_eq!(list(&conn, "trash").unwrap().len(), 0);
+    }
+
+    #[test]
+    fn snapshot_and_permanent_delete() {
+        let conn = setup();
+        let n = create(&conn, "v1", "内容1").unwrap();
+        snapshot_version(&conn, &n.id, "auto").unwrap();
+        update(
+            &conn,
+            &NoteUpdate {
+                id: n.id.clone(),
+                title: Some("v2".into()),
+                content: Some("内容2".into()),
+                is_pinned: None,
+                is_always_on_top: None,
+                show_on_all_desktops: None,
+                desktop_pin_state: None,
+                fullscreen_behavior: None,
+                monitor_id: None,
+                is_private: None,
+                locked: None,
+                readonly_flag: None,
+                scale: None,
+                touch: true,
+            },
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM note_versions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // 快照存在时软删除不影响数据；永久删除级联清空版本
+        soft_delete(&conn, &n.id).unwrap();
+        let paths = delete(&conn, &n.id).unwrap();
+        assert!(paths.is_empty());
+        let versions: i64 = conn
+            .query_row("SELECT COUNT(*) FROM note_versions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(versions, 0, "永久删除应级联清理版本快照");
+
+        // 不存在的便签快照报 Invalid
+        let r = snapshot_version(&conn, "missing", "auto");
+        assert!(matches!(r, Err(AppError::Invalid(_))));
     }
 
     #[test]

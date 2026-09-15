@@ -24,6 +24,19 @@ pub struct Note {
     pub created_at: String,
     pub updated_at: String,
     pub archived_at: Option<String>,
+    /// 以下 v2 字段允许旧导出 JSON 缺省（默认值与建表默认一致），序列化输出不受影响
+    #[serde(default)]
+    /// 回收站：软删除时间（NULL 表示未删除）
+    pub deleted_at: Option<String>,
+    #[serde(default)]
+    pub is_private: bool,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default)]
+    /// 数据库列为 readonly_flag（readonly 有 SQL 关键字风险），serde 输出名仍为 readonly
+    pub readonly: bool,
+    #[serde(default)]
+    pub scale: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -174,4 +187,55 @@ pub struct ExportData {
     pub tags: Vec<(String, String)>, // note_id, tag_name
     pub shortcuts: Vec<ShortcutEntry>,
     pub settings: Vec<(String, String)>,
+}
+
+/// 全文搜索命中项（snippet 内含 <mark> 高亮标记）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub id: String,
+    pub title: String,
+    pub snippet: String,
+    pub tags: Vec<String>,
+    pub todo_total: i64,
+    pub todo_done: i64,
+    pub updated_at: String,
+    pub is_pinned: bool,
+    pub is_private: bool,
+    pub status: String,
+}
+
+/// 便签版本快照（note_versions 表）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteVersion {
+    pub id: String,
+    pub note_id: String,
+    pub title: String,
+    pub content: String,
+    /// auto | manual | pre-restore
+    pub source: String,
+    pub created_at: String,
+}
+
+/// 保存的搜索（saved_searches 表，按 name 唯一）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedSearch {
+    pub id: String,
+    pub name: String,
+    pub query: String,
+    pub created_at: String,
+}
+
+/// 剪贴板历史条目（clipboard_history 表）。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardEntry {
+    pub id: String,
+    pub content: String,
+    /// text | image …（kind 列）
+    pub kind: String,
+    pub created_at: String,
+    pub pinned: bool,
 }

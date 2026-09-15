@@ -63,10 +63,11 @@ pub fn get_detail(app: &AppHandle, id: &str) -> AppResult<NoteDetail> {
 }
 
 /// 更新标题/正文（touch 刷新 updated_at）。
+/// 同步：版本快照（source=auto）+ FTS 索引。
 pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> AppResult<Note> {
     let state = app.state::<AppState>();
-    let note = state.db.with(|c| {
-        crate::db::notes::update(
+    let note = state.db.with(|c| -> AppResult<Note> {
+        let note = crate::db::notes::update(
             c,
             &NoteUpdate {
                 id: id.to_string(),
@@ -78,9 +79,22 @@ pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> 
                 desktop_pin_state: None,
                 fullscreen_behavior: None,
                 monitor_id: None,
+                is_private: None,
+                locked: None,
+                readonly_flag: None,
+                scale: None,
                 touch: true,
             },
-        )
+        )?;
+        // 内容变更：快照 + 重建 FTS 索引（失败不阻塞保存主流程）
+        if let Err(e) = crate::db::notes::snapshot_version(c, id, "auto") {
+            log::warn!("版本快照失败 {id}: {e}");
+        }
+        let tags = crate::db::tags::tags_for_note(c, id)?;
+        if let Err(e) = crate::db::search::fts_sync(c, id, title, content, &tags.join(" ")) {
+            log::warn!("FTS 同步失败 {id}: {e}");
+        }
+        Ok(note)
     })?;
     emit_notes_changed(app, id);
     Ok(note)
@@ -108,6 +122,10 @@ pub fn set_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> AppResult
                 desktop_pin_state: None,
                 fullscreen_behavior: None,
                 monitor_id: None,
+                is_private: None,
+                locked: None,
+                readonly_flag: None,
+                scale: None,
                 touch: true,
             },
         )
@@ -140,6 +158,10 @@ pub fn set_fullscreen_behavior(app: &AppHandle, id: &str, behavior: &str) -> App
                 desktop_pin_state: None,
                 fullscreen_behavior: Some(behavior.to_string()),
                 monitor_id: None,
+                is_private: None,
+                locked: None,
+                readonly_flag: None,
+                scale: None,
                 touch: false,
             },
         )
@@ -172,7 +194,10 @@ pub fn restore(app: &AppHandle, id: &str) -> AppResult<Note> {
 pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
     window::close_note_window(app, id);
     let state = app.state::<AppState>();
-    let image_paths = state.db.with(|c| crate::db::notes::delete(c, id))?;
+    let image_paths = state.db.with(|c| {
+        crate::db::search::fts_remove(c, id);
+        crate::db::notes::delete(c, id)
+    })?;
     for path in &image_paths {
         crate::db::images::delete_file_best_effort(&state.paths.images, path);
     }
@@ -180,6 +205,98 @@ pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
     log::info!("便签已永久删除 {id}（清理 {} 个图片文件）", image_paths.len());
     emit_notes_changed(app, id);
     Ok(())
+}
+
+/// 移入回收站（软删除）：关窗口，内容保留，可恢复。
+pub fn move_to_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
+    window::close_note_window(app, id);
+    let state = app.state::<AppState>();
+    let note = state.db.with(|c| crate::db::notes::soft_delete(c, id))?;
+    log::info!("便签已移入回收站 {id}");
+    emit_notes_changed(app, id);
+    Ok(note)
+}
+
+/// 从回收站恢复。
+pub fn restore_from_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
+    let state = app.state::<AppState>();
+    let note = state.db.with(|c| crate::db::notes::restore_from_trash(c, id))?;
+    log::info!("便签已从回收站恢复 {id}");
+    emit_notes_changed(app, id);
+    Ok(note)
+}
+
+/// 清空回收站：逐个永久删除。
+pub fn empty_trash(app: &AppHandle) -> AppResult<usize> {
+    let state = app.state::<AppState>();
+    let ids: Vec<String> = state.db.with(|c| {
+        let mut stmt = c.prepare("SELECT id FROM notes WHERE deleted_at IS NOT NULL")?;
+        let ids = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(ids)
+    })?;
+    let n = ids.len();
+    for id in ids {
+        delete_permanently(app, &id)?;
+    }
+    log::info!("回收站已清空（{n} 条）");
+    Ok(n)
+}
+
+/// 设置私密标志：private / locked / readonly。
+pub fn set_privacy_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> AppResult<Note> {
+    let field = match flag {
+        "private" => "is_private",
+        "locked" => "locked",
+        "readonly" => "readonly",
+        other => return Err(AppError::Invalid(format!("未知隐私标志: {other}"))),
+    };
+    let state = app.state::<AppState>();
+    let note = state.db.with(|c| {
+        crate::db::notes::update(
+            c,
+            &NoteUpdate {
+                id: id.to_string(),
+                title: None,
+                content: None,
+                is_pinned: None,
+                is_always_on_top: None,
+                show_on_all_desktops: None,
+                desktop_pin_state: None,
+                fullscreen_behavior: None,
+                monitor_id: None,
+                is_private: (field == "is_private").then_some(value),
+                locked: (field == "locked").then_some(value),
+                readonly_flag: (field == "readonly").then_some(value),
+                scale: None,
+                touch: false,
+            },
+        )
+    })?;
+    log::info!("便签 {id} 隐私标志 {flag}={value}");
+    emit_notes_changed(app, id);
+    Ok(note)
+}
+
+/// 恢复到指定历史版本（restore_version 内部先做 pre-restore 快照）。
+pub fn restore_note_version(app: &AppHandle, version_id: &str) -> AppResult<Note> {
+    let state = app.state::<AppState>();
+    let note = state.db.with(|c| -> AppResult<Note> {
+        let note = crate::db::versions::restore_version(c, version_id)?;
+        let tags = crate::db::tags::tags_for_note(c, &note.id)?;
+        crate::db::search::fts_sync(c, &note.id, &note.title, &note.content, &tags.join(" "))?;
+        Ok(note)
+    })?;
+    emit_notes_changed(app, &note.id);
+    Ok(note)
+}
+
+/// FTS 全文搜索（排除回收站；私密便签默认排除）。
+pub fn search_notes_v2(app: &AppHandle, keyword: &str, include_private: bool) -> AppResult<Vec<crate::db::models::SearchHit>> {
+    let state = app.state::<AppState>();
+    let hits = state.db.with(|c| crate::db::search::search(c, keyword, include_private))?;
+    Ok(hits)
 }
 
 /// 重设便签标签：清空现有关联后附着新集合（去重），返回最终标签列表。
@@ -202,6 +319,14 @@ pub fn set_note_tags(app: &AppHandle, id: &str, tags: Vec<String>) -> AppResult<
             crate::db::tags::tags_for_note(c, id)
         })?
     };
+    // 标签变化 → FTS 索引重同步（tags 列可搜）
+    {
+        let state = app.state::<AppState>();
+        let _ = state.db.with(|c| -> AppResult<()> {
+            let note = crate::db::notes::get(c, id)?;
+            crate::db::search::fts_sync(c, id, &note.title, &note.content, &final_tags.join(" "))
+        });
+    }
     emit_notes_changed(app, id);
     Ok(final_tags)
 }
