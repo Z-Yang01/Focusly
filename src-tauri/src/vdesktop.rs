@@ -34,7 +34,7 @@ pub fn set_window_pinned(
 mod imp {
     use std::ffi::c_void;
     use super::{CLSID_IMMERSIVE_SHELL, CLSID_VIRTUAL_DESKTOP_PINNED_APPS, IID_VIRTUAL_DESKTOP_PINNED_APPS};
-    use windows::core::{GUID, Interface as _, IUnknown};
+    use windows::core::{GUID, Interface as _};
     use windows::Win32::Foundation::{BOOL, HWND};
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_LOCAL_SERVER,

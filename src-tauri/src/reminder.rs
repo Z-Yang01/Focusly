@@ -1,7 +1,6 @@
 //! 提醒调度器：tokio 事件驱动（无轮询）。
 //! 依据最近的 pending 提醒睡眠，到点触发通知；插入/修改/提醒后由 `SchedulerHandle::wake()` 唤醒重算。
 
-use std::time::SystemTime;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::json;
@@ -50,7 +49,7 @@ pub fn spawn(app: AppHandle) -> SchedulerHandle {
     handle
 }
 
-pub fn spawn_loop(app: AppHandle, mut rx: UnboundedReceiver<()>) {
+pub fn spawn_loop(app: AppHandle, rx: UnboundedReceiver<()>) {
     // 启动时错过提醒汇总（静默失败）
     {
         let state = app.state::<AppState>();

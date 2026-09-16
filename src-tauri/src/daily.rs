@@ -16,7 +16,7 @@
 //!    `#[tauri::command] fn daily_get_or_create(app: tauri::AppHandle) -> Result<Note, AppError> { daily::get_or_create_daily(&app) }`。
 //! 前端入口：src/features/templates/DailyNoteButton.tsx（成功静默，后端开窗）。
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use rusqlite::params;
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
@@ -113,6 +113,7 @@ pub fn get_or_create_daily(app: &AppHandle) -> AppResult<Note> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     /// 用「本地时区的某天某刻」反推 UTC 瞬间，使断言与运行机器时区无关。
     fn local_instant(y: i32, m: u32, d: u32, hh: u32, mm: u32) -> DateTime<Utc> {

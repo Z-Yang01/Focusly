@@ -2,7 +2,6 @@
 //! 本模块负责查询与恢复。每张便签最多保留 50 条（写入时清理）。
 
 use rusqlite::{params, Connection, Row};
-use uuid::Uuid;
 
 use crate::db::models::{Note, NoteVersion};
 use crate::db::notes;

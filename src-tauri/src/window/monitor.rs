@@ -97,7 +97,7 @@ pub fn rect_visible_on_any_monitor(_x: i32, _y: i32, _w: i32, _h: i32) -> bool {
 /// 前台窗口是否处于全屏（矩形铺满所在显示器且非系统 UI）。
 pub fn is_foreground_fullscreen() -> bool {
     use windows::Win32::Graphics::Dwm::{
-        DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWINDOWATTRIBUTE,
+        DwmGetWindowAttribute, DWMWINDOWATTRIBUTE,
     };
     use windows::Win32::UI::Shell::SHQueryUserNotificationState;
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
