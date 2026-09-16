@@ -29,13 +29,18 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/images/**"]
+        "scope": [
+          "$APPDATA/images/**",
+          "$EXE/data/images/**"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -46,6 +51,14 @@
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "both",
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "displayLanguageSelector": true
       }
     }
   }

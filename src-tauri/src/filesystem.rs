@@ -13,6 +13,33 @@ pub struct AppPaths {
     pub errors: PathBuf,
 }
 
+/// 便携模式：exe 同目录存在 `portable.marker` 文件时，
+/// 全部数据（数据库/图片/备份/日志）写入 `<exe目录>/data/`，随程序走、不落 %APPDATA%。
+/// 否则回退系统应用数据目录。
+pub fn resolve_data_root(app: &tauri::AppHandle) -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            if let Some(root) = portable_root(dir) {
+                log::info!("便携模式启用，数据目录: {}", root.display());
+                return root;
+            }
+        }
+    }
+    let _ = app;
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("com.focusly.app"))
+}
+
+/// 纯函数：给定 exe 所在目录，返回便携数据根（None = 非便携）。
+pub fn portable_root(exe_dir: &Path) -> Option<PathBuf> {
+    if exe_dir.join("portable.marker").is_file() {
+        Some(exe_dir.join("data"))
+    } else {
+        None
+    }
+}
+
 impl AppPaths {
     pub fn init(root: PathBuf) -> AppResult<Self> {
         let paths = Self {
@@ -168,6 +195,15 @@ mod tests {
         assert_eq!(files.len(), 1);
         let content = std::fs::read_to_string(&files[0]).unwrap();
         assert!(content.contains("问题A") && content.contains("方案D"));
+    }
+
+    #[test]
+    fn portable_root_detection() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(portable_root(tmp.path()).is_none(), "无 marker 非便携");
+        std::fs::write(tmp.path().join("portable.marker"), b"").unwrap();
+        let root = portable_root(tmp.path()).unwrap();
+        assert_eq!(root, tmp.path().join("data"));
     }
 
     #[test]

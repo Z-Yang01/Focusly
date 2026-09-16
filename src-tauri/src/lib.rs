@@ -52,8 +52,8 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            // 1. 数据目录与日志
-            let data_dir = app.path().app_data_dir()?;
+            // 1. 数据目录与日志（便携模式：exe 旁有 portable.marker 时数据随程序走）
+            let data_dir = filesystem::resolve_data_root(app.handle());
             let paths = filesystem::AppPaths::init(data_dir).expect("无法初始化应用数据目录");
             logger::init(&paths.logs);
             log::info!(
