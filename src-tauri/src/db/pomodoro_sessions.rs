@@ -41,7 +41,16 @@ pub fn insert_running(
     phase: &str,
     planned_sec: i64,
 ) -> AppResult<()> {
-    insert_running_at(conn, id, note_id, task_key, task_text, phase, planned_sec, &crate::reminder::fmt(Utc::now()))
+    insert_running_at(
+        conn,
+        id,
+        note_id,
+        task_key,
+        task_text,
+        phase,
+        planned_sec,
+        &crate::reminder::fmt(Utc::now()),
+    )
 }
 
 /// 可控 started_at 的插入（测试与启动恢复复算用）。
@@ -141,7 +150,13 @@ pub fn stats_today(conn: &Connection, today_start: &str, now: &str) -> AppResult
         params![today_start, now],
         |r| r.get(0),
     )?;
-    Ok(StatsToday { focus_count, focus_sec, done_tasks, skipped_tasks, interrupts })
+    Ok(StatsToday {
+        focus_count,
+        focus_sec,
+        done_tasks,
+        skipped_tasks,
+        interrupts,
+    })
 }
 
 /// 单日聚合结果（date = 本地 "YYYY-MM-DD"）。
@@ -161,7 +176,11 @@ pub fn stats_daily(conn: &Connection, days: i64) -> AppResult<Vec<DailyStat>> {
     let today = Local::now().date_naive();
     let start_local = today - chrono::Duration::days(days - 1);
     let cutoff = Local
-        .from_local_datetime(&start_local.and_hms_opt(0, 0, 0).unwrap_or_else(|| start_local.and_hms_opt(12, 0, 0).unwrap()))
+        .from_local_datetime(
+            &start_local
+                .and_hms_opt(0, 0, 0)
+                .unwrap_or_else(|| start_local.and_hms_opt(12, 0, 0).unwrap()),
+        )
         .single()
         .map(|t| t.with_timezone(&Utc))
         .unwrap_or_else(|| Utc::now() - chrono::Duration::days(days));
@@ -184,7 +203,11 @@ pub fn stats_daily(conn: &Connection, days: i64) -> AppResult<Vec<DailyStat>> {
                         .to_string()
                 })
                 .unwrap_or_default();
-            Ok((local_date, phase == "focus" && status == "completed", actual))
+            Ok((
+                local_date,
+                phase == "focus" && status == "completed",
+                actual,
+            ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
@@ -218,9 +241,15 @@ pub fn fold_daily(rows: &[(String, bool, i64)], today: &str, days: i64) -> Vec<D
     }
     (0..days)
         .map(|i| {
-            let key = (start + chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
+            let key = (start + chrono::Duration::days(i))
+                .format("%Y-%m-%d")
+                .to_string();
             let (c, s) = map.get(&key).copied().unwrap_or((0, 0));
-            DailyStat { date: key, focus_count: c, focus_sec: s }
+            DailyStat {
+                date: key,
+                focus_count: c,
+                focus_sec: s,
+            }
         })
         .collect()
 }
@@ -255,7 +284,15 @@ mod tests {
     fn finish_sets_completed_fields() {
         let conn = setup();
         insert_running(&conn, "s1", "n1", "k1", "任务", "focus", 1500).unwrap();
-        finish(&conn, "s1", "completed", 1500, None, "2026-09-16T10:00:00+00:00").unwrap();
+        finish(
+            &conn,
+            "s1",
+            "completed",
+            1500,
+            None,
+            "2026-09-16T10:00:00+00:00",
+        )
+        .unwrap();
         let running = get_running(&conn).unwrap();
         assert!(running.is_none(), "结束后不再是 running");
 
@@ -274,9 +311,21 @@ mod tests {
 
         // interrupted + reason
         insert_running(&conn, "s2", "n1", "k1", "任务", "focus", 1500).unwrap();
-        finish(&conn, "s2", "interrupted", 300, Some("skip"), "2026-09-16T10:05:00+00:00").unwrap();
+        finish(
+            &conn,
+            "s2",
+            "interrupted",
+            300,
+            Some("skip"),
+            "2026-09-16T10:05:00+00:00",
+        )
+        .unwrap();
         let reason: Option<String> = conn
-            .query_row("SELECT interrupt_reason FROM pomodoro_sessions WHERE id='s2'", [], |r| r.get(0))
+            .query_row(
+                "SELECT interrupt_reason FROM pomodoro_sessions WHERE id='s2'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(reason.as_deref(), Some("skip"));
     }
@@ -285,19 +334,114 @@ mod tests {
     fn stats_today_counts_focus_and_interrupts_in_window() {
         let conn = setup();
         // 窗口内：2 个完成 focus + 1 个中断 + 1 个完成 break（不计数）
-        insert_running_at(&conn, "a", "n1", "k1", "t", "focus", 1500, "2026-09-16T01:00:00+00:00").unwrap();
-        finish(&conn, "a", "completed", 1500, None, "2026-09-16T01:25:00+00:00").unwrap();
-        insert_running_at(&conn, "b", "n1", "k1", "t", "focus", 1500, "2026-09-16T02:00:00+00:00").unwrap();
-        finish(&conn, "b", "completed", 1200, None, "2026-09-16T02:20:00+00:00").unwrap();
-        insert_running_at(&conn, "c", "n1", "k1", "t", "focus", 1500, "2026-09-16T03:00:00+00:00").unwrap();
-        finish(&conn, "c", "interrupted", 300, Some("skip"), "2026-09-16T03:05:00+00:00").unwrap();
-        insert_running_at(&conn, "d", "n1", "k1", "t", "short_break", 300, "2026-09-16T04:00:00+00:00").unwrap();
-        finish(&conn, "d", "completed", 300, None, "2026-09-16T04:05:00+00:00").unwrap();
+        insert_running_at(
+            &conn,
+            "a",
+            "n1",
+            "k1",
+            "t",
+            "focus",
+            1500,
+            "2026-09-16T01:00:00+00:00",
+        )
+        .unwrap();
+        finish(
+            &conn,
+            "a",
+            "completed",
+            1500,
+            None,
+            "2026-09-16T01:25:00+00:00",
+        )
+        .unwrap();
+        insert_running_at(
+            &conn,
+            "b",
+            "n1",
+            "k1",
+            "t",
+            "focus",
+            1500,
+            "2026-09-16T02:00:00+00:00",
+        )
+        .unwrap();
+        finish(
+            &conn,
+            "b",
+            "completed",
+            1200,
+            None,
+            "2026-09-16T02:20:00+00:00",
+        )
+        .unwrap();
+        insert_running_at(
+            &conn,
+            "c",
+            "n1",
+            "k1",
+            "t",
+            "focus",
+            1500,
+            "2026-09-16T03:00:00+00:00",
+        )
+        .unwrap();
+        finish(
+            &conn,
+            "c",
+            "interrupted",
+            300,
+            Some("skip"),
+            "2026-09-16T03:05:00+00:00",
+        )
+        .unwrap();
+        insert_running_at(
+            &conn,
+            "d",
+            "n1",
+            "k1",
+            "t",
+            "short_break",
+            300,
+            "2026-09-16T04:00:00+00:00",
+        )
+        .unwrap();
+        finish(
+            &conn,
+            "d",
+            "completed",
+            300,
+            None,
+            "2026-09-16T04:05:00+00:00",
+        )
+        .unwrap();
         // 窗口外（前一天）
-        insert_running_at(&conn, "e", "n1", "k1", "t", "focus", 1500, "2026-09-15T23:00:00+00:00").unwrap();
-        finish(&conn, "e", "completed", 1500, None, "2026-09-15T23:25:00+00:00").unwrap();
+        insert_running_at(
+            &conn,
+            "e",
+            "n1",
+            "k1",
+            "t",
+            "focus",
+            1500,
+            "2026-09-15T23:00:00+00:00",
+        )
+        .unwrap();
+        finish(
+            &conn,
+            "e",
+            "completed",
+            1500,
+            None,
+            "2026-09-15T23:25:00+00:00",
+        )
+        .unwrap();
 
-        let st = stats_today(&conn, "2026-09-16T00:00:00+00:00", "2026-09-16T12:00:00+00:00").unwrap();
+        let st = stats_today(
+            &conn,
+            "2026-09-16T00:00:00+00:00",
+            "2026-09-16T12:00:00+00:00",
+        )
+        .unwrap();
         assert_eq!(st.focus_count, 2, "只计 completed focus");
         assert_eq!(st.focus_sec, 1500 + 1200);
         assert_eq!(st.interrupts, 1, "break 的 completed 不进 interrupts");
@@ -334,7 +478,12 @@ mod tests {
         assert_eq!(st.skipped_tasks, 1);
 
         // 完全过期的窗口：不计入
-        let st2 = stats_today(&conn, "2020-01-01T00:00:00+00:00", "2020-01-02T00:00:00+00:00").unwrap();
+        let st2 = stats_today(
+            &conn,
+            "2020-01-01T00:00:00+00:00",
+            "2020-01-02T00:00:00+00:00",
+        )
+        .unwrap();
         assert_eq!(st2.done_tasks, 0);
         assert_eq!(st2.skipped_tasks, 0);
     }
@@ -373,7 +522,15 @@ mod tests {
     fn stats_daily_today_integration() {
         let conn = setup();
         insert_running(&conn, "now1", "n1", "k1", "t", "focus", 1500).unwrap();
-        finish(&conn, "now1", "completed", 1500, None, &crate::reminder::fmt(Utc::now())).unwrap();
+        finish(
+            &conn,
+            "now1",
+            "completed",
+            1500,
+            None,
+            &crate::reminder::fmt(Utc::now()),
+        )
+        .unwrap();
         let out = stats_daily(&conn, 7).unwrap();
         assert_eq!(out.len(), 7);
         let today = out.last().unwrap();

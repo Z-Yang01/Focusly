@@ -36,6 +36,12 @@ import { ReminderPopover } from "@/features/reminders/ReminderPopover";
 import { ReminderBanner } from "@/features/reminders/ReminderBanner";
 import { useNoteAutoSave } from "./useNoteAutoSave";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   ContextMenu,
@@ -77,6 +83,12 @@ import type {
   ReminderFiredEvent,
 } from "@/types";
 import { cn } from "@/lib/utils";
+import { usePomodoro } from "@/features/pomodoro/usePomodoro";
+import { PomodoroBar } from "@/features/pomodoro/PomodoroBar";
+import { ensureMiniPomodoro } from "@/features/pomodoro/miniWindow";
+import { localDateKey } from "@/features/pomodoro/format";
+import { taskMetaGet, taskMetaUpdate, pomodoroStart, pomodoroCompleteTask } from "@/features/pomodoro/api";
+import type { TaskMeta } from "@/features/pomodoro/types";
 import { VersionHistoryPanel } from "@/features/archive/VersionHistoryPanel";
 
 export interface NoteWindowProps {
@@ -139,6 +151,28 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   });
   const [banner, setBanner] = useState<ReminderFiredEvent | null>(null);
   const [versionOpen, setVersionOpen] = useState(false);
+  const pomo = usePomodoro();
+  const [taskMetaList, setTaskMetaList] = useState<TaskMeta[]>([]);
+  const [taskMenu, setTaskMenu] = useState<{
+    taskKey: string;
+    lineText: string;
+    status: "todo" | "done" | "skipped" | "running";
+  } | null>(null);
+  const today = localDateKey(new Date());
+  const runningOnThisNote = pomo.state?.noteId === noteId ? pomo.state.taskKey : null;
+  const pomoOnThisNote = pomo.state?.noteId === noteId && pomo.isRunning;
+
+  const refreshTaskMeta = useCallback(async () => {
+    try {
+      setTaskMetaList(await taskMetaGet(noteId));
+    } catch (err) {
+      console.error("读取任务元数据失败", err);
+    }
+  }, [noteId]);
+
+  useEffect(() => {
+    void refreshTaskMeta();
+  }, [refreshTaskMeta]);
   const [dragOver, setDragOver] = useState(false);
 
   const readyCalledRef = useRef(false);
@@ -510,6 +544,9 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 placeholder="无标题"
                 className="h-8 flex-1 border-none bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
               />
+              {pomoOnThisNote && (
+                <span title={`番茄进行中 ${pomo.mmss}`}>🍅</span>
+              )}
               <IconButton
                 title={preview ? "切换到编辑" : "切换到预览"}
                 onClick={togglePreview}
@@ -562,6 +599,13 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 onImagePaths={insertImageMarkdown}
                 onPasteImage={() => void handlePasteImage()}
                 noteId={noteId}
+                taskPassthrough={{
+                  taskMetaList,
+                  today,
+                  runningTaskKey: runningOnThisNote ?? undefined,
+                  onTaskMenu: (e) =>
+                    setTaskMenu({ taskKey: e.taskKey, lineText: e.lineText, status: e.status }),
+                }}
               />
               {dragOver && (
                 <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/70">
@@ -582,6 +626,15 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                   </>
                 )}
               </span>
+              <PomodoroBar noteId={noteId} />
+              <button
+                type="button"
+                title="迷你番茄窗"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => void ensureMiniPomodoro()}
+              >
+                🖥
+              </button>
               <div className="flex flex-1 justify-center">
                 <ReminderPopover note={detail} onChanged={refreshMeta} />
               </div>
@@ -655,6 +708,91 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
         onOpenChange={setVersionOpen}
         onRestored={refreshMeta}
       />
+      <Dialog open={taskMenu !== null} onOpenChange={(v) => !v && setTaskMenu(null)}>
+        <DialogContent className="max-w-xs gap-2 p-3 text-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">任务：{taskMenu?.lineText}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-1">
+            {[
+              {
+                label: "🍅 设为当前番茄任务",
+                act: () =>
+                  taskMenu && void pomodoroStart(noteId, taskMenu.taskKey, taskMenu.lineText),
+              },
+              {
+                label: "✔️ 完成任务",
+                act: () =>
+                  taskMenu &&
+                  void pomodoroCompleteTask(noteId, taskMenu.taskKey, taskMenu.lineText),
+              },
+              ...[1, 2, 3, 5, 8].map((n) => ({
+                label: `🍅 预计番茄数：${n}`,
+                act: () =>
+                  taskMenu &&
+                  void taskMetaUpdate({
+                    noteId,
+                    taskKey: taskMenu.taskKey,
+                    lineText: taskMenu.lineText,
+                    estimate: n,
+                  }),
+              })),
+              ...[
+                { label: "⬆ 优先级：高", v: "high" },
+                { label: "➖ 优先级：中", v: "medium" },
+                { label: "⬇ 优先级：低", v: "low" },
+              ].map((o) => ({
+                label: o.label,
+                act: () =>
+                  taskMenu &&
+                  void taskMetaUpdate({
+                    noteId,
+                    taskKey: taskMenu.taskKey,
+                    lineText: taskMenu.lineText,
+                    priority: o.v,
+                  }),
+              })),
+              {
+                label: "✖️ 跳过今天",
+                act: () =>
+                  taskMenu &&
+                  void taskMetaUpdate({
+                    noteId,
+                    taskKey: taskMenu.taskKey,
+                    lineText: taskMenu.lineText,
+                    status: "skipped",
+                  }),
+              },
+              {
+                label: "↺ 清除跳过状态",
+                act: () =>
+                  taskMenu &&
+                  void taskMetaUpdate({
+                    noteId,
+                    taskKey: taskMenu.taskKey,
+                    lineText: taskMenu.lineText,
+                    clearSkip: true,
+                  }),
+              },
+            ].map((item) => (
+              <Button
+                key={item.label}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="justify-start"
+                onClick={() => {
+                  item.act();
+                  void refreshTaskMeta();
+                  setTaskMenu(null);
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }

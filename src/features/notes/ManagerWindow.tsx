@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import {
   Archive,
+  BarChart3,
   CalendarClock,
   Eye,
   EyeOff,
@@ -54,6 +55,7 @@ import { TemplatePicker } from "@/features/templates/TemplatePicker";
 import { applyTemplate, type NoteTemplate } from "@/features/templates/templates";
 import { DailyNoteButton } from "@/features/templates/DailyNoteButton";
 import { ImageManagerDialog } from "@/features/gallery/ImageManagerDialog";
+import { StatsDialog } from "@/features/pomodoro/StatsDialog";
 import { DndSettingsCard } from "@/features/dnd/DndSettingsCard";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +70,7 @@ function ManagerContent() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const searchRef = useRef<SearchBarHandle | null>(null);
 
   const activeQuery = useQuery({ queryKey: ["notes", "active"], queryFn: () => listNotes("active") });
@@ -225,6 +228,16 @@ function ManagerContent() {
         >
           <Images className="size-4" />
         </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+          title="番茄统计"
+          onClick={() => setStatsOpen(true)}
+        >
+          <BarChart3 className="size-4" />
+        </Button>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -331,6 +344,7 @@ function ManagerContent() {
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <ImageManagerDialog open={galleryOpen} onOpenChange={setGalleryOpen} />
+      <StatsDialog open={statsOpen} onOpenChange={setStatsOpen} />
       <CommandPaletteHost />
       <TemplatePicker onPick={(tpl) => void handleCreateFromTemplate(tpl)}>
         <Button

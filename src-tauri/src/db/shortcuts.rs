@@ -8,6 +8,7 @@ pub const DEFAULT_SHORTCUTS: &[(&str, &str)] = &[
     ("new_note", "Ctrl+Shift+N"),
     ("focus_search", "Ctrl+Shift+F"),
     ("quick_capture", "Ctrl+Shift+Q"),
+    ("pomodoro_toggle", "Ctrl+Shift+P"),
 ];
 
 pub fn list(conn: &Connection) -> AppResult<Vec<ShortcutEntry>> {

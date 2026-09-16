@@ -6,6 +6,9 @@ use tauri::{AppHandle, Emitter};
 
 use crate::window;
 
+/// 托盘图标 id（pomodoro.rs 经 app.tray_by_id 更新 tooltip）
+pub const TRAY_ID: &str = "focusly-tray";
+
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_all = MenuItem::with_id(app, "show_all", "显示全部便签", true, None::<&str>)?;
     let hide_all = MenuItem::with_id(app, "hide_all", "隐藏全部便签", true, None::<&str>)?;
@@ -32,7 +35,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
-    let mut builder = TrayIconBuilder::new();
+    let mut builder = TrayIconBuilder::with_id(TRAY_ID);
     if let Some(icon) = app.default_window_icon().cloned() {
         builder = builder.icon(icon);
     }
@@ -70,4 +73,17 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+/// 更新托盘 tooltip（番茄钟运行状态："🍅 24:59 任务文本" / "⏸ 剩余 mm:ss"）。
+/// 托盘不存在（创建失败/测试环境）或更新失败时仅记日志，静默降级。
+pub fn set_tooltip(app: &AppHandle, text: &str) {
+    match app.tray_by_id(TRAY_ID) {
+        Some(tray) => {
+            if let Err(e) = tray.set_tooltip(Some(text)) {
+                log::warn!("托盘 tooltip 更新失败: {e}");
+            }
+        }
+        None => log::debug!("托盘图标不存在（{TRAY_ID}），跳过 tooltip 更新"),
+    }
 }

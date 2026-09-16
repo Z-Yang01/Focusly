@@ -10,6 +10,8 @@ pub struct AppState {
     pub db: Db,
     pub paths: AppPaths,
     pub scheduler: crate::reminder::SchedulerHandle,
+    /// 番茄钟调度器：命令发送端（状态机本体在 pomodoro.rs 的 loop task 里）
+    pub pomodoro: crate::pomodoro::PomodoroHandle,
     /// 全局快捷键：规范化匹配键 -> 动作名（见 shortcut::register_all）
     pub shortcut_map: Mutex<HashMap<String, String>>,
     /// 被全屏策略隐藏的窗口 label（退出全屏后需要恢复显示）

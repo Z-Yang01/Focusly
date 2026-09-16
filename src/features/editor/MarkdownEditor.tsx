@@ -27,6 +27,14 @@ import { MarkdownView } from "./MarkdownView";
 import { toggleTodoAtLine } from "@/features/todo/todo";
 import { cn } from "@/lib/utils";
 
+/** 番茄/任务元数据透传（缺省 = 完全旧行为） */
+export interface TaskMetaPassthrough {
+  taskMetaList?: { taskKey: string; lineText: string; status: string; skipDate: string | null }[];
+  today?: string;
+  runningTaskKey?: string;
+  onTaskMenu?: (e: { taskKey: string; lineText: string; status: "todo" | "done" | "skipped" | "running" }) => void;
+}
+
 export interface MarkdownEditorProps {
   value: string;
   onChange: (v: string) => void;
@@ -37,6 +45,8 @@ export interface MarkdownEditorProps {
   /** Ctrl+V 检测到剪贴板图片时调用（父组件读剪贴板并入库） */
   onPasteImage: () => void;
   noteId: string;
+  /** 番茄任务元数据（可选） */
+  taskPassthrough?: TaskMetaPassthrough;
 }
 
 interface Mutation {
@@ -54,6 +64,7 @@ export function MarkdownEditor({
   onTogglePreview: _onTogglePreview,
   onImagePaths: _onImagePaths,
   onPasteImage,
+  taskPassthrough,
 }: MarkdownEditorProps) {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -203,6 +214,10 @@ export function MarkdownEditor({
           <MarkdownView
             content={value}
             onToggleTodo={handleToggleTodo}
+            taskMetaList={taskPassthrough?.taskMetaList}
+            today={taskPassthrough?.today}
+            runningTaskKey={taskPassthrough?.runningTaskKey}
+            onTaskMenu={taskPassthrough?.onTaskMenu}
             className="min-h-0 flex-1 overflow-y-auto p-3"
           />
         ) : (

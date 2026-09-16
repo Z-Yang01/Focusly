@@ -34,7 +34,10 @@ export const pomodoroCompleteTask = (noteId: string, taskKey: string, lineText: 
   invoke<StatePayload>("pomodoro_complete_task", { noteId, taskKey, lineText });
 
 /** 当前状态；空闲时为 null */
-export const pomodoroState = () => invoke<StatePayload | null>("pomodoro_state");
+export const pomodoroState = async (): Promise<StatePayload | null> => {
+  const snap = await invoke<StatePayload>("pomodoro_state");
+  return snap.running ? snap : null;
+};
 
 // ---------- 统计 ----------
 
@@ -44,7 +47,7 @@ export const pomodoroStatsRange = (days: number) =>
 
 // ---------- 任务元数据 ----------
 
-export const taskMetaGet = (noteId: string) => invoke<TaskMeta[]>("task_meta_get", { noteId });
+export const taskMetaGet = (noteId: string) => invoke<TaskMeta[]>("task_meta_list", { noteId });
 
 export interface TaskMetaUpdateArgs {
   noteId: string;
@@ -52,7 +55,7 @@ export interface TaskMetaUpdateArgs {
   lineText: string;
   status?: "todo" | "done" | "skipped";
   estimate?: number | null;
-  priority?: number | null;
+  priority?: string | null; // high | medium | low
   /** RFC3339 UTC */
   dueAt?: string | null;
   /** 清除跳过标记（恢复为 todo） */

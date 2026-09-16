@@ -6,6 +6,8 @@ export type PomodoroPhase = "focus" | "short_break" | "long_break";
 
 /** 所有 pomodoro_* 写命令的统一返回；noteId/taskKey/taskText 为 null 表示未绑定任务的专注 */
 export interface StatePayload {
+  /** P 的快照恒返回全量；running=false 表示空闲 */
+  running?: boolean;
   phase: PomodoroPhase;
   /** RFC3339 UTC；null = 无进行中的阶段（暂停 / 空闲） */
   endsAt: string | null;

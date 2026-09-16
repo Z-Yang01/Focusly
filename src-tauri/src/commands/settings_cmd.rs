@@ -18,9 +18,23 @@ const SETTING_KEYS: &[&str] = &[
     // 勿扰时段（"HH:MM"，空串 = 关闭；读取端见 src-tauri/src/dnd.rs）
     "dnd_start",
     "dnd_end",
+    // 番茄钟（读取端见 src-tauri/src/pomodoro.rs settings_from）
+    "pomo_focus_min",
+    "pomo_short_min",
+    "pomo_long_min",
+    "pomo_long_every",
+    "pomo_auto_next",
+    "pomo_sound",
+    "pomo_force_remind",
 ];
 
-const SHORTCUT_ACTIONS: &[&str] = &["toggle_notes", "new_note", "focus_search", "quick_capture"];
+const SHORTCUT_ACTIONS: &[&str] = &[
+    "toggle_notes",
+    "new_note",
+    "focus_search",
+    "quick_capture",
+    "pomodoro_toggle",
+];
 
 #[tauri::command]
 pub fn get_all_settings(state: State<'_, AppState>) -> AppResult<HashMap<String, String>> {

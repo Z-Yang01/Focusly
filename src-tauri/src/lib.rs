@@ -10,6 +10,7 @@ mod filesystem;
 mod imagemgr;
 mod logger;
 mod notes;
+mod pomodoro;
 mod privacy;
 mod quickcapture;
 mod reminder;
@@ -71,14 +72,18 @@ pub fn run() {
 
             // 3. 共享状态（先 manage，后续模块才能 app.state::<AppState>()）
             let (scheduler, scheduler_rx) = reminder::channel();
+            let pomodoro = pomodoro::spawn(app.handle().clone());
             app.manage(AppState {
                 db: app_db,
                 paths,
                 scheduler,
+                pomodoro,
                 shortcut_map: std::sync::Mutex::new(std::collections::HashMap::new()),
                 fullscreen_hidden: std::sync::Mutex::new(std::collections::HashSet::new()),
                 geometry_gens: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
+            // 番茄钟启动恢复：遗留 running 会话标记 interrupted，24h 内补发阶段结束通知
+            pomodoro::recover(app.handle());
 
             // 4. 托盘（失败仅日志，不阻断启动）
             if let Err(e) = tray::create_tray(app.handle()) {
@@ -187,6 +192,20 @@ pub fn run() {
             commands::imagemgr_cmd::image_make_thumbnails,
             // 模板与每日笔记
             commands::notes_cmd::daily_get_or_create,
+            // 番茄钟
+            commands::pomodoro_cmd::pomodoro_start,
+            commands::pomodoro_cmd::pomodoro_pause,
+            commands::pomodoro_cmd::pomodoro_resume,
+            commands::pomodoro_cmd::pomodoro_skip,
+            commands::pomodoro_cmd::pomodoro_stop,
+            commands::pomodoro_cmd::pomodoro_add_minutes,
+            commands::pomodoro_cmd::pomodoro_state,
+            commands::pomodoro_cmd::pomodoro_complete_task,
+            commands::pomodoro_cmd::pomodoro_stats_today,
+            commands::pomodoro_cmd::pomodoro_stats_range,
+            commands::pomodoro_cmd::task_meta_get,
+            commands::pomodoro_cmd::task_meta_list,
+            commands::pomodoro_cmd::task_meta_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running focusly");

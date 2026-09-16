@@ -80,11 +80,17 @@ impl Phase {
 
 #[derive(Debug, Clone)]
 pub enum PomodoroCmd {
-    Start { note_id: String, task_key: String, task_text: String },
+    Start {
+        note_id: String,
+        task_key: String,
+        task_text: String,
+    },
     Pause,
     Resume,
     Skip,
-    Stop { reason: String },
+    Stop {
+        reason: String,
+    },
     AddMinutes(i64),
     CompleteTask,
     /// 全屏状态变化提示（总控可从 window/foreground.rs 接线；当前仅作通知延迟的提示位）
@@ -212,7 +218,10 @@ pub fn settings_from(map: &HashMap<String, String>) -> PomoSettings {
         long_every: parse_setting_i64(map, "pomo_long_every", 4, 1).max(1) as u32,
         auto_next: parse_setting_bool(map, "pomo_auto_next", false),
         force_remind: parse_setting_bool(map, "pomo_force_remind", false),
-        sound: map.get("pomo_sound").cloned().unwrap_or_else(|| "off".into()),
+        sound: map
+            .get("pomo_sound")
+            .cloned()
+            .unwrap_or_else(|| "off".into()),
     }
 }
 
@@ -256,7 +265,12 @@ pub fn next_phase(current: Phase, completed_focus_in_cycle: u32, long_every: u32
 }
 
 /// 阶段结束后是否应自动续接下一阶段（纯判定）。
-pub fn auto_next_decision(auto_next: bool, finished: Phase, completed_focus_in_cycle: u32, long_every: u32) -> Option<Phase> {
+pub fn auto_next_decision(
+    auto_next: bool,
+    finished: Phase,
+    completed_focus_in_cycle: u32,
+    long_every: u32,
+) -> Option<Phase> {
     if auto_next {
         Some(next_phase(finished, completed_focus_in_cycle, long_every))
     } else {
@@ -284,7 +298,11 @@ pub fn notice_text(phase: Phase, task_text: &str) -> (String, String) {
     match phase {
         Phase::Focus => {
             let t = truncate_chars(task_text.trim(), 60);
-            let body = if t.is_empty() { "专注完成，休息一下吧".to_string() } else { format!("完成：{t}") };
+            let body = if t.is_empty() {
+                "专注完成，休息一下吧".to_string()
+            } else {
+                format!("完成：{t}")
+            };
             ("🍅 专注完成".to_string(), body)
         }
         _ => ("☕ 休息结束".to_string(), "开始下一个专注".to_string()),
@@ -345,30 +363,35 @@ fn snapshot_of(st: &Machine, now: DateTime<Utc>) -> PomoSnapshot {
     }
 }
 
-/// 托盘 tooltip 文案（纯函数）：Idle→"Focusly"；运行→"🍅/☕ mm:ss 任务"；暂停→"⏸ 剩余 mm:ss"。
-pub fn tooltip_text(st: &Machine, now: DateTime<Utc>) -> String {
+/// 托盘 tooltip 文案（纯函数）：运行中 → "🍅/☕ mm:ss 任务"；暂停 → "⏸ 剩余 mm:ss"。
+pub fn tooltip_text_for(
+    phase: Phase,
+    ends_at: DateTime<Utc>,
+    pause: Option<(DateTime<Utc>, i64)>,
+    task_text: &str,
+    now: DateTime<Utc>,
+) -> String {
+    let remaining = match &pause {
+        Some((_, s)) => *s,
+        None => (ends_at - now).num_seconds().max(0),
+    };
+    if pause.is_some() {
+        format!("⏸ 剩余 {}", fmt_mmss(remaining))
+    } else {
+        let icon = if phase == Phase::Focus { "🍅" } else { "☕" };
+        let t = truncate_chars(task_text.trim(), 16);
+        if t.is_empty() {
+            format!("{icon} {}", fmt_mmss(remaining))
+        } else {
+            format!("{icon} {} {t}", fmt_mmss(remaining))
+        }
+    }
+}
+
+fn tooltip_text(st: &Machine, now: DateTime<Utc>) -> String {
     match st {
         Machine::Idle => "Focusly".to_string(),
-        Machine::Running(r) => {
-            let rem = match &r.pause {
-                Some((_, s)) => *s,
-                None => (r.ends_at - now).num_seconds().max(0),
-            };
-            if r.pause.is_some() {
-                format!("⏸ 剩余 {}", fmt_mmss(rem))
-            } else {
-                let icon = match r.phase {
-                    Phase::Focus => "🍅",
-                    _ => "☕",
-                };
-                let t = truncate_chars(r.task_text.trim(), 16);
-                if t.is_empty() {
-                    format!("{icon} {}", fmt_mmss(rem))
-                } else {
-                    format!("{icon} {} {t}", fmt_mmss(rem))
-                }
-            }
-        }
+        Machine::Running(r) => tooltip_text_for(r.phase, r.ends_at, r.pause, &r.task_text, now),
     }
 }
 
@@ -377,7 +400,10 @@ fn publish(app: &AppHandle, st: &Machine) {
     if let Ok(mut g) = snapshot_cell().lock() {
         *g = snap.clone();
     }
-    let _ = app.emit(STATE_EVENT, serde_json::to_value(&snap).unwrap_or_else(|_| json!({})));
+    let _ = app.emit(
+        STATE_EVENT,
+        serde_json::to_value(&snap).unwrap_or_else(|_| json!({})),
+    );
 }
 
 fn update_tooltip(app: &AppHandle, st: &Machine) {
@@ -443,15 +469,32 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<PomodoroCmd>) {
 
 fn handle_cmd(app: &AppHandle, st: &mut Machine, cmd: PomodoroCmd) {
     match cmd {
-        PomodoroCmd::Start { note_id, task_key, task_text } => {
+        PomodoroCmd::Start {
+            note_id,
+            task_key,
+            task_text,
+        } => {
             // 已有运行中会话：先按切换任务中断
             if matches!(st, Machine::Running(_)) {
                 stop_running(app, st, "switch_task");
             }
             // 私密便签：任务文本全程置空（不入库/不进事件/不进通知）
-            let task_text = if note_is_private(app, &note_id) { String::new() } else { task_text };
+            let task_text = if note_is_private(app, &note_id) {
+                String::new()
+            } else {
+                task_text
+            };
             let settings = read_settings(app);
-            begin_phase(app, st, Phase::Focus, note_id, task_key, task_text, 0, &settings);
+            begin_phase(
+                app,
+                st,
+                Phase::Focus,
+                note_id,
+                task_key,
+                task_text,
+                0,
+                &settings,
+            );
         }
         PomodoroCmd::Pause => {
             if let Machine::Running(r) = st {
@@ -524,7 +567,11 @@ fn toggle_cmd(app: &AppHandle, st: &mut Machine) {
         ),
         Machine::Running(_) => {
             let paused = matches!(st, Machine::Running(r) if r.pause.is_some());
-            let next = if paused { PomodoroCmd::Resume } else { PomodoroCmd::Pause };
+            let next = if paused {
+                PomodoroCmd::Resume
+            } else {
+                PomodoroCmd::Pause
+            };
             handle_cmd(app, st, next);
         }
     }
@@ -548,7 +595,15 @@ fn begin_phase(
     {
         let state = app.state::<AppState>();
         let r = state.db.with(|c| {
-            pomodoro_sessions::insert_running(c, &id, &note_id, &task_key, &task_text, phase.as_str(), planned)
+            pomodoro_sessions::insert_running(
+                c,
+                &id,
+                &note_id,
+                &task_key,
+                &task_text,
+                phase.as_str(),
+                planned,
+            )
         });
         if let Err(e) = r {
             log::error!("番茄钟会话写入失败: {e}");
@@ -581,13 +636,22 @@ fn phase_end(app: &AppHandle, st: &mut Machine) {
     {
         let state = app.state::<AppState>();
         if let Err(e) = state.db.with(|c| {
-            pomodoro_sessions::finish(c, &r.session_id, "completed", r.planned_sec, None, &crate::reminder::fmt(now))
+            pomodoro_sessions::finish(
+                c,
+                &r.session_id,
+                "completed",
+                r.planned_sec,
+                None,
+                &crate::reminder::fmt(now),
+            )
         }) {
             log::error!("番茄钟会话完结失败: {e}");
         }
     }
 
     let is_private = note_is_private(app, &r.note_id);
+    // 焦点阶段自然完成：本周期完成数 +1（skip 不加，见 finish_interrupted_and_advance）
+    let completed_before = r.completed_in_cycle;
     if finished == Phase::Focus {
         r.completed_in_cycle += 1;
         if !r.note_id.is_empty() && !r.task_key.is_empty() {
@@ -601,7 +665,8 @@ fn phase_end(app: &AppHandle, st: &mut Machine) {
         }
     }
 
-    let next = next_phase(finished, r.completed_in_cycle, settings.long_every);
+    // next_phase 内部对 Focus 做 +1：传入增量前的计数，结果等价于按"含本次"的新计数选长/短休
+    let next = next_phase(finished, completed_before, settings.long_every);
     let _ = app.emit(
         FINISHED_EVENT,
         json!({
@@ -628,9 +693,23 @@ fn phase_end(app: &AppHandle, st: &mut Machine) {
     let completed = r.completed_in_cycle;
     let (note_id, task_key, task_text) =
         (r.note_id.clone(), r.task_key.clone(), r.task_text.clone());
-    match auto_next_decision(settings.auto_next, finished, completed - u32::from(finished == Phase::Focus), settings.long_every) {
+    match auto_next_decision(
+        settings.auto_next,
+        finished,
+        completed_before,
+        settings.long_every,
+    ) {
         Some(next_phase_to_start) => {
-            begin_phase(app, st, next_phase_to_start, note_id, task_key, task_text, completed, &settings);
+            begin_phase(
+                app,
+                st,
+                next_phase_to_start,
+                note_id,
+                task_key,
+                task_text,
+                completed,
+                &settings,
+            );
         }
         None => {
             *st = Machine::Idle;
@@ -676,14 +755,26 @@ fn finish_interrupted_and_advance(app: &AppHandle, st: &mut Machine, reason: &st
             "taskText": if is_private { "" } else { r.task_text.as_str() },
         }),
     );
-    log::info!("番茄钟阶段跳过: {} reason={reason} actual={actual}s", finished.as_str());
+    log::info!(
+        "番茄钟阶段跳过: {} reason={reason} actual={actual}s",
+        finished.as_str()
+    );
 
     let completed = r.completed_in_cycle;
     let (note_id, task_key, task_text) =
         (r.note_id.clone(), r.task_key.clone(), r.task_text.clone());
     match auto_next_decision(settings.auto_next, finished, completed, settings.long_every) {
         Some(next_phase_to_start) => {
-            begin_phase(app, st, next_phase_to_start, note_id, task_key, task_text, completed, &settings);
+            begin_phase(
+                app,
+                st,
+                next_phase_to_start,
+                note_id,
+                task_key,
+                task_text,
+                completed,
+                &settings,
+            );
         }
         None => {
             *st = Machine::Idle;
@@ -771,7 +862,9 @@ fn spawn_notice(
                     settings.get("dnd_end").map(String::as_str).unwrap_or(""),
                 ) {
                     let exit = crate::dnd::next_exit_utc(Utc::now(), &w);
-                    let dur = (exit - Utc::now()).to_std().unwrap_or(Duration::from_secs(1));
+                    let dur = (exit - Utc::now())
+                        .to_std()
+                        .unwrap_or(Duration::from_secs(1));
                     log::info!("番茄钟通知处于勿扰时段，推迟到 {exit}");
                     tokio::time::sleep(dur).await;
                 }
@@ -779,7 +872,13 @@ fn spawn_notice(
         }
         let is_private = note_is_private(&app, &note_id);
         let (title, body) = crate::privacy::notification_text(&title, &body, is_private);
-        if let Err(e) = app.notification().builder().title(&title).body(&body).show() {
+        if let Err(e) = app
+            .notification()
+            .builder()
+            .title(&title)
+            .body(&body)
+            .show()
+        {
             log::error!("番茄钟通知发送失败: {e}");
         }
     });
@@ -814,20 +913,37 @@ pub fn recover(app: &AppHandle) {
         log::error!("番茄钟启动恢复：遗留会话 {} 标记失败: {e}", s.id);
         return;
     }
-    log::info!("番茄钟启动恢复：遗留会话 {} 已标记 interrupted（actual={actual}s）", s.id);
+    log::info!(
+        "番茄钟启动恢复：遗留会话 {} 已标记 interrupted（actual={actual}s）",
+        s.id
+    );
 
     let ends_at = started + chrono::Duration::seconds(s.planned_sec);
     if now - ends_at <= chrono::Duration::hours(RECOVER_CUTOFF_HOURS) {
         let settings = read_settings(app);
-        let (title, body) = notice_text(Phase::parse(&s.phase), s.task_text_snapshot.as_deref().unwrap_or(""));
-        spawn_notice(app.clone(), title, body, s.note_id.clone().unwrap_or_default(), settings.force_remind, false);
+        let (title, body) = notice_text(
+            Phase::parse(&s.phase),
+            s.task_text_snapshot.as_deref().unwrap_or(""),
+        );
+        spawn_notice(
+            app.clone(),
+            title,
+            body,
+            s.note_id.clone().unwrap_or_default(),
+            settings.force_remind,
+            false,
+        );
     }
 }
 
 // ---------- 完成任务（命令层与 CompleteTask 命令共用） ----------
 
 /// 完成任务：task_meta 置 done + 便签正文第一条匹配行勾选回写（标题不变）。
-pub fn complete_task(app: &AppHandle, note_id: &str, task_key: &str) -> AppResult<crate::db::models::TaskMeta> {
+pub fn complete_task(
+    app: &AppHandle,
+    note_id: &str,
+    task_key: &str,
+) -> AppResult<crate::db::models::TaskMeta> {
     let state = app.state::<AppState>();
     let meta = state
         .db
@@ -837,7 +953,9 @@ pub fn complete_task(app: &AppHandle, note_id: &str, task_key: &str) -> AppResul
         })?;
     // 正文回写：读 content → 勾选 → update_content（title 传回原值）
     let note = state.db.with(|c| crate::db::notes::get(c, note_id))?;
-    if let Some(new_content) = crate::db::task_meta::mark_done_content_line(&note.content, &meta.line_text) {
+    if let Some(new_content) =
+        crate::db::task_meta::mark_done_content_line(&note.content, &meta.line_text)
+    {
         crate::notes::update_content(app, note_id, &note.title, &new_content)?;
     }
     let meta = state.db.with(|c| {
@@ -916,22 +1034,39 @@ mod tests {
         assert_eq!(break_after(4, 4), Phase::LongBreak, "每 4 个焦点进长休");
         assert_eq!(break_after(8, 4), Phase::LongBreak);
         assert_eq!(break_after(7, 4), Phase::ShortBreak);
-        assert_eq!(break_after(1, 1), Phase::LongBreak, "long_every=1 每次都长休");
-        assert_eq!(break_after(5, 0), Phase::ShortBreak, "long_every=0 防御性回退短休");
+        assert_eq!(
+            break_after(1, 1),
+            Phase::LongBreak,
+            "long_every=1 每次都长休"
+        );
+        assert_eq!(
+            break_after(5, 0),
+            Phase::ShortBreak,
+            "long_every=0 防御性回退短休"
+        );
     }
 
     #[test]
     fn next_phase_focus_goes_to_break_break_returns_focus() {
-        assert_eq!(next_phase(Phase::Focus, 3, 4), Phase::ShortBreak);
-        assert_eq!(next_phase(Phase::Focus, 4, 4), Phase::LongBreak);
+        // completed_focus_in_cycle 为"不含本次"的已完成数：本次完成后共 3 个 → 短休
+        assert_eq!(next_phase(Phase::Focus, 2, 4), Phase::ShortBreak);
+        // 本次完成后共 4 个 → 长休
+        assert_eq!(next_phase(Phase::Focus, 3, 4), Phase::LongBreak);
+        assert_eq!(next_phase(Phase::Focus, 7, 4), Phase::LongBreak);
         assert_eq!(next_phase(Phase::ShortBreak, 0, 4), Phase::Focus);
         assert_eq!(next_phase(Phase::LongBreak, 4, 4), Phase::Focus);
     }
 
     #[test]
     fn auto_next_decision_respects_setting() {
-        assert_eq!(auto_next_decision(true, Phase::Focus, 0, 4), Some(Phase::ShortBreak));
-        assert_eq!(auto_next_decision(true, Phase::ShortBreak, 3, 4), Some(Phase::Focus));
+        assert_eq!(
+            auto_next_decision(true, Phase::Focus, 0, 4),
+            Some(Phase::ShortBreak)
+        );
+        assert_eq!(
+            auto_next_decision(true, Phase::ShortBreak, 3, 4),
+            Some(Phase::Focus)
+        );
         assert_eq!(auto_next_decision(false, Phase::Focus, 0, 4), None);
     }
 
@@ -996,14 +1131,26 @@ mod tests {
         let start = at(2026, 9, 16, 10, 0, 0);
         let ends = start + chrono::Duration::seconds(1500);
         // 未暂停、跑了 10 分钟
-        assert_eq!(elapsed_sec(1500, ends, &None, start + chrono::Duration::seconds(600)), 600);
+        assert_eq!(
+            elapsed_sec(1500, ends, &None, start + chrono::Duration::seconds(600)),
+            600
+        );
         // 未暂停、已越过 ends_at（系统休眠）：夹到 planned
-        assert_eq!(elapsed_sec(1500, ends, &None, ends + chrono::Duration::seconds(500)), 1500);
+        assert_eq!(
+            elapsed_sec(1500, ends, &None, ends + chrono::Duration::seconds(500)),
+            1500
+        );
         // 暂停中：用暂停时刻的剩余
         let pause = Some((start + chrono::Duration::seconds(600), 900));
-        assert_eq!(elapsed_sec(1500, ends, &pause, start + chrono::Duration::seconds(1200)), 600);
+        assert_eq!(
+            elapsed_sec(1500, ends, &pause, start + chrono::Duration::seconds(1200)),
+            600
+        );
         // 时间倒流防御：不为负
-        assert_eq!(elapsed_sec(1500, ends, &None, start - chrono::Duration::seconds(600)), 0);
+        assert_eq!(
+            elapsed_sec(1500, ends, &None, start - chrono::Duration::seconds(600)),
+            0
+        );
     }
 
     // ---------- 通知与托盘文案 ----------
@@ -1014,6 +1161,7 @@ mod tests {
         assert_eq!(t, "🍅 专注完成");
         assert_eq!(b, "完成：写周报");
         let (t, b) = notice_text(Phase::Focus, "   ");
+        assert_eq!(t, "🍅 专注完成");
         assert_eq!(b, "专注完成，休息一下吧", "无任务文本回退通用文案");
         assert!(b.contains("专注完成"));
         let (t, b) = notice_text(Phase::ShortBreak, "无所谓");
@@ -1027,52 +1175,48 @@ mod tests {
     fn notice_text_truncates_long_task() {
         let long = "字".repeat(100);
         let (_, b) = notice_text(Phase::Focus, &long);
-        assert_eq!(b.chars().count(), 61, "60 字 + 省略号");
+        // "完成：" 3 字 + 60 字任务 + 省略号
+        assert_eq!(b.chars().count(), 64);
+        assert!(b.ends_with('…'));
     }
 
     #[test]
     fn tooltip_text_variants() {
         let start = at(2026, 9, 16, 10, 0, 0);
         let ends = start + chrono::Duration::seconds(1500);
-        let running = Machine::Running(Box::new(RunningState {
-            session_id: "s".into(),
-            note_id: "n".into(),
-            task_key: "k".into(),
-            task_text: "买牛奶".into(),
-            phase: Phase::Focus,
-            planned_sec: 1500,
-            ends_at: ends,
-            pause: None,
-            completed_in_cycle: 1,
-        }));
-        assert_eq!(tooltip_text(&running, start + chrono::Duration::seconds(60)), "🍅 24:00 买牛奶");
+        assert_eq!(
+            tooltip_text_for(
+                Phase::Focus,
+                ends,
+                None,
+                "买牛奶",
+                start + chrono::Duration::seconds(60)
+            ),
+            "🍅 24:00 买牛奶"
+        );
+        assert_eq!(
+            tooltip_text_for(
+                Phase::ShortBreak,
+                start + chrono::Duration::seconds(300),
+                None,
+                "",
+                start
+            ),
+            "☕ 05:00",
+            "无任务文本省略尾部"
+        );
+        // 暂停态不看挂钟，用暂停时刻的剩余
+        assert_eq!(
+            tooltip_text_for(
+                Phase::Focus,
+                ends,
+                Some((start, 1499)),
+                "买牛奶",
+                start + chrono::Duration::seconds(300)
+            ),
+            "⏸ 剩余 24:59"
+        );
         assert_eq!(tooltip_text(&Machine::Idle, start), "Focusly");
-
-        let paused = Machine::Running(Box::new(RunningState {
-            session_id: "s".into(),
-            note_id: "n".into(),
-            task_key: "k".into(),
-            task_text: "买牛奶".into(),
-            phase: Phase::Focus,
-            planned_sec: 1500,
-            ends_at: ends,
-            pause: Some((start, 1499)),
-            completed_in_cycle: 1,
-        }));
-        assert_eq!(tooltip_text(&paused, start + chrono::Duration::seconds(300)), "⏸ 剩余 24:59", "暂停态不看挂钟");
-
-        let break_running = Machine::Running(Box::new(RunningState {
-            session_id: "s".into(),
-            note_id: String::new(),
-            task_key: String::new(),
-            task_text: String::new(),
-            phase: Phase::ShortBreak,
-            planned_sec: 300,
-            ends_at: start + chrono::Duration::seconds(300),
-            pause: None,
-            completed_in_cycle: 1,
-        }));
-        assert_eq!(tooltip_text(&break_running, start), "☕ 05:00", "无任务文本省略尾部");
     }
 
     // ---------- 快照 ----------

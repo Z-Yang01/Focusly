@@ -42,6 +42,9 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
         "quick_capture" => {
             let _ = crate::quickcapture::toggle(app);
         }
+        "pomodoro_toggle" => {
+            let _ = crate::pomodoro::toggle_via_cmd(app);
+        }
         other => log::warn!("未知的快捷键动作: {other}"),
     }
 }

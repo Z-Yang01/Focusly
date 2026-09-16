@@ -39,6 +39,7 @@ pub fn local_today() -> String {
 }
 
 /// 部分更新载荷：None 字段保留原值（新行则用列默认）。
+#[derive(Debug, Clone)]
 pub struct TaskMetaUpsert {
     pub note_id: String,
     pub task_key: String,
@@ -93,15 +94,15 @@ pub fn upsert(conn: &Connection, u: &TaskMetaUpsert) -> AppResult<TaskMeta> {
     let updated_at = if status_changed {
         now_str()
     } else {
-        existing.as_ref().map(|m| m.updated_at.clone()).unwrap_or_else(now_str)
-    };
-
-    let estimate = u.estimate.unwrap_or_else(|| {
         existing
             .as_ref()
-            .map(|m| m.estimate_pomodoros)
-            .unwrap_or(0)
-    });
+            .map(|m| m.updated_at.clone())
+            .unwrap_or_else(now_str)
+    };
+
+    let estimate = u
+        .estimate
+        .unwrap_or_else(|| existing.as_ref().map(|m| m.estimate_pomodoros).unwrap_or(0));
     let priority = u
         .priority
         .clone()
@@ -110,7 +111,10 @@ pub fn upsert(conn: &Connection, u: &TaskMetaUpsert) -> AppResult<TaskMeta> {
         .due_at
         .clone()
         .or_else(|| existing.as_ref().and_then(|m| m.due_at.clone()));
-    let completed = existing.as_ref().map(|m| m.completed_pomodoros).unwrap_or(0);
+    let completed = existing
+        .as_ref()
+        .map(|m| m.completed_pomodoros)
+        .unwrap_or(0);
 
     conn.execute(
         "INSERT INTO task_meta \
@@ -257,7 +261,11 @@ mod tests {
 
         let m2 = upsert(&conn, &ups("n1", "k1", "- [ ] 买牛奶")).unwrap();
         assert_eq!(m2.updated_at, m1.updated_at, "无字段变更不刷新 updated_at");
-        assert_eq!(list_for_note(&conn, "n1").unwrap().len(), 1, "幂等：不产生新行");
+        assert_eq!(
+            list_for_note(&conn, "n1").unwrap().len(),
+            1,
+            "幂等：不产生新行"
+        );
     }
 
     #[test]
@@ -286,7 +294,10 @@ mod tests {
         let conn = setup();
         let m = upsert(
             &conn,
-            &TaskMetaUpsert { status: Some("skipped".into()), ..ups("n1", "k1", "- [ ] 跳过我") },
+            &TaskMetaUpsert {
+                status: Some("skipped".into()),
+                ..ups("n1", "k1", "- [ ] 跳过我")
+            },
         )
         .unwrap();
         assert_eq!(m.status, "skipped");
@@ -294,7 +305,10 @@ mod tests {
 
         let m2 = upsert(
             &conn,
-            &TaskMetaUpsert { clear_skip: true, ..ups("n1", "k1", "- [ ] 跳过我") },
+            &TaskMetaUpsert {
+                clear_skip: true,
+                ..ups("n1", "k1", "- [ ] 跳过我")
+            },
         )
         .unwrap();
         assert_eq!(m2.status, "todo", "clear_skip 复位为 todo");
@@ -306,12 +320,18 @@ mod tests {
         let conn = setup();
         upsert(
             &conn,
-            &TaskMetaUpsert { status: Some("skipped".into()), ..ups("n1", "k1", "- [ ] a") },
+            &TaskMetaUpsert {
+                status: Some("skipped".into()),
+                ..ups("n1", "k1", "- [ ] a")
+            },
         )
         .unwrap();
         let m = upsert(
             &conn,
-            &TaskMetaUpsert { status: Some("done".into()), ..ups("n1", "k1", "- [ ] a") },
+            &TaskMetaUpsert {
+                status: Some("done".into()),
+                ..ups("n1", "k1", "- [ ] a")
+            },
         )
         .unwrap();
         assert_eq!(m.status, "done");
@@ -333,10 +353,18 @@ mod tests {
             updated_at: String::new(),
         };
         assert_eq!(effective_status(&m, "2026-09-15"), "todo", "跨日自动复活");
-        assert_eq!(effective_status(&m, "2026-09-14"), "skipped", "当天保持跳过");
+        assert_eq!(
+            effective_status(&m, "2026-09-14"),
+            "skipped",
+            "当天保持跳过"
+        );
 
         m.skip_date = None;
-        assert_eq!(effective_status(&m, "2026-09-15"), "skipped", "无 skip_date 不复活（异常行保守处理）");
+        assert_eq!(
+            effective_status(&m, "2026-09-15"),
+            "skipped",
+            "无 skip_date 不复活（异常行保守处理）"
+        );
 
         m.status = "done".into();
         assert_eq!(effective_status(&m, "2026-09-15"), "done", "done 不受影响");
@@ -347,13 +375,23 @@ mod tests {
     #[test]
     fn list_for_note_orders_by_updated_at_desc() {
         let conn = setup();
-        let a = upsert(&conn, &ups("n1", "k1", "- [ ] a")).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        let b = upsert(&conn, &ups("n1", "k2", "- [ ] b")).unwrap();
+        upsert(&conn, &ups("n1", "k1", "- [ ] a")).unwrap();
+        upsert(&conn, &ups("n1", "k2", "- [ ] b")).unwrap();
+        // updated_at 精度为秒：直接改时间戳保证顺序确定（避免同秒并列的偶发顺序）
+        conn.execute(
+            "UPDATE task_meta SET updated_at = '2026-09-16T12:00:00+00:00' WHERE task_key = 'k1'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE task_meta SET updated_at = '2026-09-16T13:00:00+00:00' WHERE task_key = 'k2'",
+            [],
+        )
+        .unwrap();
         let list = list_for_note(&conn, "n1").unwrap();
         assert_eq!(list.len(), 2);
-        assert_eq!(list[0].task_key, b.task_key, "更新的在前");
-        assert_eq!(list[1].task_key, a.task_key);
+        assert_eq!(list[0].task_key, "k2", "更新的在前");
+        assert_eq!(list[1].task_key, "k1");
         assert!(list_for_note(&conn, "不存在").unwrap().is_empty());
     }
 
@@ -364,7 +402,10 @@ mod tests {
         incr_completed(&conn, "n1", "k1").unwrap();
         incr_completed(&conn, "n1", "k1").unwrap();
         incr_completed(&conn, "n1", "k2").unwrap(); // 不存在的行：静默
-        assert_eq!(get(&conn, "n1", "k1").unwrap().unwrap().completed_pomodoros, 2);
+        assert_eq!(
+            get(&conn, "n1", "k1").unwrap().unwrap().completed_pomodoros,
+            2
+        );
     }
 
     // ---------- mark_done_content_line（纯函数） ----------
@@ -409,7 +450,10 @@ mod tests {
     fn mark_done_not_found_returns_none() {
         assert!(mark_done_content_line("- [ ] A", "B").is_none());
         assert!(mark_done_content_line("", "A").is_none());
-        assert!(mark_done_content_line("- [ ] A", "  ").is_none(), "空目标直接 None");
+        assert!(
+            mark_done_content_line("- [ ] A", "  ").is_none(),
+            "空目标直接 None"
+        );
     }
 
     #[test]
