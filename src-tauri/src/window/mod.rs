@@ -186,7 +186,8 @@ pub fn show_all_notes(app: &AppHandle) -> AppResult<()> {
         notes.iter().map(|n| note_label(&n.id)).collect()
     };
     {
-        let mut hidden = app.state::<AppState>().fullscreen_hidden.lock().unwrap();
+        let app_state = app.state::<AppState>();
+        let mut hidden = app_state.fullscreen_hidden.lock().unwrap();
         for label in &labels {
             if let Some(win) = app.get_webview_window(label) {
                 let _ = win.show();

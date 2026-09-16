@@ -2,6 +2,7 @@
 
 use serde_json::json;
 use tauri::{AppHandle, State};
+use tauri::Manager;
 
 use crate::error::{AppError, AppResult};
 use crate::export::ImportSummary;

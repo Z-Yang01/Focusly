@@ -75,14 +75,13 @@ mod imp {
             // WinEvent 钩子（OUTOFCONTEXT）要求注册线程有消息循环
             let mut msg = MSG::default();
             loop {
-                // GetMessageW 返回 Result<i32>：Ok(0)=WM_QUIT，Err=-1（出错）
-                match GetMessageW(&mut msg, None, 0, 0) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        let _ = TranslateMessage(&msg);
-                        DispatchMessageW(&msg);
-                    }
+                // GetMessageW 返回 BOOL：0=WM_QUIT，-1=出错，其余=收到消息
+                let r = GetMessageW(&mut msg, None, 0, 0);
+                if r.0 == 0 || r.0 == -1 {
+                    break;
                 }
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
             }
             let _ = UnhookWinEvent(hook);
             log::info!("前台切换监听已退出");

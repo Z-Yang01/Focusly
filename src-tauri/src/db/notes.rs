@@ -165,43 +165,43 @@ pub fn update(conn: &Connection, u: &NoteUpdate) -> AppResult<Note> {
         vals.push(v);
     };
     if let Some(ref v) = u.title {
-        bind("title = ?", Box::new(v.clone()));
+        bind("title", Box::new(v.clone()));
     }
     if let Some(ref v) = u.content {
-        bind("content = ?", Box::new(v.clone()));
+        bind("content", Box::new(v.clone()));
     }
     if let Some(v) = u.is_pinned {
-        bind("is_pinned = ?", Box::new(v as i64));
+        bind("is_pinned", Box::new(v as i64));
     }
     if let Some(v) = u.is_always_on_top {
-        bind("is_always_on_top = ?", Box::new(v as i64));
+        bind("is_always_on_top", Box::new(v as i64));
     }
     if let Some(v) = u.show_on_all_desktops {
-        bind("show_on_all_desktops = ?", Box::new(v as i64));
+        bind("show_on_all_desktops", Box::new(v as i64));
     }
     if let Some(ref v) = u.desktop_pin_state {
-        bind("desktop_pin_state = ?", Box::new(v.clone()));
+        bind("desktop_pin_state", Box::new(v.clone()));
     }
     if let Some(ref v) = u.fullscreen_behavior {
-        bind("fullscreen_behavior = ?", Box::new(v.clone()));
+        bind("fullscreen_behavior", Box::new(v.clone()));
     }
     if let Some(ref v) = u.monitor_id {
-        bind("monitor_id = ?", Box::new(v.clone()));
+        bind("monitor_id", Box::new(v.clone()));
     }
     if let Some(v) = u.is_private {
-        bind("is_private = ?", Box::new(v as i64));
+        bind("is_private", Box::new(v as i64));
     }
     if let Some(v) = u.locked {
-        bind("locked = ?", Box::new(v as i64));
+        bind("locked", Box::new(v as i64));
     }
     if let Some(v) = u.readonly_flag {
-        bind("readonly_flag = ?", Box::new(v as i64));
+        bind("readonly_flag", Box::new(v as i64));
     }
     if let Some(v) = u.scale {
-        bind("scale = ?", Box::new(v));
+        bind("scale", Box::new(v));
     }
     if u.touch {
-        bind("updated_at = ?", Box::new(now()));
+        bind("updated_at", Box::new(now()));
     }
 
     if sets.is_empty() {
@@ -342,7 +342,7 @@ pub fn list_private(conn: &Connection) -> AppResult<Vec<NoteSummary>> {
          ORDER BY updated_at DESC"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let notes = stmt.query_map([], row_to_note)?.collect::<rusqlite::Result<_>>()?;
+    let notes: Vec<Note> = stmt.query_map([], row_to_note)?.collect::<rusqlite::Result<_>>()?;
     notes.into_iter().map(|n| to_summary(conn, n)).collect()
 }
 

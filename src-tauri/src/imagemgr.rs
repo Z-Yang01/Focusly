@@ -18,6 +18,8 @@
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
+use image::GenericImageView;
+use std::io::Write;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};

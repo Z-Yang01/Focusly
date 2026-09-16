@@ -2,13 +2,15 @@
 //! 与任务栏右键"在所有桌面上显示"是同一机制。
 //!
 //! 接口/CLSID 定义来自 MScholtes/VirtualDesktop 与 widavies/WinJump（已核实的 vtable 顺序）。
+//! 实现采用手工 vtable 声明（windows 0.58 的 `#[interface]` 宏在 rustc 1.98 下
+//! 因 `interface` 成为保留关键字而无法解析，手工声明确定性最高）。
 
 /// CLSID_ImmersiveShell（Windows Shell 宿主服务）
 pub const CLSID_IMMERSIVE_SHELL: &str = "c2f03a33-21f5-47fa-b4bb-156362a2f239";
 /// CLSID_VirtualDesktopPinnedApps（固定服务）
 pub const CLSID_VIRTUAL_DESKTOP_PINNED_APPS: &str = "b5a399e7-1c87-46b8-88e9-fc5747b171bd";
-/// IVirtualDesktopPinnedApps 的 IID（vtable: IsAppIdPinned, PinAppID, UnpinAppID,
-/// IsWindowPinned, PinWindow, UnpinWindow）
+/// IVirtualDesktopPinnedApps 的 IID（vtable: IUnknown×3 + IsAppIdPinned, PinAppID,
+/// UnpinAppID, IsWindowPinned, PinWindow, UnpinWindow）
 pub const IID_VIRTUAL_DESKTOP_PINNED_APPS: &str = "4ce81583-1e4c-4632-a621-07a53543148f";
 
 #[derive(Debug, thiserror::Error)]
@@ -30,27 +32,53 @@ pub fn set_window_pinned(
 
 #[cfg(windows)]
 mod imp {
-    use windows::core::GUID;
+    use std::ffi::c_void;
+    use super::{CLSID_IMMERSIVE_SHELL, CLSID_VIRTUAL_DESKTOP_PINNED_APPS, IID_VIRTUAL_DESKTOP_PINNED_APPS};
+    use windows::core::{GUID, Interface as _, IUnknown};
     use windows::Win32::Foundation::{BOOL, HWND};
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED,
-        IServiceProvider,
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_LOCAL_SERVER,
+        COINIT_APARTMENTTHREADED, IServiceProvider,
     };
 
     /// combaseapi.h: RPC_E_CHANGED_MODE（0x80010106）——线程已按其他套间模型初始化。
     /// 不同 windows crate 版本导出位置不一致，直接本地定义。
     const RPC_E_CHANGED_MODE: windows::core::HRESULT = windows::core::HRESULT(0x8001_0106u32 as i32);
 
-    /// COM 自定义接口。vtable 顺序 = IUnknown 三项 + 下面六个方法，顺序绝对不能变。
-    #[windows::core::interface("4ce81583-1e4c-4632-a621-07a53543148f")]
-    pub unsafe interface IVirtualDesktopPinnedApps: windows::core::IUnknown {
-        pub fn isappidpinned(&self, appid: windows::core::PCWSTR) -> windows::core::Result<BOOL>;
-        pub fn pinappid(&self, appid: windows::core::PCWSTR) -> windows::core::Result<()>;
-        pub fn unpinappid(&self, appid: windows::core::PCWSTR) -> windows::core::Result<()>;
-        pub fn iswindowpinned(&self, hwnd: HWND) -> windows::core::Result<BOOL>;
-        pub fn pinwindow(&self, hwnd: HWND) -> windows::core::Result<()>;
-        pub fn unpinwindow(&self, hwnd: HWND) -> windows::core::Result<()>;
+    fn guid(s: &str) -> GUID {
+        GUID::from_u128(u128::from_str_radix(s.replace('-', "").as_str(), 16).expect("合法 GUID"))
     }
+
+    /// IServiceProvider 自定义 vtable（IUnknown×3 + QueryService）。
+    #[repr(C)]
+    struct ServiceProviderVtbl {
+        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT_REF,
+        add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        release: unsafe extern "system" fn(*mut c_void) -> u32,
+        query_service: unsafe extern "system" fn(
+            *mut c_void,
+            *const GUID,
+            *const GUID,
+            *mut *mut c_void,
+        ) -> windows::core::HRESULT,
+    }
+
+    /// IVirtualDesktopPinnedApps vtable（IUnknown×3 + 六个方法，顺序不可变）。
+    /// 未使用的 IsAppIdPinned/PinAppID/UnpinAppID 参数以裸指针占位（x64 指针宽度一致，布局等价）。
+    #[repr(C)]
+    struct PinnedAppsVtbl {
+        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT_REF,
+        add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        release: unsafe extern "system" fn(*mut c_void) -> u32,
+        is_app_id_pinned: unsafe extern "system" fn(*mut c_void, *const u16, *mut BOOL) -> windows::core::HRESULT,
+        pin_app_id: unsafe extern "system" fn(*mut c_void, *const u16) -> windows::core::HRESULT,
+        unpin_app_id: unsafe extern "system" fn(*mut c_void, *const u16) -> windows::core::HRESULT,
+        is_window_pinned: unsafe extern "system" fn(*mut c_void, HWND, *mut BOOL) -> windows::core::HRESULT,
+        pin_window: unsafe extern "system" fn(*mut c_void, HWND) -> windows::core::HRESULT,
+        unpin_window: unsafe extern "system" fn(*mut c_void, HWND) -> windows::core::HRESULT,
+    }
+
+    type HRESULT_REF = windows::core::HRESULT;
 
     pub unsafe fn pin_window(hwnd: HWND, pin: bool) -> Result<(), crate::vdesktop::VdError> {
         // CoInitializeEx：S_OK/S_FALSE 视为已初始化（需配对 CoUninitialize）；
@@ -71,37 +99,52 @@ mod imp {
     }
 
     unsafe fn pin_with_service(hwnd: HWND, pin: bool) -> Result<(), crate::vdesktop::VdError> {
-        let shell_clsid = GUID::from(crate::vdesktop::CLSID_IMMERSIVE_SHELL);
-        let pinned_clsid = GUID::from(crate::vdesktop::CLSID_VIRTUAL_DESKTOP_PINNED_APPS);
+        let shell_clsid = guid(CLSID_IMMERSIVE_SHELL);
+        let pinned_clsid = guid(CLSID_VIRTUAL_DESKTOP_PINNED_APPS);
+        let iid_pinned = guid(IID_VIRTUAL_DESKTOP_PINNED_APPS);
 
         let shell: IServiceProvider = CoCreateInstance(&shell_clsid, None, CLSCTX_LOCAL_SERVER)
             .map_err(|e| {
-                crate::vdesktop::VdError::Unsupported(format!("ImmersiveShell 服务不可用: {e}"))
-            })?;
+            crate::vdesktop::VdError::Unsupported(format!("ImmersiveShell 服务不可用: {e}"))
+        })?;
 
-        let pinned: IVirtualDesktopPinnedApps = shell
-            .QueryService::<IVirtualDesktopPinnedApps>(&pinned_clsid)
-            .map_err(|e| {
-                crate::vdesktop::VdError::Unsupported(format!("虚拟桌面固定服务不可用: {e}"))
-            })?;
+        // 手工调用 IServiceProvider::QueryService（泛型版要求 windows-core Interface trait，
+        // 我们的对象是手工 vtable，因此直接走 vtable 槽位）
+        let sp_vtbl = &**(shell.as_raw() as *mut *mut ServiceProviderVtbl);
+        let mut obj: *mut c_void = std::ptr::null_mut();
+        let hr = (sp_vtbl.query_service)(shell.as_raw(), &pinned_clsid, &iid_pinned, &mut obj);
+        if hr.is_err() || obj.is_null() {
+            return Err(crate::vdesktop::VdError::Unsupported(format!(
+                "虚拟桌面固定服务不可用: {hr:?}"
+            )));
+        }
+
+        let vtbl = &**(obj as *mut *mut PinnedAppsVtbl);
 
         // 先查当前状态，避免重复调用
-        let current = pinned
-            .iswindowpinned(hwnd)
-            .map_err(|e| crate::vdesktop::VdError::Unsupported(format!("查询固定状态失败: {e}")))?
-            .as_bool();
-        if current == pin {
+        let mut current = BOOL(0);
+        let hr = (vtbl.is_window_pinned)(obj, hwnd, &mut current);
+        if hr.is_err() {
+            (vtbl.release)(obj);
+            return Err(crate::vdesktop::VdError::Unsupported(format!(
+                "查询固定状态失败: {hr:?}"
+            )));
+        }
+        if current.as_bool() == pin {
+            (vtbl.release)(obj);
             return Ok(());
         }
-        if pin {
-            pinned.pinwindow(hwnd).map_err(|e| {
-                crate::vdesktop::VdError::Failed(format!("固定窗口到所有桌面失败: {e}"))
-            })
-        } else {
-            pinned.unpinwindow(hwnd).map_err(|e| {
-                crate::vdesktop::VdError::Failed(format!("取消固定失败: {e}"))
-            })
+
+        let hr = if pin { (vtbl.pin_window)(obj, hwnd) } else { (vtbl.unpin_window)(obj, hwnd) };
+        (vtbl.release)(obj);
+        if hr.is_err() {
+            return Err(crate::vdesktop::VdError::Failed(if pin {
+                format!("固定窗口到所有桌面失败: {hr:?}")
+            } else {
+                format!("取消固定失败: {hr:?}")
+            }));
         }
+        Ok(())
     }
 }
 

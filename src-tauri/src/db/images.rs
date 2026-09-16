@@ -159,7 +159,7 @@ mod tests {
     fn setup() -> (Connection, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let conn = Connection::open_in_memory().unwrap();
-        super::super::super::migrations::run(&conn).unwrap();
+        crate::db::migrations::run(&conn).unwrap();
         (conn, dir)
     }
 

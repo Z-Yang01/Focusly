@@ -1,8 +1,10 @@
 //! 文件系统服务：数据目录布局、启动备份、结构化错误日志（error/*.md）。
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::error::AppResult;
+use tauri::Manager;
 
 pub struct AppPaths {
     pub root: PathBuf,

@@ -76,7 +76,8 @@ fn validate_accelerator(accelerator: &str) -> AppResult<String> {
     }
     const MODIFIERS: &[&str] = &["ctrl", "shift", "alt", "super"];
     let mut has_key = false;
-    let mut parts: Vec<String> = Vec::new();
+    let mut key_part = String::new();
+    let mut seen_mods: Vec<String> = Vec::new();
     for raw in trimmed.split('+') {
         let part = raw.trim().to_lowercase();
         if part.is_empty() {
@@ -88,7 +89,12 @@ fn validate_accelerator(accelerator: &str) -> AppResult<String> {
                     "快捷键格式无效（修饰键须在按键之前）: {accelerator}"
                 )));
             }
-            parts.push(part);
+            if seen_mods.contains(&part) {
+                return Err(AppError::Invalid(format!(
+                    "快捷键包含重复修饰键: {accelerator}"
+                )));
+            }
+            seen_mods.push(part);
             continue;
         }
         let is_fkey = part
@@ -96,19 +102,29 @@ fn validate_accelerator(accelerator: &str) -> AppResult<String> {
             .and_then(|digits| digits.parse::<u8>().ok())
             .map(|n| (1..=24).contains(&n))
             .unwrap_or(false);
-        let valid = part.chars().count() == 1 || is_fkey;
+        // 命名按键（tauri 全局快捷键支持的小写形式）
+        const NAMED_KEYS: &[&str] = &[
+            "space", "tab", "enter", "backspace", "delete", "insert", "home", "end",
+            "pageup", "pagedown", "up", "down", "left", "right", "esc", "escape",
+            "minus", "equal", "comma", "period", "slash", "backslash", "semicolon",
+        ];
+        let valid = part.chars().count() == 1 || is_fkey || NAMED_KEYS.contains(&part.as_str());
         if !valid {
             return Err(AppError::Invalid(format!(
                 "快捷键包含无法识别的按键: {part}"
             )));
         }
         has_key = true;
-        parts.push(part);
+        key_part = part;
     }
     if !has_key {
         return Err(AppError::Invalid(format!("快捷键缺少主按键: {accelerator}")));
     }
-    Ok(parts.join("+"))
+    // 归一化：修饰键按 ctrl→shift→alt→super 排序置于前端，主键在后，整体小写
+    seen_mods.sort_by_key(|m| MODIFIERS.iter().position(|x| x == m).unwrap_or(usize::MAX));
+    let mut ordered = std::mem::take(&mut seen_mods);
+    ordered.push(key_part.to_lowercase());
+    Ok(ordered.join("+"))
 }
 
 #[tauri::command]
@@ -172,7 +188,8 @@ mod tests {
         // 非法输入
         assert!(validate_accelerator("").is_err());
         assert!(validate_accelerator("ctrl").is_err(), "缺少主按键");
-        assert!(validate_accelerator("shift+ctrl+n").is_err(), "修饰键顺序错误");
+        // 修饰键顺序无语义（tauri 注册时归一化），乱序合法
+        assert_eq!(validate_accelerator("shift+ctrl+n").unwrap(), "ctrl+shift+n");
         assert!(validate_accelerator("ctrl+ctrl+n").is_err(), "主按键后不得再出现修饰键");
         assert!(validate_accelerator("ctrl+foo").is_err(), "多字符非法按键");
         assert!(validate_accelerator("ctrl+f25").is_err(), "F 键范围 1-24");

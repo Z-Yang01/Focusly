@@ -62,7 +62,9 @@ pub fn monitor_of_window(hwnd: HWND) -> Option<String> {
     let mut info = MONITORINFOEXW::default();
     info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
     unsafe {
-        GetMonitorInfoW(nearest, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO).ok()?;
+        if !GetMonitorInfoW(nearest, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO).as_bool() {
+            return None;
+        }
     }
     Some(String::from_utf16_lossy(
         &info.szDevice[..info.szDevice.iter().position(|&c| c == 0).unwrap_or(info.szDevice.len())],
@@ -101,59 +103,47 @@ pub fn is_foreground_fullscreen() -> bool {
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
     unsafe {
-        // 快速通道：系统通知状态（全屏 D3D / 演示模式 / BUSY 均视为全屏占用）
-        if let Ok(state) = SHQueryUserNotificationState() {
-            use windows::Win32::UI::Shell::QUERY_USER_NOTIFICATION_STATE;
-            if matches!(
-                state,
-                QUERY_USER_NOTIFICATION_STATE::QUNS_RUNNING_D3D_FULL_SCREEN
-                    | QUERY_USER_NOTIFICATION_STATE::QUNS_PRESENTATION_MODE
-            ) {
+        // 快速通道：系统通知状态（原始值：2=QUNS_BUSY, 3=QUNS_RUNNING_D3D_FULL_SCREEN, 4=QUNS_PRESENTATION_MODE）
+        let Ok(state) = SHQueryUserNotificationState() else {
+            return false;
+        };
+        if state.0 == 3 || state.0 == 4 {
+            return true;
+        }
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_invalid() {
+            return false;
+        }
+        // 排除被 cloak 的窗口（其他虚拟桌面上的 UWP 等）；DWMWA_CLOAKED = 14
+        let mut cloaked: u32 = 0;
+        let hr = DwmGetWindowAttribute(
+            hwnd,
+            DWMWINDOWATTRIBUTE(14),
+            &mut cloaked as *mut u32 as *mut _,
+            std::mem::size_of::<u32>() as u32,
+        );
+        if hr.is_ok() && cloaked != 0 {
+            return false;
+        }
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return false;
+        }
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO::default();
+        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(monitor, &mut info).as_bool() {
+            let m = info.rcMonitor;
+            if rect.left <= m.left
+                && rect.top <= m.top
+                && rect.right >= m.right
+                && rect.bottom >= m.bottom
+            {
                 return true;
             }
-            // QUNS_BUSY 同时覆盖"普通应用铺满全屏"（如浏览器 F11），
-            // 但也包含其他勿扰场景；配合矩形判定避免误判。
-            let hwnd = GetForegroundWindow();
-            if hwnd.is_invalid() {
-                return false;
-            }
-            // 排除被 cloak 的窗口（其他虚拟桌面上的 UWP 等）
-            let mut cloaked: u32 = 0;
-            let hr = DwmGetWindowAttribute(
-                hwnd,
-                DWMWINDOWATTRIBUTE::DWMWA_CLOAKED,
-                &mut cloaked as *mut u32 as *mut _,
-                std::mem::size_of::<u32>() as u32,
-            );
-            if hr.is_ok() && cloaked != 0 {
-                return false;
-            }
-            let mut rect = RECT::default();
-            if GetWindowRect(hwnd, &mut rect).is_err() {
-                return false;
-            }
-            let monitor =
-                MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            let mut info = MONITORINFO::default();
-            info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
-            if GetMonitorInfoW(monitor, &mut info).as_bool() {
-                let m = info.rcMonitor;
-                let is_full = rect.left <= m.left
-                    && rect.top <= m.top
-                    && rect.right >= m.right
-                    && rect.bottom >= m.bottom;
-                if is_full {
-                    return true;
-                }
-            }
-            if state == QUERY_USER_NOTIFICATION_STATE::QUNS_BUSY {
-                // BUSY 且前台窗口未铺满：不视为全屏
-                return false;
-            }
-            false
-        } else {
-            false
         }
+        // QUNS_BUSY(=2) 且前台窗口未铺满：不视为全屏
+        false
     }
 }
 

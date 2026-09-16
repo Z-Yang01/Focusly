@@ -84,7 +84,8 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<()>) {
                 if t <= now {
                     fire_due(&app);
                 } else {
-                    let deadline = tokio::time::Instant::from(SystemTime::from(t));
+                    let dur = (t - now).to_std().unwrap_or(std::time::Duration::from_secs(1));
+                    let deadline = tokio::time::Instant::now() + dur;
                     tokio::select! {
                         _ = tokio::time::sleep_until(deadline) => fire_due(&app),
                         _ = rx.recv() => {} // 被唤醒：重新计算最近时间
@@ -156,7 +157,7 @@ fn fire_due(app: &AppHandle) {
         settings.get("dnd_start").map(String::as_str).unwrap_or(""),
         settings.get("dnd_end").map(String::as_str).unwrap_or(""),
     );
-    let now_local = chrono::Local::now().naive_local();
+    let now_local = chrono::Local::now().time();
 
     for r in due {
         let Ok(t) = parse(&r.remind_at) else { continue };
@@ -269,7 +270,14 @@ fn markdown_snippet(content: &str, max_chars: usize) -> String {
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
-        .map(|line| line.trim_start_matches(MARKDOWN_CHARS).trim())
+        .map(|line| {
+            // 全文剥离 markdown 符号（而非仅行首），保证摘要干净
+            line.chars()
+                .filter(|c| !MARKDOWN_CHARS.contains(c))
+                .collect::<String>()
+        })
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
     let mut out: String = cleaned.chars().take(max_chars).collect();

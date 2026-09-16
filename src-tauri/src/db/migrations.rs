@@ -199,7 +199,7 @@ mod tests {
         run(&conn).unwrap();
 
         let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 2);
+        assert_eq!(v, MIGRATIONS.len() as i64);
 
         // 旧数据完整
         let (title, content, status): (String, String, String) = conn

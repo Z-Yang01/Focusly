@@ -72,7 +72,7 @@ fn search_fts(conn: &Connection, keyword: &str, include_private: bool) -> AppRes
         LIMIT {SEARCH_LIMIT}"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let hits = stmt
+    let hits: Vec<crate::db::models::SearchHit> = stmt
         .query_map(params![phrase, include_private], row_to_hit)?
         .collect::<rusqlite::Result<_>>()?;
     hits.into_iter().map(|h| finish_hit(conn, h)).collect()
@@ -91,7 +91,7 @@ fn search_like(conn: &Connection, keyword: &str, include_private: bool) -> AppRe
         LIMIT {SEARCH_LIMIT}"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let hits = stmt
+    let hits: Vec<crate::db::models::SearchHit> = stmt
         .query_map(params![pattern, include_private], |r| {
             let mut hit = row_to_hit(r)?;
             let content: String = r.get("content")?;

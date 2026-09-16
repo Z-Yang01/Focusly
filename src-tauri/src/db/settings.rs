@@ -20,7 +20,7 @@ pub fn get_all(conn: &Connection) -> AppResult<HashMap<String, String>> {
     let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
     let rows = stmt
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
-        .collect::<rusqlite::Result<_>>()?;
+        .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
     for (k, v) in rows {
         map.insert(k, v);
     }

@@ -47,6 +47,8 @@ impl Db {
     #[cfg(test)]
     pub fn in_memory() -> AppResult<Self> {
         let conn = Connection::open_in_memory()?;
-        Db(Mutex::new(conn)).with(|c| migrations::run(c))
+        let db = Db(Mutex::new(conn));
+        db.with(|c| migrations::run(c))?;
+        Ok(db)
     }
 }
