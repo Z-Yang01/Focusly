@@ -36,5 +36,14 @@ export default defineConfig(async () => ({
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "es2021",
     minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    rollupOptions: {
+      output: {
+        // 拆分大依赖：框架 / Markdown 渲染 / 其余应用代码，加速窗口冷启动
+        manualChunks: {
+          react_vendor: ["react", "react-dom", "@tanstack/react-query", "zustand"],
+          markdown: ["react-markdown", "remark-gfm"],
+        },
+      },
+    },
   },
 }));

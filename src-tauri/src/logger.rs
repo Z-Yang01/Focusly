@@ -6,6 +6,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+/// 单文件超过 5MB 触发轮转
+const ROTATE_BYTES: u64 = 5 * 1024 * 1024;
+
 pub struct FileLogger {
     file: Mutex<Option<std::fs::File>>,
     path: PathBuf,
@@ -38,7 +41,22 @@ impl log::Log for FileLogger {
             }
         }
         if let Some(f) = guard.as_mut() {
-            let _ = f.write_all(line.as_bytes());
+            if f.write_all(line.as_bytes()).is_err() {
+                *guard = None;
+                return;
+            }
+            // 大小轮转：超过 5MB 归档为 focusly.log.1（只保留一代，避免占盘）
+            if let Ok(meta) = f.metadata() {
+                if meta.len() > ROTATE_BYTES {
+                    *guard = None;
+                    let rotated = self.path.with_extension("log.1");
+                    let _ = std::fs::remove_file(&rotated);
+                    let _ = std::fs::rename(&self.path, &rotated);
+                    if let Ok(nf) = OpenOptions::new().create(true).append(true).open(&self.path) {
+                        *guard = Some(nf);
+                    }
+                }
+            }
         }
     }
 

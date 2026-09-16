@@ -104,3 +104,58 @@ pub fn get_app_info(state: State<'_, AppState>) -> serde_json::Value {
         "version": env!("CARGO_PKG_VERSION"),
     })
 }
+
+
+/// 导出诊断包：版本/系统信息/数据库健康摘要/日志副本（不含便签内容、不含私密数据）。
+/// 写入用户通过 dialog save 选择的路径（前端负责选路径）。
+#[tauri::command]
+pub fn export_diagnostics(app: AppHandle, path: String) -> AppResult<()> {
+    use serde_json::json;
+
+    let state = app.state::<AppState>();
+    let mut lines: Vec<String> = Vec::new();
+
+    // 基本环境
+    lines.push(format!("app_version={}", env!("CARGO_PKG_VERSION")));
+    lines.push(format!(
+        "os={} {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ));
+    lines.push(format!("generated_at={}", chrono::Local::now().to_rfc3339()));
+
+    // 数据库健康摘要（只统计数量，不输出任何便签内容）
+    let health = state.db.with(|c| -> AppResult<serde_json::Value> {
+        let integrity = c
+            .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+            .unwrap_or_else(|_| "query_failed".into());
+        let count = |sql: &str| -> i64 {
+            c.query_row(sql, [], |r| r.get(0)).unwrap_or(-1)
+        };
+        Ok(json!({
+            "integrity": integrity,
+            "notes_active": count("SELECT COUNT(*) FROM notes WHERE status='active' AND deleted_at IS NULL"),
+            "notes_archived": count("SELECT COUNT(*) FROM notes WHERE status='archived'"),
+            "notes_trashed": count("SELECT COUNT(*) FROM notes WHERE deleted_at IS NOT NULL"),
+            "sessions_completed": count("SELECT COUNT(*) FROM pomodoro_sessions WHERE status='completed'"),
+            "reminders_pending": count("SELECT COUNT(*) FROM reminders WHERE status='pending'"),
+        }))
+    })?;
+    lines.push(format!("db_health={}", health));
+
+    // 日志尾部（最多 200 行；日志本身不含便签正文）
+    let log_path = state.paths.logs.join("focusly.log");
+    if let Ok(content) = std::fs::read_to_string(&log_path) {
+        let tail: Vec<&str> = content.lines().rev().take(200).collect();
+        lines.push("--- log_tail ---".into());
+        for l in tail.into_iter().rev() {
+            lines.push(l.to_string());
+        }
+    }
+
+    std::fs::write(&path, lines.join("
+"))
+        .map_err(|e| crate::error::AppError::Io(format!("写入诊断包失败: {e}")))?;
+    log::info!("诊断包已导出: {path}");
+    Ok(())
+}

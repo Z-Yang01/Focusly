@@ -155,6 +155,7 @@ pub fn run() {
             commands::system_cmd::open_external,
             commands::system_cmd::reveal_data_dir,
             commands::system_cmd::get_app_info,
+            commands::system_cmd::export_diagnostics,
             // 回收站 / 版本历史 / 私密 / FTS 搜索
             commands::notes_cmd::list_deleted_notes,
             commands::notes_cmd::trash_note,
