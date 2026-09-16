@@ -176,6 +176,13 @@ pub fn get_due_view(state: State<'_, AppState>) -> AppResult<crate::db::todos_vi
     state.db.with(|c| crate::db::todos_view::get_due_view(c))
 }
 
+// ---------- 图钉三态（normal / topmost / desktop） ----------
+
+#[tauri::command]
+pub fn set_pin_mode(app: AppHandle, note_id: String, mode: String) -> AppResult<Note> {
+    notes::set_pin_mode(&app, &note_id, &mode)
+}
+
 // ---------- 每日笔记（批3） ----------
 
 #[tauri::command]

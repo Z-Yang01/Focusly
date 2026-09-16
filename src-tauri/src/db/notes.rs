@@ -38,13 +38,14 @@ fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
         locked: r.get::<_, i64>("locked")? != 0,
         readonly: r.get::<_, i64>("readonly_flag")? != 0,
         scale: r.get("scale")?,
+        pin_mode: r.get("pin_mode")?,
     })
 }
 
 const NOTE_COLS: &str =
     "id, title, content, content_format, status, is_pinned, is_always_on_top, show_on_all_desktops, \
      desktop_pin_state, fullscreen_behavior, x, y, width, height, monitor_id, created_at, updated_at, archived_at, \
-     deleted_at, is_private, locked, readonly_flag, scale";
+     deleted_at, is_private, locked, readonly_flag, pin_mode, scale";
 
 pub fn create(conn: &Connection, title: &str, content: &str) -> AppResult<Note> {
     let id = Uuid::new_v4().to_string();
@@ -155,6 +156,7 @@ pub struct NoteUpdate {
     /// 数据库列 readonly_flag（serde 输出名 readonly）
     pub readonly_flag: Option<bool>,
     pub scale: Option<f64>,
+    pub pin_mode: Option<String>,
     /// 几何与隐藏类更新不刷新 updated_at，避免列表频繁重排
     pub touch: bool,
 }
@@ -201,6 +203,9 @@ pub fn update(conn: &Connection, u: &NoteUpdate) -> AppResult<Note> {
     }
     if let Some(v) = u.scale {
         bind("scale", Box::new(v));
+    if let Some(ref v) = u.pin_mode {
+        bind("pin_mode", Box::new(v.clone()));
+    }
     }
     if u.touch {
         bind("updated_at", Box::new(now()));
@@ -394,6 +399,7 @@ mod tests {
                 desktop_pin_state: None,
                 fullscreen_behavior: None,
                 monitor_id: None,
+                pin_mode: None,
                 is_private: Some(true),
                 locked: Some(true),
                 readonly_flag: Some(true),
@@ -463,6 +469,7 @@ mod tests {
                 locked: None,
                 readonly_flag: None,
                 scale: None,
+                pin_mode: None,
                 touch: true,
             },
         )

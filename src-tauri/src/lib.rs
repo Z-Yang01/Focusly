@@ -2,6 +2,7 @@
 
 mod commands;
 mod daily;
+mod desktop_pin;
 mod db;
 mod dnd;
 mod error;
@@ -193,6 +194,7 @@ pub fn run() {
             commands::imagemgr_cmd::image_make_thumbnails,
             // 模板与每日笔记
             commands::notes_cmd::daily_get_or_create,
+            commands::notes_cmd::set_pin_mode,
             // 番茄钟
             commands::pomodoro_cmd::pomodoro_start,
             commands::pomodoro_cmd::pomodoro_pause,

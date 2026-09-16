@@ -172,6 +172,11 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('pomo_sound', 'off'),
     ('pomo_force_remind', 'false');
 "#,
+
+    // v6: 便签图钉三态（normal / topmost / desktop）
+    r#"
+    ALTER TABLE notes ADD COLUMN pin_mode TEXT NOT NULL DEFAULT 'normal';
+    "#,
 ];
 
 use rusqlite::Connection;

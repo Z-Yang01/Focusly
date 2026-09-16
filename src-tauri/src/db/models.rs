@@ -40,6 +40,9 @@ pub struct Note {
     pub readonly: bool,
     #[serde(default)]
     pub scale: Option<f64>,
+    /// 图钉三态: normal | topmost | desktop
+    #[serde(default)]
+    pub pin_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

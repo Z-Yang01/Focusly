@@ -123,6 +123,7 @@ fn apply_desktop_pin(app: &AppHandle, win: &tauri::WebviewWindow, note: &Note, p
                     readonly_flag: None,
                     scale: None,
                     touch: false,
+                    pin_mode: None,
                 },
             )
         });

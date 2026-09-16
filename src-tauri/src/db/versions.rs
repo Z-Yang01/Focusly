@@ -71,6 +71,7 @@ pub fn restore_version(conn: &Connection, version_id: &str) -> AppResult<Note> {
             locked: None,
             readonly_flag: None,
             scale: None,
+                pin_mode: None,
             touch: true,
         },
     )?;
@@ -104,6 +105,7 @@ mod tests {
             locked: None,
             readonly_flag: None,
             scale: None,
+                pin_mode: None,
             touch: true,
         }
     }

@@ -65,6 +65,7 @@ fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
         is_private: r.get::<_, i64>("is_private")? != 0,
         locked: r.get::<_, i64>("locked")? != 0,
         readonly: r.get::<_, i64>("readonly_flag")? != 0,
+        pin_mode: Some(r.get::<_, String>("pin_mode").unwrap_or_default()),
         scale: r.get("scale")?,
     })
 }

@@ -344,6 +344,7 @@ mod tests {
                     readonly_flag: None,
                     scale: None,
                     touch: false,
+                    pin_mode: None,
                 },
             )
         })

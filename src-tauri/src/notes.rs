@@ -83,6 +83,7 @@ pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> 
                 locked: None,
                 readonly_flag: None,
                 scale: None,
+                pin_mode: None,
                 touch: true,
             },
         )?;
@@ -130,6 +131,7 @@ pub fn set_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> AppResult
                 locked: None,
                 readonly_flag: None,
                 scale: None,
+                pin_mode: None,
                 touch: true,
             },
         )
@@ -166,6 +168,7 @@ pub fn set_fullscreen_behavior(app: &AppHandle, id: &str, behavior: &str) -> App
                 locked: None,
                 readonly_flag: None,
                 scale: None,
+                pin_mode: None,
                 touch: false,
             },
         )
@@ -280,6 +283,7 @@ pub fn set_privacy_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> A
                 locked: (field == "locked").then_some(value),
                 readonly_flag: (field == "readonly").then_some(value),
                 scale: None,
+                pin_mode: None,
                 touch: false,
             },
         )
@@ -309,6 +313,72 @@ pub fn restore_note_version(app: &AppHandle, version_id: &str) -> AppResult<Note
 /// FTS 全文搜索（排除回收站；私密便签默认排除）。
 /// 服务层包装：notes_cmd::search_notes_v2 暂直连 db::search，本入口作为服务层契约保留。
 #[allow(dead_code)]
+/// 设置图钉模式：normal / topmost / desktop。
+/// desktop 模式调用 Windows WorkerW 桌面层嵌入。
+pub fn set_pin_mode(app: &AppHandle, id: &str, mode: &str) -> AppResult<Note> {
+    const VALID: &[&str] = &["normal", "topmost", "desktop"];
+    if !VALID.contains(&mode) {
+        return Err(AppError::Invalid(format!(
+            "未知图钉模式: {mode}（可选 {VALID:?}）"
+        )));
+    }
+    let state = app.state::<AppState>();
+    let note = state.db.with(|c| {
+        crate::db::notes::update(
+            c,
+            &crate::db::notes::NoteUpdate {
+                id: id.to_string(),
+                title: None,
+                content: None,
+                is_pinned: None,
+                is_always_on_top: None,
+                show_on_all_desktops: None,
+                desktop_pin_state: None,
+                fullscreen_behavior: None,
+                monitor_id: None,
+                is_private: None,
+                locked: None,
+                readonly_flag: None,
+                pin_mode: Some(mode.to_string()),
+                scale: None,
+                touch: false,
+            },
+        )
+    })?;
+
+    // Windows 侧操作
+    #[cfg(windows)]
+    {
+        let label = crate::window::note_label(id);
+        if let Some(win) = app.get_webview_window(&label) {
+            if let Ok(hwnd) = win.hwnd() {
+                let h = windows::Win32::Foundation::HWND(hwnd.0 as _);
+                unsafe {
+                    match mode {
+                        "desktop" => {
+                            crate::desktop_pin::pin_to_desktop(h)?;
+                            // desktop 与 topmost 互斥
+                            let _ = win.set_always_on_top(false);
+                        }
+                        "topmost" => {
+                            crate::desktop_pin::unpin_from_desktop(h)?;
+                            let _ = win.set_always_on_top(true);
+                        }
+                        _ => {
+                            crate::desktop_pin::unpin_from_desktop(h)?;
+                            let _ = win.set_always_on_top(false);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    log::info!("便签 {id} 图钉模式 → {mode}");
+    emit_notes_changed(app, id);
+    Ok(note)
+}
+
 pub fn search_notes_v2(app: &AppHandle, keyword: &str, include_private: bool) -> AppResult<Vec<crate::db::models::SearchHit>> {
     let state = app.state::<AppState>();
     let hits = state.db.with(|c| crate::db::search::search(c, keyword, include_private))?;
