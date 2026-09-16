@@ -129,6 +129,7 @@ pub fn run() {
             commands::reminders_cmd::complete_reminder,
             commands::reminders_cmd::snooze_reminder,
             commands::reminders_cmd::list_reminders,
+            commands::reminders_cmd::parse_time_nl,
             // 设置
             commands::settings_cmd::get_all_settings,
             commands::settings_cmd::set_setting,

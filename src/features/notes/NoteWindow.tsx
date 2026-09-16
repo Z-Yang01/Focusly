@@ -77,6 +77,7 @@ import type {
   ReminderFiredEvent,
 } from "@/types";
 import { cn } from "@/lib/utils";
+import { VersionHistoryPanel } from "@/features/archive/VersionHistoryPanel";
 
 export interface NoteWindowProps {
   noteId: string;
@@ -137,6 +138,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
     }
   });
   const [banner, setBanner] = useState<ReminderFiredEvent | null>(null);
+  const [versionOpen, setVersionOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const readyCalledRef = useRef(false);
@@ -470,6 +472,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       >
         在管理器中显示
       </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setVersionOpen(true)}>版本历史</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => void handleArchive()}>归档</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => void handleDelete()}>
@@ -646,6 +649,12 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      <VersionHistoryPanel
+        noteId={noteId}
+        open={versionOpen}
+        onOpenChange={setVersionOpen}
+        onRestored={refreshMeta}
+      />
     </TooltipProvider>
   );
 }

@@ -84,3 +84,18 @@ pub fn list_reminders(
         .db
         .with(|c| crate::db::reminders::list_for_note(c, &note_id, limit.unwrap_or(50)))
 }
+
+// ---------- 自然语言时间解析（批3接线） ----------
+
+/// 解析中文自然语言时间（"明天下午3点"/"每周一10点"/"工作日9点"/"30分钟后"…）。
+/// 返回 None 表示无法解析；前端据此提示。
+#[tauri::command]
+pub fn parse_time_nl(input: String) -> AppResult<Option<serde_json::Value>> {
+    let now = chrono::Utc::now();
+    Ok(crate::timeparse::parse_time_nl(&input, now).map(|p| {
+        serde_json::json!({
+            "at": crate::reminder::fmt(p.at),
+            "repeat": p.repeat.as_str(),
+        })
+    }))
+}
