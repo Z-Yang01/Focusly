@@ -317,7 +317,7 @@ describe("端到端（真实仓库文件）", () => {
   });
 
   it("[快照] Rust 注册命令总数（增删命令须双端同步后更新此快照）", () => {
-    expect(registered.size).toBe(86);
+    expect(registered.size).toBe(87);
     expect(registered).toContain("create_note");
     expect(registered).toContain("task_meta_update");
   });
@@ -331,7 +331,7 @@ describe("端到端（真实仓库文件）", () => {
   });
 
   it("[快照] 未使用命令清单（注册但前端未调用，仅为信息性）", () => {
-    expect(unused).toEqual(["task_meta_get"]);
+    expect(unused).toEqual(["set_pin_mode", "task_meta_get"]);
   });
 
   it("P0：关键类型字段与 Rust serde camelCase 对齐", () => {
