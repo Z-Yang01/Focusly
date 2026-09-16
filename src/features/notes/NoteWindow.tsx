@@ -350,6 +350,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       await saveNow();
     } catch (err) {
       console.error("关闭前保存失败", err);
+      toast.error("关闭前自动保存失败，请重新打开便签检查内容");
     }
     try {
       await closeNoteWindow(noteId);

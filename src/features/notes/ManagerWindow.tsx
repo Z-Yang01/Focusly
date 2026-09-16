@@ -205,6 +205,17 @@ function ManagerContent() {
           速记
         </Button>
         <DailyNoteButton />
+        <TemplatePicker onPick={(tpl) => void handleCreateFromTemplate(tpl)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 text-xs"
+            title="从模板新建"
+          >
+            模板
+          </Button>
+        </TemplatePicker>
         <Button type="button" size="sm" className="h-8 shrink-0 text-xs" onClick={() => void handleCreate()}>
           <Plus className="size-3.5" />
           新建便签
@@ -347,17 +358,6 @@ function ManagerContent() {
       <ImageManagerDialog open={galleryOpen} onOpenChange={setGalleryOpen} />
       <StatsDialog open={statsOpen} onOpenChange={setStatsOpen} />
       <CommandPaletteHost />
-      <TemplatePicker onPick={(tpl) => void handleCreateFromTemplate(tpl)}>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 shrink-0 text-xs"
-          title="从模板新建"
-        >
-          模板
-        </Button>
-      </TemplatePicker>
     </div>
   );
 }
