@@ -125,6 +125,10 @@ CREATE TABLE layout_presets (
   created_at TEXT NOT NULL
 );
 "#,
+    // v4: 快速捕获（速记箱）全局快捷键默认绑定
+    r#"
+INSERT OR IGNORE INTO shortcuts (action, accelerator, enabled, updated_at) VALUES ('quick_capture', 'Ctrl+Shift+Q', 1, '');
+"#,
 ];
 
 use rusqlite::Connection;
@@ -164,11 +168,11 @@ mod tests {
             .unwrap();
         assert_eq!(theme, "system");
 
-        // shortcuts 默认值存在
+        // shortcuts 默认值存在（v4 起含 quick_capture）
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM shortcuts", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 4);
     }
 
     /// 模拟 v1 旧库：只跑第一条迁移并手工把 user_version 置为 1。

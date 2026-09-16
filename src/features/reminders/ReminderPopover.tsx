@@ -1,5 +1,6 @@
-/** 提醒设置气泡：快捷时间 / 自定义时间 / 重复类型 / 清除 */
+/** 提醒设置气泡：快捷时间 / 自然语言时间 / 自定义时间 / 重复类型 / 清除 */
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Bell, BellPlus, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,12 +50,21 @@ function nextMondayAt9(): Date {
   return d;
 }
 
+/** parse_time_nl 命令返回：at 为 RFC3339 UTC，repeat 为 RepeatType 字面量 */
+interface NlParsed {
+  at: string;
+  repeat: string;
+}
+
 export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
   const [open, setOpen] = useState(false);
   const [reminder, setReminderState] = useState<Reminder | null>(note.nextReminder ?? null);
   const [datetime, setDatetime] = useState("");
   const [repeat, setRepeat] = useState<RepeatType>("once");
   const [busy, setBusy] = useState(false);
+  const [nlInput, setNlInput] = useState("");
+  const [nlPreview, setNlPreview] = useState<NlParsed | null>(null);
+  const [nlBusy, setNlBusy] = useState(false);
 
   const refresh = async () => {
     try {
@@ -114,6 +124,46 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
       return;
     }
     await applyAt(at);
+  };
+
+  /** 解析自然语言时间（parse_time_nl 未注册/失败时优雅降级为提示） */
+  const handleParseNl = async () => {
+    const input = nlInput.trim();
+    if (!input) return;
+    setNlBusy(true);
+    try {
+      const parsed = await invoke<NlParsed | null>("parse_time_nl", { input });
+      if (!parsed || !parsed.at) {
+        setNlPreview(null);
+        alert("无法识别，请换种说法");
+        return;
+      }
+      setNlPreview(parsed);
+    } catch (err) {
+      console.error("自然语言时间解析失败", err);
+      setNlPreview(null);
+      alert(`解析失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setNlBusy(false);
+    }
+  };
+
+  /** 用解析结果设置提醒：at 已是 RFC3339 UTC，可直接走 setReminder */
+  const applyNl = async () => {
+    if (!nlPreview) return;
+    setBusy(true);
+    try {
+      const created = await setReminder(note.id, nlPreview.at, nlPreview.repeat as RepeatType);
+      setReminderState(created);
+      setNlPreview(null);
+      setNlInput("");
+      onChanged?.();
+    } catch (err) {
+      console.error("设置提醒失败", err);
+      alert(`设置提醒失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const trigger = (
@@ -183,6 +233,56 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
         </div>
 
         <div className="mt-3 space-y-2">
+          <div className="space-y-1">
+            <Label htmlFor="reminder-nl" className="text-xs text-muted-foreground">
+              自然语言时间
+            </Label>
+            <div className="flex gap-1.5">
+              <Input
+                id="reminder-nl"
+                value={nlInput}
+                onChange={(e) => {
+                  setNlInput(e.target.value);
+                  setNlPreview(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleParseNl();
+                  }
+                }}
+                placeholder="明天下午3点 / 每周一10点 / 30分钟后"
+                className="h-8 flex-1 text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-xs"
+                disabled={nlBusy || !nlInput.trim()}
+                onClick={() => void handleParseNl()}
+              >
+                解析
+              </Button>
+            </div>
+            {nlPreview && (
+              <div className="flex items-center justify-between gap-2 rounded-md bg-muted px-2 py-1.5">
+                <span className="min-w-0 text-xs text-muted-foreground">
+                  将提醒：{describeTime(nlPreview.at)}
+                  （重复类型：{REPEAT_LABEL[nlPreview.repeat as RepeatType] ?? nlPreview.repeat}）
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-6 shrink-0 px-2 text-xs"
+                  disabled={busy}
+                  onClick={() => void applyNl()}
+                >
+                  设为提醒
+                </Button>
+              </div>
+            )}
+          </div>
           <div className="space-y-1">
             <Label htmlFor="reminder-datetime" className="text-xs text-muted-foreground">
               自定义时间

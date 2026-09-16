@@ -20,7 +20,7 @@ const SETTING_KEYS: &[&str] = &[
     "dnd_end",
 ];
 
-const SHORTCUT_ACTIONS: &[&str] = &["toggle_notes", "new_note", "focus_search"];
+const SHORTCUT_ACTIONS: &[&str] = &["toggle_notes", "new_note", "focus_search", "quick_capture"];
 
 #[tauri::command]
 pub fn get_all_settings(state: State<'_, AppState>) -> AppResult<HashMap<String, String>> {

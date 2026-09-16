@@ -37,6 +37,9 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
             window::show_manager(app);
             let _ = app.emit("focus-search", ());
         }
+        "quick_capture" => {
+            let _ = crate::quickcapture::toggle(app);
+        }
         other => log::warn!("未知的快捷键动作: {other}"),
     }
 }

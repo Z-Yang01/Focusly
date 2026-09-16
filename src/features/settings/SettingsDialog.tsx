@@ -34,22 +34,35 @@ export interface SettingsDialogProps {
   onOpenChange: (v: boolean) => void;
 }
 
-type ShortcutMap = Record<ShortcutAction, string>;
+/**
+ * 本地扩展动作：quick_capture（速记箱）由 DB 迁移 v4 引入，
+ * types/index.ts 的 ShortcutAction 尚未包含；此处本地联合扩展，后端已支持 set/get。
+ */
+type ShortcutActionExt = ShortcutAction | "quick_capture";
 
-const SHORTCUT_ACTIONS: { action: ShortcutAction; label: string }[] = [
+type ShortcutMap = Record<ShortcutActionExt, string>;
+
+const SHORTCUT_ACTIONS: { action: ShortcutActionExt; label: string }[] = [
   { action: "toggle_notes", label: "显示 / 隐藏全部便签" },
   { action: "new_note", label: "新建便签" },
   { action: "focus_search", label: "聚焦搜索" },
+  { action: "quick_capture", label: "速记箱（快速捕获）" },
 ];
 
 const SHORTCUT_ACTION_NAMES: Record<string, string> = {
   toggle_notes: "显示 / 隐藏全部便签",
   new_note: "新建便签",
   focus_search: "聚焦搜索",
+  quick_capture: "速记箱（快速捕获）",
 };
 
 function shortcutsToMap(list: ShortcutEntry[]): ShortcutMap {
-  const map: ShortcutMap = { toggle_notes: "", new_note: "", focus_search: "" };
+  const map: ShortcutMap = {
+    toggle_notes: "",
+    new_note: "",
+    focus_search: "",
+    quick_capture: "",
+  };
   for (const entry of list) {
     if (entry.action in map) map[entry.action] = entry.accelerator;
   }
@@ -64,6 +77,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     toggle_notes: "",
     new_note: "",
     focus_search: "",
+    quick_capture: "",
   });
   const [staged, setStaged] = useState<Partial<ShortcutMap>>({});
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -118,20 +132,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const boolValue = (key: string) => settings[key] === "true";
 
-  const currentShortcut = (action: ShortcutAction) => staged[action] ?? shortcuts[action];
+  const currentShortcut = (action: ShortcutActionExt) => staged[action] ?? shortcuts[action];
   const hasStaged = Object.keys(staged).length > 0;
 
   const saveShortcuts = async () => {
     const entries = Object.entries(staged).filter(
-      ([action, acc]) => acc !== undefined && acc !== shortcuts[action as ShortcutAction],
-    ) as [ShortcutAction, string][];
+      ([action, acc]) => acc !== undefined && acc !== shortcuts[action as ShortcutActionExt],
+    ) as [ShortcutActionExt, string][];
     if (entries.length === 0) {
       setStaged({});
       return;
     }
     try {
       for (const [action, accelerator] of entries) {
-        await setShortcut(action, accelerator);
+        // lib/api.ts 的 setShortcut 形参仍是 ShortcutAction（types 禁改），此处断言透传
+        await setShortcut(action as ShortcutAction, accelerator);
       }
       const list = await getShortcuts();
       setShortcuts(shortcutsToMap(list));
