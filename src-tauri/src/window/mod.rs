@@ -5,6 +5,7 @@ pub mod layout;
 pub mod monitor;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -153,7 +154,7 @@ pub fn close_note_window(app: &AppHandle, note_id: &str) {
         let _ = win.close();
     }
     let state = app.state::<AppState>();
-    state.fullscreen_hidden.lock().unwrap().remove(&label);
+    lock_ok(&state.fullscreen_hidden).remove(&label);
 }
 
 /// 显示、取消最小化并聚焦指定便签窗口。
@@ -190,7 +191,7 @@ pub fn show_all_notes(app: &AppHandle) -> AppResult<()> {
     };
     {
         let app_state = app.state::<AppState>();
-        let mut hidden = app_state.fullscreen_hidden.lock().unwrap();
+        let mut hidden = lock_ok(&app_state.fullscreen_hidden);
         for label in &labels {
             if let Some(win) = app.get_webview_window(label) {
                 let _ = win.show();
@@ -206,7 +207,7 @@ pub fn show_all_notes(app: &AppHandle) -> AppResult<()> {
 /// 隐藏全部便签窗口（只隐藏窗口，不删内容）。
 pub fn hide_all_notes(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<AppState>();
-    let mut hidden = state.fullscreen_hidden.lock().unwrap();
+    let mut hidden = lock_ok(&state.fullscreen_hidden);
     for (label, win) in app.webview_windows() {
         if note_id_from_label(&label).is_some() {
             let _ = win.hide();
@@ -232,7 +233,7 @@ pub fn toggle_all_notes(app: &AppHandle) -> AppResult<()> {
 /// 前台全屏状态变化时应用每张便签的全屏策略。
 pub fn apply_fullscreen_policy(app: &AppHandle, fullscreen: bool) {
     let state = app.state::<AppState>();
-    let mut hidden = state.fullscreen_hidden.lock().unwrap();
+    let mut hidden = lock_ok(&state.fullscreen_hidden);
     let Ok(notes) = state.db.with(|c| crate::db::notes::all_active_with_windows(c)) else {
         return;
     };
@@ -288,6 +289,11 @@ pub fn save_geometry_now(app: &AppHandle, win: &tauri::WebviewWindow) {
             )
         });
     }
+}
+
+/// 锁中毒容错：即使持锁线程 panic 也能恢复（锁内操作均为简单集合读写，安全）。
+fn lock_ok<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// tauri 的 HWND（其内部 windows crate 版本可能与本 crate 不同）转换为本 crate 的 HWND。
@@ -346,7 +352,7 @@ pub fn handle_window_event(app: &AppHandle, label: &str, event: &WindowEvent) {
 fn schedule_geometry_save(app: &AppHandle, label: &str) {
     let gen = {
         let state = app.state::<AppState>();
-        let mut map = state.geometry_gens.lock().unwrap();
+        let mut map = lock_ok(&state.geometry_gens);
         let g = map.entry(label.to_string()).or_insert(0);
         *g += 1;
         *g
@@ -359,11 +365,7 @@ fn schedule_geometry_save(app: &AppHandle, label: &str) {
             return;
         };
         // 期间又有新事件 → 本次放弃
-        let current = app
-            .state::<AppState>()
-            .geometry_gens
-            .lock()
-            .unwrap()
+        let current = lock_ok(&app.state::<AppState>().geometry_gens)
             .get(&label)
             .copied()
             .unwrap_or(0);
@@ -418,7 +420,7 @@ pub fn startup_windows(app: &AppHandle) -> AppResult<()> {
 /// 供外部模块查询：当前被全屏策略隐藏的窗口集合（调试用）。
 #[allow(dead_code)]
 pub fn hidden_by_fullscreen(state: &AppState) -> HashSet<String> {
-    state.fullscreen_hidden.lock().unwrap().clone()
+    lock_ok(&state.fullscreen_hidden).clone()
 }
 
 /// 窗口几何持久化的 id→(packed x,y,w,h) 映射类型（geometry 存取接口契约）。
