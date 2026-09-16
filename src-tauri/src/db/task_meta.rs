@@ -225,9 +225,143 @@ pub fn mark_done_content_line(content: &str, line_text: &str) -> Option<String> 
     }
 }
 
+
+// ---------- 任务身份算法（与前端 taskKey.ts 严格对齐） ----------
+
+/// FNV-1a 32 位哈希（按 UTF-16 码元迭代，与 JS charCodeAt 完全一致），
+/// 返回 8 位十六进制。金标准：fnv1a32("写周报") = "12943e83"。
+pub fn fnv1a32(input: &str) -> String {
+    let mut h: u32 = 0x811c_9dc5;
+    for unit in input.encode_utf16() {
+        h ^= unit as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    format!("{h:08x}")
+}
+
+
+/// 从便签正文解析待办行：(行文本, 是否勾选)。匹配规则与前端 parseTodos 一致。
+fn extract_task_lines(content: &str) -> Vec<(String, bool)> {
+    let mut out = Vec::new();
+    for line in content.split('\n') {
+        let t = line.trim_start();
+        let rest = match t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")).or_else(|| t.strip_prefix("+ ")) {
+            Some(r) => r,
+            None => continue,
+        };
+        // rest 形如 "[ ] 文本" / "[x] 文本" / "[X] 文本"
+        if !rest.starts_with('[') || rest.len() < 3 {
+            continue;
+        }
+        let mark = rest.as_bytes()[1];
+        let checked = mark == b'x' || mark == b'X';
+        let body = &rest[3..];
+        let text = body.strip_prefix(' ').unwrap_or(body).to_string();
+        out.push((text, checked));
+    }
+    out
+}
+
+/// 内容变更后同步 task_meta（双向真源规则）：
+/// - 勾选 `[x]` → meta.status = 'done'
+/// - 取消勾选 `[ ]` 且 meta 原为 done → 回退 'todo'
+/// - meta 为 skipped → 不受勾选影响（跳过是独立维度）
+/// - 无 meta 的未勾选行不建行（避免空记录膨胀）
+/// 返回更新的行数。
+pub fn sync_task_meta_from_content(conn: &Connection, note_id: &str, content: &str) -> AppResult<usize> {
+    let mut changed = 0usize;
+    let mut seen: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    for (raw_text, checked) in extract_task_lines(content) {
+        let norm = normalize_task_text(&raw_text);
+        let occurrence = seen.entry(norm.clone()).or_insert(0);
+        let task_key = format!("{}-{}", fnv1a32(&norm), occurrence);
+        *occurrence += 1;
+
+        let existing = conn
+            .query_row(
+                "SELECT status FROM task_meta WHERE note_id = ?1 AND task_key = ?2",
+                params![note_id, task_key],
+                |r| r.get::<_, String>(0),
+            )
+            .ok();
+
+        match existing.as_deref() {
+            Some("skipped") => continue, // 跳过态不受勾选影响
+            Some("done") if checked => continue,
+            Some("done") if !checked => {
+                conn.execute(
+                    "UPDATE task_meta SET status = 'todo', updated_at = ?3                      WHERE note_id = ?1 AND task_key = ?2",
+                    params![note_id, task_key, chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()],
+                )?;
+                changed += 1;
+            }
+            _ if checked => {
+                conn.execute(
+                    "INSERT INTO task_meta (note_id, task_key, line_text, status, updated_at)                      VALUES (?1, ?2, ?3, 'done', ?4)                      ON CONFLICT(note_id, task_key) DO UPDATE SET status = 'done', updated_at = ?4",
+                    params![note_id, task_key, raw_text.trim(), chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()],
+                )?;
+                changed += 1;
+            }
+            _ => {}
+        }
+    }
+    Ok(changed)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::migrations;
+
+    #[test]
+    fn fnv1a32_cross_language_golden() {
+        // 与前端 taskKey.test.ts 的金标准一致（node 实测值）
+        assert_eq!(fnv1a32(""), "811c9dc5");
+        assert_eq!(fnv1a32("写周报"), "12943e83");
+        assert_eq!(fnv1a32("窗口渲染正常"), "d294d34f");
+    }
+
+    #[test]
+    fn sync_creates_done_and_reverts_unchecked() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrations::run(&conn).unwrap();
+        let note = crate::db::notes::create(&conn, "t", "").unwrap();
+        let content = "# 实机验收\n- [ ] 任务甲\n- [x] 任务乙";
+        sync_task_meta_from_content(&conn, &note.id, content).unwrap();
+        // 甲：未勾选无 meta → 不建行
+        // 乙：勾选 → 建 done
+        let metas = list_for_note(&conn, &note.id).unwrap();
+        assert_eq!(metas.len(), 1);
+        assert_eq!(metas[0].status, "done");
+        assert_eq!(metas[0].line_text, "任务乙");
+
+        // 取消勾选乙 → meta 回退 todo
+        sync_task_meta_from_content(&conn, &note.id, "# 实机验收\n- [ ] 任务甲\n- [ ] 任务乙").unwrap();
+        let metas = list_for_note(&conn, &note.id).unwrap();
+        let yi = metas.iter().find(|m| m.line_text == "任务乙").unwrap();
+        assert_eq!(yi.status, "todo");
+    }
+
+    #[test]
+    fn sync_preserves_skipped() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrations::run(&conn).unwrap();
+        let note = crate::db::notes::create(&conn, "t", "- [ ] 被跳过的任务").unwrap();
+        upsert(&conn, &TaskMetaUpsert {
+            note_id: note.id.clone(),
+            task_key: crate::db::task_meta::fnv1a32("被跳过的任务") + "-0",
+            line_text: "被跳过的任务".into(),
+            status: Some("skipped".into()),
+            estimate: None,
+            priority: None,
+            due_at: None,
+            clear_skip: false,
+        }).unwrap();
+        sync_task_meta_from_content(&conn, &note.id, "- [ ] 被跳过的任务").unwrap();
+        let metas = list_for_note(&conn, &note.id).unwrap();
+        assert_eq!(metas[0].status, "skipped", "跳过态不受未勾选同步影响");
+    }
 
     fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

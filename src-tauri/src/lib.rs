@@ -66,7 +66,7 @@ pub fn run() {
             // 2. 数据库：打开 → 迁移 → 启动备份
             let app_db = db::Db::open(&paths.db)?;
             app_db.with(db::migrations::run)?;
-            if let Err(e) = filesystem::backup_database(&paths) {
+            if let Err(e) = filesystem::backup_database(&app_db, &paths) {
                 log::warn!("启动备份数据库失败: {e}");
             }
 

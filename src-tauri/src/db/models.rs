@@ -199,6 +199,9 @@ pub struct ExportData {
     /// 本次导出是否包含私密便签；旧导出文件缺省按 false 处理（导入不受影响）
     #[serde(default)]
     pub includes_private: bool,
+    /// 任务三态元数据（新导出格式；旧文件缺省为空，导入不受影响）
+    #[serde(default)]
+    pub task_meta: Vec<TaskMeta>,
 }
 
 /// 全文搜索命中项（snippet 内含 <mark> 高亮标记）。

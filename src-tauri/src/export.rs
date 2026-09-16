@@ -6,7 +6,7 @@ use std::path::Path;
 use rusqlite::params;
 use serde::Serialize;
 
-use crate::db::models::{ExportData, NoteImage, Reminder};
+use crate::db::models::{ExportData, NoteImage, Reminder, TaskMeta};
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
 use crate::reminder;
@@ -106,6 +106,31 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
             }
         }
 
+        // 任务三态元数据：私密便签的行按 include_private 过滤（line_text 可能泄露内容）
+        let mut task_meta: Vec<TaskMeta> = Vec::new();
+        {
+            let mut stmt = c.prepare(
+                "SELECT tm.note_id, tm.task_key, tm.line_text, tm.status, tm.estimate_pomodoros,                  tm.completed_pomodoros, tm.priority, tm.due_at, tm.skip_date, tm.updated_at                  FROM task_meta tm                  LEFT JOIN notes n ON n.id = tm.note_id                  WHERE ?1 OR COALESCE(n.is_private, 0) = 0",
+            )?;
+            let rows = stmt.query_map(params![include_private], |r| {
+                Ok(TaskMeta {
+                    note_id: r.get(0)?,
+                    task_key: r.get(1)?,
+                    line_text: r.get(2)?,
+                    status: r.get(3)?,
+                    estimate_pomodoros: r.get(4)?,
+                    completed_pomodoros: r.get(5)?,
+                    priority: r.get(6)?,
+                    due_at: r.get(7)?,
+                    skip_date: r.get(8)?,
+                    updated_at: r.get(9)?,
+                })
+            })?;
+            for row in rows {
+                task_meta.push(row?);
+            }
+        }
+
         let shortcuts = crate::db::shortcuts::list(c)?;
         let mut settings: Vec<(String, String)> =
             crate::db::settings::get_all(c)?.into_iter().collect();
@@ -121,6 +146,7 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
             tags,
             shortcuts,
             settings,
+            task_meta,
             includes_private: include_private,
         })
     })
@@ -158,8 +184,8 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
                 "INSERT OR REPLACE INTO notes \
                  (id, title, content, content_format, status, is_pinned, is_always_on_top, \
                   show_on_all_desktops, desktop_pin_state, fullscreen_behavior, x, y, width, height, \
-                  monitor_id, created_at, updated_at, archived_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                  monitor_id, created_at, updated_at, archived_at, deleted_at, is_private, locked, readonly_flag, scale) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
                 params![
                     n.id,
                     n.title,
@@ -179,6 +205,11 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
                     n.created_at,
                     n.updated_at,
                     n.archived_at,
+                    n.deleted_at,
+                    n.is_private as i64,
+                    n.locked as i64,
+                    n.readonly as i64,
+                    n.scale,
                 ],
             )?;
             note_ids.insert(n.id.clone());
@@ -253,7 +284,33 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
             )?;
         }
 
+        // 任务三态元数据：仅还原 note_ids 中存在的便签对应行（历史保留语义）
+        for tm in &data.task_meta {
+            if !note_ids.contains(&tm.note_id) {
+                skipped += 1;
+                continue;
+            }
+            tx.execute(
+                "INSERT OR REPLACE INTO task_meta (note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    tm.note_id,
+                    tm.task_key,
+                    tm.line_text,
+                    tm.status,
+                    tm.estimate_pomodoros,
+                    tm.completed_pomodoros,
+                    tm.priority,
+                    tm.due_at,
+                    tm.skip_date,
+                    tm.updated_at,
+                ],
+            )?;
+        }
+
+        // P0-2 修复：重建 FTS 索引，导入数据对全文搜索立即可见（事务内）
+        crate::db::search::fts_rebuild_all(&tx)?;
         tx.commit()?;
+
         Ok(ImportSummary { imported_notes, skipped })
     })
 }

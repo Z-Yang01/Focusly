@@ -190,6 +190,26 @@ fn take_chars(s: &str, n: usize) -> String {
     }
 }
 
+
+/// 全量重建 FTS 索引：导入数据、批量修复后调用，保证搜索可见性（P0-2）。
+/// 只索引未进入回收站的便签；归档与私密过滤由查询侧负责。
+pub fn fts_rebuild_all(conn: &Connection) -> AppResult<()> {
+    conn.execute("DELETE FROM notes_fts", [])?;
+    let mut stmt = conn
+        .prepare("SELECT id, title, content FROM notes WHERE deleted_at IS NULL")?;
+    let rows: Vec<(String, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut count = 0usize;
+    for (id, title, content) in rows {
+        let tags = crate::db::tags::tags_for_note(conn, &id)?;
+        fts_sync(conn, &id, &title, &content, &tags.join(" "))?;
+        count += 1;
+    }
+    log::info!("FTS 索引已全量重建（{count} 条）");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

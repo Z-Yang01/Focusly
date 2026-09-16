@@ -59,26 +59,29 @@ impl AppPaths {
     }
 }
 
-/// 启动时轮转备份：database.sqlite → backups/，最多保留 5 份。
-/// 数据库不存在（首次启动）则跳过。
-pub fn backup_database(paths: &AppPaths) -> AppResult<()> {
+/// 启动时轮转备份：通过 SQLite Online Backup API 生成原子一致性快照，
+/// 最多保留 5 份。数据库不存在（首次启动）则跳过。
+/// 注意：必须在拿到 `&Db` 连接后调用（备份 API 需要源连接）。
+pub fn backup_database(db: &crate::db::Db, paths: &AppPaths) -> AppResult<()> {
+    use rusqlite::backup::Backup;
+    use std::time::Duration;
+
     if !paths.db.exists() {
         return Ok(());
     }
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
     let dest = paths.backups.join(format!("database-{stamp}.sqlite"));
-    std::fs::copy(&paths.db, &dest)?;
 
-    // WAL/SHM 一并拷贝，保证备份点一致（WAL checkpoint 在下次打开时自然回收）
-    for ext in ["-wal", "-shm"] {
-        let src = PathBuf::from(format!("{}{}", paths.db.display(), ext));
-        if src.exists() {
-            let _ = std::fs::copy(
-                &src,
-                paths.backups.join(format!("database-{stamp}.sqlite{ext}")),
-            );
+    // Online Backup API：把源库（含未合并的 WAL 页）以页为单位复制成一致快照
+    db.with(|src| -> AppResult<()> {
+        let mut dst = rusqlite::Connection::open(&dest)?;
+        {
+            let backup = Backup::new(src, &mut dst)?;
+            backup.run_to_completion(512, Duration::from_millis(5), None)?;
         }
-    }
+        dst.pragma_update(None, "journal_mode", "DELETE")?; // 备份文件自包含，无 WAL
+        Ok(())
+    })?;
 
     // 清理旧备份，保留最近 5 份
     let mut backups: Vec<PathBuf> = std::fs::read_dir(&paths.backups)?
@@ -94,8 +97,6 @@ pub fn backup_database(paths: &AppPaths) -> AppResult<()> {
     while backups.len() > 5 {
         let oldest = backups.remove(0);
         let _ = std::fs::remove_file(&oldest);
-        let _ = std::fs::remove_file(PathBuf::from(format!("{}-wal", oldest.display())));
-        let _ = std::fs::remove_file(PathBuf::from(format!("{}-shm", oldest.display())));
     }
     log::info!("数据库备份完成: {}", dest.display());
     Ok(())
@@ -159,19 +160,20 @@ mod tests {
 
     #[test]
     fn paths_and_backup_rotation() {
+        use crate::db::{migrations, Db};
+
         let tmp = tempfile::tempdir().unwrap();
         let paths = AppPaths::init(tmp.path().to_path_buf()).unwrap();
-        assert!(paths.images.is_dir() && paths.backups.is_dir());
+        let db = Db::open(&paths.db).unwrap();
+        db.with(|c| migrations::run(c)).unwrap();
 
-        // 无数据库 → 跳过
-        backup_database(&paths).unwrap();
-
-        std::fs::write(&paths.db, b"fake").unwrap();
+        // 建 7 份备份验证轮转（时间戳秒级分辨率，间隔 >1s 保证文件名唯一）
         for i in 0..7 {
             std::thread::sleep(std::time::Duration::from_millis(1100));
-            let _ = i;
-            std::fs::write(&paths.db, format!("v{i}")).unwrap();
-            backup_database(&paths).unwrap();
+            db.with(|c| {
+                crate::db::notes::create(c, &format!("n{i}"), "")
+            }).unwrap();
+            backup_database(&db, &paths).unwrap();
         }
         let count = std::fs::read_dir(&paths.backups)
             .unwrap()
@@ -183,6 +185,61 @@ mod tests {
             })
             .count();
         assert!(count <= 5, "备份应轮转，实际 {count} 份");
+
+        // 最新备份内容可用（还原演练另有专项测试）
+        let mut names: Vec<String> = std::fs::read_dir(&paths.backups)
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().to_string()))
+            .collect();
+        names.sort();
+        let latest = names.last().unwrap();
+        assert!(std::fs::read(paths.backups.join(latest)).is_ok());
+    }
+
+    /// 备份恢复演练：写入 → 备份 → 破坏原库 → 用备份还原 → 数据完整。
+    /// 这是"备份可恢复"的唯一权威验证，重构备份逻辑时不得删除。
+    #[test]
+    fn backup_restore_drill() {
+        use crate::db::{migrations, Db};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let paths = AppPaths::init(tmp.path().to_path_buf()).unwrap();
+        let db = Db::open(&paths.db).unwrap();
+        db.with(|c| migrations::run(c)).unwrap();
+        db.with(|c| {
+            crate::db::notes::create(c, "演练便签", "重要数据")
+        }).unwrap();
+
+        backup_database(&db, &paths).unwrap();
+
+        // 找最新备份
+        let mut backups: Vec<PathBuf> = std::fs::read_dir(&paths.backups)
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .collect();
+        backups.sort();
+        let latest = backups.last().unwrap().clone();
+        assert!(latest.is_file());
+
+        // 破坏原库（模拟损坏）
+        std::fs::write(&paths.db, b"corrupted junk data").unwrap();
+
+        // 还原：关闭连接 → 拷贝备份覆盖 → 重开验证
+        drop(db);
+        std::fs::copy(&latest, &paths.db).unwrap();
+        let db2 = Db::open(&paths.db).unwrap();
+        let (title, content): (String, String) = db2
+            .with(|c| {
+                c.query_row(
+                    "SELECT title, content FROM notes LIMIT 1",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .map_err(crate::error::AppError::from)
+            })
+            .unwrap();
+        assert_eq!(title, "演练便签");
+        assert_eq!(content, "重要数据");
     }
 
     #[test]

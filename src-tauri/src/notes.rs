@@ -94,6 +94,10 @@ pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> 
         if let Err(e) = crate::db::search::fts_sync(c, id, title, content, &tags.join(" ")) {
             log::warn!("FTS 同步失败 {id}: {e}");
         }
+        // P0-4：正文勾选状态 → task_meta 单向同步（content 为勾选真源）
+        if let Err(e) = crate::db::task_meta::sync_task_meta_from_content(c, id, content) {
+            log::warn!("task_meta 同步失败 {id}: {e}");
+        }
         Ok(note)
     })?;
     emit_notes_changed(app, id);
