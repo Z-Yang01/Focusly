@@ -155,7 +155,9 @@ export function MarkdownView({
         | { checked?: boolean; disabled?: boolean }
         | undefined;
       const checked = Boolean(inputProps?.checked);
-      const disabled = Boolean(inputProps?.disabled);
+      // remark-gfm 生成的任务复选框自带 disabled 属性，但 Focusly 的便签始终可交互，
+      // 不能把它当作"用户禁用"处理（否则点击永远无效）
+      const disabled = false;
       // li 的 position 从 "- [ ]" 源行开始；remark 是 1-based，转 0-based
       const line = node.position?.start.line;
       const line0 = line !== undefined ? line - 1 : undefined;

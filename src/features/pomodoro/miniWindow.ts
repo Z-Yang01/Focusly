@@ -6,6 +6,15 @@ const POS_KEY = "focusly.pomodoro.pos";
 
 /** 打开或聚焦迷你番茄窗（已存在则显示+聚焦） */
 export async function ensureMiniPomodoro(): Promise<void> {
+  try {
+    await ensureMiniPomodoroInner();
+  } catch (err) {
+    console.error("[pomodoro-mini] 创建/显示失败", err);
+    alert(`迷你番茄窗打开失败: ${String(err)}`);
+  }
+}
+
+async function ensureMiniPomodoroInner(): Promise<void> {
   const existing = await WebviewWindow.getByLabel(LABEL);
   if (existing) {
     await existing.show();
