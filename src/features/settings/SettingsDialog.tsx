@@ -1,6 +1,7 @@
 /** 应用设置对话框：外观 / 行为 / 快捷键 / 数据 */
 import { useEffect, useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -209,6 +210,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   };
 
+  // 导出诊断包：环境/数据库健康/日志尾部（不含便签内容，不含私密数据）
+  const handleExportDiagnostics = async () => {
+    try {
+      const path = await saveDialog({
+        title: "导出诊断包",
+        filters: [{ name: "诊断文本", extensions: ["txt"] }],
+      });
+      if (!path) return;
+      await invoke("export_diagnostics", { path });
+      alert(`诊断包已导出：${path}
+（仅含环境信息、数据库健康摘要与日志尾部，不含便签内容）`);
+    } catch (err) {
+      console.error("导出诊断包失败", err);
+      alert(`导出诊断包失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -384,6 +402,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 onClick={() => void handleReveal()}
               >
                 打开数据目录
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleExportDiagnostics()}
+              >
+                导出诊断包
               </Button>
             </div>
           </TabsContent>
