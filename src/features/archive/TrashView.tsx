@@ -1,6 +1,7 @@
 /** 回收站视图：已删除便签的恢复 / 永久删除 / 批量操作 / 只读预览 */
 import { useCallback, useEffect, useState } from "react";
-import { ArchiveRestore, Inbox, RefreshCw, SquareCheck, Trash2 } from "lucide-react";
+import { ArchiveRestore, RefreshCw, SquareCheck, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -217,9 +218,12 @@ export function TrashView({ className }: TrashViewProps) {
           </Button>
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-muted-foreground">
-          <Inbox className="size-8 opacity-50" />
-          <span className="text-sm">回收站是空的</span>
+        <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed py-8">
+          <EmptyState
+            icon={Trash2}
+            title="回收站是空的"
+            description="删除的便签会出现在这里"
+          />
         </div>
       ) : (
         <ScrollArea className="min-h-0 flex-1">

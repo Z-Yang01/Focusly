@@ -20,6 +20,15 @@
   --animate-content-show: content-show 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-content-hide: content-hide 0.12s ease-in;
 
+  /* 管理器视图切换淡入 */
+  --animate-fade-in: fade-in 0.15s ease-out;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
   @keyframes overlay-show {
     from {
       opacity: 0;
@@ -359,3 +368,36 @@
     accent-color: var(--primary);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 可访问性增强（追加层：只追加，不改上方任何既有变量/规则）              */
+/* ------------------------------------------------------------------ */
+@layer base {
+  /* 焦点环统一：宽度 2px / 偏移 2px 已由上方 :focus-visible 规则确定，
+     此处仅把颜色统一为 primary（同层靠后声明覆盖，自定义 ring 的组件仍可用 outline-none 关闭） */
+  :focus-visible {
+    outline-color: var(--primary);
+  }
+}
+
+/* 减少动效：系统开启"减少动态效果"时禁用所有过渡与动画（含 Radix 浮层进出动画） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 对比度留档（WCAG AA 正文 ≥ 4.5:1，基于当前变量实测）：
+   .dark muted-foreground hsl(240 5% 64.9%) vs background hsl(240 10% 3.9%) ≈ 7.7:1 ✓
+   :root muted-foreground hsl(240 3.8% 46.1%) vs background hsl(0 0% 100%)  ≈ 4.8:1 ✓
+   既有变量均已达标，未做改动；后续调色请维持此下限。 */
+
+/* 滚动条覆盖确认：上方 `*` / `::-webkit-scrollbar` 为全局选择器，
+   ScrollArea 即原生 overflow-y-auto 的 div，dialog / popover / 搜索面板内嵌滚动区一并生效。 */
+
+/* 文本选择色：已有 ::selection（primary 底 + primary-foreground 字）✓ */

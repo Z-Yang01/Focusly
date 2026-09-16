@@ -74,6 +74,7 @@ export function ReminderBanner({
           size="icon"
           className="size-6 text-muted-foreground hover:text-foreground"
           title="关闭提醒"
+          aria-label="关闭提醒"
           onClick={onDismiss}
         >
           <X className="size-3.5" />

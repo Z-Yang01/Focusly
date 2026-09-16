@@ -51,6 +51,9 @@ export function MiniPomodoroWindow() {
           {meta.emoji} {meta.label}
         </div>
         <div
+          role="timer"
+          aria-live="polite"
+          aria-label="番茄倒计时"
           className={cn(
             "text-4xl font-semibold tabular-nums tracking-tight",
             paused && "opacity-60",

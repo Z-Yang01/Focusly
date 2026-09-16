@@ -5,8 +5,10 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import {
+  AlertCircle,
   Ellipsis,
   Eye,
+  ImagePlus,
   Monitor,
   Pencil,
   Pin,
@@ -36,6 +38,7 @@ import { ReminderPopover } from "@/features/reminders/ReminderPopover";
 import { ReminderBanner } from "@/features/reminders/ReminderBanner";
 import { useNoteAutoSave } from "./useNoteAutoSave";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -125,6 +128,8 @@ function IconButton({ title, onClick, active, children }: IconButtonProps) {
           type="button"
           variant="ghost"
           size="icon"
+          aria-label={title}
+          aria-pressed={active}
           className={cn("size-7 text-muted-foreground hover:text-foreground", active && "text-amber-500 hover:text-amber-500")}
           onClick={onClick}
         >
@@ -143,6 +148,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [preview, setPreview] = useState(() => {
     try {
       return localStorage.getItem(`focusly-preview-${noteId}`) === "1";
@@ -181,33 +187,33 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   const autosave = useNoteAutoSave({ noteId, title, content });
   const saveNow = autosave.saveNow;
 
-  // 初始加载：数据就绪后才通知 Rust 显示窗口（避免白闪）
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const d = await getNote(noteId);
-        if (!alive) return;
-        setDetail(d);
-        setTitle(d.title);
-        setContent(d.content);
-        setLoadState("ready");
-      } catch (err) {
-        console.error("加载便签失败", err);
-        if (alive) setLoadState("error");
-      } finally {
-        if (alive && !readyCalledRef.current) {
-          readyCalledRef.current = true;
-          noteWindowReady(noteId).catch((err) =>
-            console.error("note_window_ready 调用失败", err),
-          );
-        }
+  // 加载便签：初始加载与错误态"重试"共用；数据就绪后才通知 Rust 显示窗口（避免白闪）
+  const loadNote = useCallback(async () => {
+    setLoadState("loading");
+    setLoadError(null);
+    try {
+      const d = await getNote(noteId);
+      setDetail(d);
+      setTitle(d.title);
+      setContent(d.content);
+      setLoadState("ready");
+    } catch (err) {
+      console.error("加载便签失败", err);
+      setLoadError(err instanceof Error ? err.message : String(err));
+      setLoadState("error");
+    } finally {
+      if (!readyCalledRef.current) {
+        readyCalledRef.current = true;
+        noteWindowReady(noteId).catch((err) =>
+          console.error("note_window_ready 调用失败", err),
+        );
       }
-    })();
-    return () => {
-      alive = false;
-    };
+    }
   }, [noteId]);
+
+  useEffect(() => {
+    void loadNote();
+  }, [loadNote]);
 
   const refreshMeta = useCallback(() => {
     getNote(noteId)
@@ -449,16 +455,43 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   };
 
   if (loadState === "loading") {
-    return <div className="h-screen bg-background" />;
+    return (
+      <div className="m-0.5 overflow-hidden rounded-xl border bg-background shadow-sm" style={{ height: "360px" }}>
+        <div className="flex h-10 items-center gap-2 border-b px-3">
+          <Skeleton className="h-4 w-32" />
+        </div>
+        <div className="space-y-3 p-4">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      </div>
+    );
   }
 
   if (loadState === "error" || !detail) {
+    const openInManager = () =>
+      void showManager().catch((err) => {
+        console.error("打开管理器失败", err);
+        toast.error("打开管理器失败");
+      });
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background text-sm">
-        <p className="text-muted-foreground">便签加载失败</p>
-        <Button size="sm" onClick={() => window.location.reload()}>
-          重试
-        </Button>
+      <div className="flex h-screen flex-col items-center justify-center gap-2 bg-background px-6 text-sm">
+        <AlertCircle className="size-8 text-destructive/70" />
+        <p className="font-medium">便签加载失败</p>
+        {loadError && (
+          <p className="max-w-xs text-center text-xs text-muted-foreground" title={loadError}>
+            {loadError}
+          </p>
+        )}
+        <div className="mt-2 flex items-center gap-2">
+          <Button size="sm" onClick={() => void loadNote()}>
+            重试
+          </Button>
+          <Button size="sm" variant="outline" onClick={openInManager}>
+            在管理器中打开
+          </Button>
+        </div>
       </div>
     );
   }
@@ -561,6 +594,8 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label="更多操作"
+                    title="更多操作"
                     className="size-7 text-muted-foreground hover:text-foreground"
                   >
                     <Ellipsis className="size-4" />
@@ -593,6 +628,18 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
 
             {/* 正文 */}
             <div className="relative min-h-0 flex-1">
+              {/* 预览模式：待办进度条（done/total） */}
+              {preview && stats.total > 0 && (
+                <div
+                  className="absolute inset-x-0 top-0 z-10 h-0.5 bg-muted"
+                  title={`待办进度 ${stats.done}/${stats.total}`}
+                >
+                  <div
+                    className="h-full bg-primary transition-[width] duration-300"
+                    style={{ width: `${Math.round((stats.done / stats.total) * 100)}%` }}
+                  />
+                </div>
+              )}
               <MarkdownEditor
                 value={content}
                 onChange={setContent}
@@ -601,6 +648,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 onImagePaths={insertImageMarkdown}
                 onPasteImage={() => void handlePasteImage()}
                 noteId={noteId}
+                emptyGuide={content === "" && title === ""}
                 taskPassthrough={{
                   taskMetaList,
                   today,
@@ -610,10 +658,9 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 }}
               />
               {dragOver && (
-                <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/70">
-                  <div className="rounded-lg border-2 border-dashed border-primary px-6 py-4 text-xs text-muted-foreground">
-                    松开鼠标插入图片
-                  </div>
+                <div className="pointer-events-none absolute inset-0 z-20 m-2 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-background/70">
+                  <ImagePlus className="size-6 text-primary" />
+                  <span className="text-xs text-muted-foreground">释放以添加图片</span>
                 </div>
               )}
             </div>
@@ -632,6 +679,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
               <button
                 type="button"
                 title="迷你番茄窗"
+                aria-label="打开迷你番茄窗"
                 className="text-muted-foreground hover:text-foreground"
                 onClick={() => void ensureMiniPomodoro()}
               >

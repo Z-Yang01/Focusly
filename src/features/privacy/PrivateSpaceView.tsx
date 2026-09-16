@@ -3,6 +3,7 @@
  *  隐私边界（诚实标注）：当前为隐私隔离模式，不是加密；完整加密（Windows Hello/DPAPI）为后续版本。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, Info, Lock, LockOpen, RefreshCw, ShieldX } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -239,12 +240,12 @@ export function PrivateSpaceView({ className }: PrivateSpaceViewProps) {
           </Button>
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-8 text-muted-foreground">
-          <Lock className="size-8 opacity-50" />
-          <span className="text-sm">暂无私密便签</span>
-          <span className="max-w-sm text-center text-xs opacity-70">
-            在便签上将其设为私密后，会出现在这里
-          </span>
+        <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed py-8">
+          <EmptyState
+            icon={Lock}
+            title="没有私密便签"
+            description="右键便签可设置私密状态"
+          />
         </div>
       ) : (
         <ScrollArea className="min-h-0 flex-1">

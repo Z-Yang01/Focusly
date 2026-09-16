@@ -5,9 +5,10 @@
  *  feature 内本地 api 函数与类型（不动 lib/api.ts）。
  */
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
+import { AlertCircle, CalendarClock, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getDueView } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +91,7 @@ export function TodayOverdueView({ onOpenNote }: TodayOverdueViewProps) {
           disabled={loading}
           onClick={() => void load()}
           title="刷新"
+          aria-label="刷新到期视图"
         >
           <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
         </Button>
@@ -110,10 +112,12 @@ export function TodayOverdueView({ onOpenNote }: TodayOverdueViewProps) {
       )}
 
       {isEmpty && (
-        <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-          <Inbox className="size-6" />
-          <p className="text-sm">近期没有到期的任务，去便签里用「任务 ^2026-09-20」标记到期日吧</p>
-        </div>
+        <EmptyState
+          icon={CalendarClock}
+          title="今天没有到期任务"
+          description="休息一下，或创建新任务"
+          className="py-8"
+        />
       )}
 
       {!loading && !error && data !== null && !isEmpty && (

@@ -247,6 +247,7 @@ export function QuickCaptureWindow() {
           size="icon"
           className="size-6 text-muted-foreground hover:text-foreground"
           title="关闭（Esc）"
+          aria-label="关闭速记箱"
           onClick={() => void hideWindow()}
         >
           <X className="size-4" />
@@ -320,6 +321,7 @@ export function QuickCaptureWindow() {
                       size="icon"
                       className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
                       title={entry.pinned ? "取消固定" : "固定"}
+                      aria-label={entry.pinned ? "取消固定该记录" : "固定该记录"}
                       onClick={() => void togglePin(entry.id)}
                     >
                       {entry.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
@@ -329,6 +331,7 @@ export function QuickCaptureWindow() {
                       size="icon"
                       className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
                       title="删除"
+                      aria-label="删除该剪贴板记录"
                       onClick={() => void removeEntry(entry.id)}
                     >
                       <Trash2 className="size-3.5" />

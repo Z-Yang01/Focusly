@@ -1,5 +1,5 @@
 /** 管理器主窗口（label=manager） */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -21,10 +21,13 @@ import {
   StickyNote,
   Tag as TagIcon,
   Trash2,
+  X,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   newNote,
   listNotes,
@@ -163,6 +166,36 @@ function ManagerContent() {
     });
   };
 
+  // 键盘网格导航：卡片（data-note-card）聚焦后，方向键在卡片间移动（列数按当前网格实测）
+  const handleGridKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (
+      e.key !== "ArrowLeft" &&
+      e.key !== "ArrowRight" &&
+      e.key !== "ArrowUp" &&
+      e.key !== "ArrowDown"
+    ) {
+      return;
+    }
+    const cards = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>("[data-note-card]"),
+    );
+    const current = cards.indexOf(document.activeElement as HTMLElement);
+    if (cards.length === 0 || current === -1) return;
+    e.preventDefault();
+    const gap = parseFloat(getComputedStyle(e.currentTarget).columnGap) || 0;
+    const columns = Math.max(
+      1,
+      Math.round((e.currentTarget.clientWidth + gap) / (cards[0].offsetWidth + gap)),
+    );
+    const last = cards.length - 1;
+    let next = current;
+    if (e.key === "ArrowLeft") next = Math.max(0, current - 1);
+    else if (e.key === "ArrowRight") next = Math.min(last, current + 1);
+    else if (e.key === "ArrowUp") next = Math.max(0, current - columns);
+    else next = Math.min(last, current + columns);
+    if (next !== current) cards[next].focus();
+  };
+
   const views: { key: ViewKey; label: string; icon: typeof StickyNote; count?: number }[] = [
     { key: "all", label: "全部便签", icon: StickyNote, count: activeQuery.data?.length ?? 0 },
     { key: "todo", label: "待办", icon: SquareCheck, count: todoQuery.data?.length ?? 0 },
@@ -177,6 +210,36 @@ function ManagerContent() {
     isNotesGrid &&
     (activeQuery.isLoading || archivedQuery.isLoading || todoQuery.isLoading || tagsQuery.isLoading);
 
+  // 网格视图统一空状态：图标 + 主文案 + 副文案（B3）
+  const gridEmpty: { icon: LucideIcon; title: string; description: string } = (() => {
+    if (selectedTag) {
+      return {
+        icon: Inbox,
+        title: "没有匹配的便签",
+        description: `试试其他标签，或清除「${selectedTag}」过滤`,
+      };
+    }
+    if (view === "todo") {
+      return {
+        icon: SquareCheck,
+        title: "暂无待办",
+        description: "在便签中使用 - [ ] 语法创建待办事项",
+      };
+    }
+    if (view === "archived") {
+      return {
+        icon: Archive,
+        title: "没有已归档便签",
+        description: "归档的便签会出现在这里",
+      };
+    }
+    return {
+      icon: StickyNote,
+      title: "还没有便签",
+      description: "点击右上角创建你的第一张便签",
+    };
+  })();
+
   return (
     <div className="flex h-screen flex-col bg-background text-sm">
       {/* 顶栏 */}
@@ -188,6 +251,7 @@ function ManagerContent() {
           size="icon"
           className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
           title={notesVisible ? "隐藏全部便签" : "显示全部便签"}
+          aria-label={notesVisible ? "隐藏全部便签" : "显示全部便签"}
           onClick={() => void handleToggleNotes()}
         >
           {notesVisible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
@@ -226,6 +290,7 @@ function ManagerContent() {
           size="icon"
           className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
           title="设置"
+          aria-label="设置"
           onClick={() => setSettingsOpen(true)}
         >
           <Settings className="size-4" />
@@ -236,6 +301,7 @@ function ManagerContent() {
           size="icon"
           className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
           title="图片管理（重复/孤儿/缩略图）"
+          aria-label="图片管理"
           onClick={() => setGalleryOpen(true)}
         >
           <Images className="size-4" />
@@ -246,6 +312,7 @@ function ManagerContent() {
           size="icon"
           className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
           title="番茄统计"
+          aria-label="番茄统计"
           onClick={() => setStatsOpen(true)}
         >
           <BarChart3 className="size-4" />
@@ -259,6 +326,7 @@ function ManagerContent() {
             <button
               key={v.key}
               type="button"
+              aria-current={view === v.key ? "page" : undefined}
               className={cn(
                 "flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent",
                 view === v.key && "bg-accent font-medium",
@@ -281,6 +349,7 @@ function ManagerContent() {
             <button
               key={tag.name}
               type="button"
+              aria-pressed={selectedTag === tag.name}
               className={cn(
                 "flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent",
                 selectedTag === tag.name && "bg-accent font-medium",
@@ -312,45 +381,61 @@ function ManagerContent() {
         </aside>
 
         {/* 内容区 */}
-        <main className="min-w-0 flex-1 p-3">
-          {view === "today" ? (
-            <TodayOverdueView onOpenNote={handleOpenNote} />
-          ) : view === "trash" ? (
-            <div className="h-full">
-              <TrashView />
+        <main className="flex min-w-0 flex-1 flex-col p-3">
+          {/* 当前标签过滤条（B4：内容区顶部展示 + 快捷清除） */}
+          {selectedTag && (
+            <div className="mb-2 flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <TagIcon className="size-3" />
+              <span>
+                标签过滤：<span className="font-medium text-foreground">{selectedTag}</span>
+              </span>
+              <button
+                type="button"
+                className="ml-1 inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors hover:bg-accent hover:text-foreground"
+                onClick={() => setSelectedTag(null)}
+              >
+                <X className="size-3" />
+                清除过滤
+              </button>
             </div>
-          ) : view === "private" ? (
-            <div className="h-full">
-              <PrivateSpaceView />
-            </div>
-          ) : (
-            <ScrollArea className="h-full">
-              {isLoading ? (
-                <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
-                  加载中…
-                </div>
-              ) : notes.length === 0 ? (
-                <div className="flex h-full min-h-40 flex-col items-center justify-center gap-2 text-muted-foreground">
-                  <Inbox className="size-8 opacity-50" />
-                  <p className="text-xs">
-                    {selectedTag || view !== "all"
-                      ? "没有匹配的便签"
-                      : "还没有便签，点击右上角「新建便签」创建一个吧"}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
-                  {notes.map((note) => (
-                    <NoteCard
-                      key={note.id}
-                      note={note}
-                      onOpen={() => handleOpenNote(note.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
           )}
+          {/* key=view 触发重挂载 + 淡入动画（B1） */}
+          <div key={view} className="min-h-0 flex-1 animate-fade-in">
+            {view === "today" ? (
+              <TodayOverdueView onOpenNote={handleOpenNote} />
+            ) : view === "trash" ? (
+              <div className="h-full">
+                <TrashView />
+              </div>
+            ) : view === "private" ? (
+              <div className="h-full">
+                <PrivateSpaceView />
+              </div>
+            ) : (
+              <ScrollArea className="h-full">
+                {isLoading ? (
+                  <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
+                    加载中…
+                  </div>
+                ) : notes.length === 0 ? (
+                  <EmptyState {...gridEmpty} className="h-full min-h-40" />
+                ) : (
+                  <div
+                    className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]"
+                    onKeyDown={handleGridKeyDown}
+                  >
+                    {notes.map((note) => (
+                      <NoteCard
+                        key={note.id}
+                        note={note}
+                        onOpen={() => handleOpenNote(note.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            )}
+          </div>
         </main>
       </div>
 

@@ -1,4 +1,5 @@
 /** 便签卡片（管理器网格） */
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Archive, ArchiveRestore, EllipsisVertical, Pin, SquareCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,10 +54,24 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
     }
   };
 
+  // 键盘激活：Enter / Space 打开便签（仅当焦点在卡片本身，避免与内部菜单按钮冲突）
+  const handleCardKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onOpen();
+    }
+  };
+
   return (
     <div
-      className="group flex h-36 cursor-pointer flex-col rounded-lg border bg-card p-3 text-sm transition-shadow hover:shadow-md"
+      data-note-card
+      role="button"
+      tabIndex={0}
+      aria-label={`打开便签：${note.title || "无标题"}`}
+      className="group flex h-36 cursor-pointer flex-col rounded-lg border bg-card p-3 text-sm transition-[box-shadow,border-color] hover:border-primary/50 hover:shadow-md focus-visible:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       onClick={onOpen}
+      onKeyDown={handleCardKeyDown}
     >
       <div className="flex items-start gap-1">
         {note.isPinned && <Pin className="mt-0.5 size-3.5 shrink-0 text-amber-500" />}
@@ -69,6 +84,8 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
               type="button"
               variant="ghost"
               size="icon"
+              aria-label="便签操作菜单"
+              title="便签操作菜单"
               className="size-6 shrink-0 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
             >

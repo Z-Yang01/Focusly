@@ -3,6 +3,7 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { useToastStore, type ToastItem, type ToastKind } from "@/stores/toast";
+import { zIndex } from "@/design-tokens";
 import { cn } from "@/lib/utils";
 
 interface KindStyle {
@@ -75,7 +76,8 @@ export function ToastHost({ children }: ToastHostProps) {
       {children}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed bottom-4 right-4 z-[100] flex flex-col items-end gap-2"
+        className="pointer-events-none fixed bottom-4 right-4 flex flex-col items-end gap-2"
+        style={{ zIndex: zIndex.toast }}
       >
         {toasts.map((t) => (
           <ToastEntry key={t.id} item={t} />

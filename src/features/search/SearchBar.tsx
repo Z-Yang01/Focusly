@@ -488,6 +488,8 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
       <Input
         ref={inputRef}
         value={q}
+        role="searchbox"
+        aria-label="搜索便签"
         placeholder="搜索便签…（tag: is: has: due:）"
         className={cn("h-8 pl-8 text-xs", q.trim() !== "" && "pr-8")}
         onChange={(e) => updateQ(e.target.value)}
@@ -502,6 +504,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
         <button
           type="button"
           title="保存当前搜索"
+          aria-label="保存当前搜索"
           className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
@@ -573,6 +576,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
                       <button
                         type="button"
                         title="删除该记录"
+                        aria-label="删除该最近搜索记录"
                         className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => setRecent((list) => removeRecentItem(list, rq))}
@@ -612,6 +616,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
                       <button
                         type="button"
                         title="删除该保存"
+                        aria-label={`删除保存的搜索「${item.name}」`}
                         className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handleDeleteSaved(item)}

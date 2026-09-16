@@ -187,6 +187,7 @@ export function MarkdownView({
       ) : isSkipped ? (
         <span
           role="button"
+          tabIndex={0}
           aria-label="清除跳过，恢复为待办"
           title="清除跳过（恢复为待办）"
           className={cn(
@@ -198,18 +199,32 @@ export function MarkdownView({
             onToggleTodo?.(line0, false); // 保持 markdown 源为未勾选
             onTaskMenu?.({ taskKey: task.taskKey, lineText: task.text, status: "todo" });
           }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            if (line0 === undefined || !task) return;
+            onToggleTodo?.(line0, false); // 保持 markdown 源为未勾选
+            onTaskMenu?.({ taskKey: task.taskKey, lineText: task.text, status: "todo" });
+          }}
         >
           ✕
         </span>
       ) : (
         <span
           role={disabled ? undefined : "checkbox"}
+          tabIndex={disabled ? undefined : 0}
           aria-checked={status === "done"}
           aria-disabled={disabled}
           aria-label="切换待办状态"
           className={cn("mt-0.5 inline-flex shrink-0", !disabled && "cursor-pointer")}
           onClick={() => {
             if (disabled || line0 === undefined) return;
+            onToggleTodo?.(line0, status !== "done");
+          }}
+          onKeyDown={(e) => {
+            if (disabled || line0 === undefined) return;
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
             onToggleTodo?.(line0, status !== "done");
           }}
         >

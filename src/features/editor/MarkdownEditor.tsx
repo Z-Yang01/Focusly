@@ -45,6 +45,8 @@ export interface MarkdownEditorProps {
   /** Ctrl+V 检测到剪贴板图片时调用（父组件读剪贴板并入库） */
   onPasteImage: () => void;
   noteId: string;
+  /** 内容与标题均为空时显示多行新手引导 placeholder */
+  emptyGuide?: boolean;
   /** 番茄任务元数据（可选） */
   taskPassthrough?: TaskMetaPassthrough;
 }
@@ -61,9 +63,10 @@ export function MarkdownEditor({
   value,
   onChange,
   preview,
-  onTogglePreview: _onTogglePreview,
+  onTogglePreview,
   onImagePaths: _onImagePaths,
   onPasteImage,
+  emptyGuide = false,
   taskPassthrough,
 }: MarkdownEditorProps) {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
@@ -194,6 +197,7 @@ export function MarkdownEditor({
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label={tool.title}
                     className="size-7 text-muted-foreground hover:text-foreground"
                     // 防止点击工具栏时丢失 textarea 选区
                     onMouseDown={(e) => e.preventDefault()}
@@ -211,15 +215,26 @@ export function MarkdownEditor({
         )}
 
         {preview ? (
-          <MarkdownView
-            content={value}
-            onToggleTodo={handleToggleTodo}
-            taskMetaList={taskPassthrough?.taskMetaList}
-            today={taskPassthrough?.today}
-            runningTaskKey={taskPassthrough?.runningTaskKey}
-            onTaskMenu={taskPassthrough?.onTaskMenu}
-            className="min-h-0 flex-1 overflow-y-auto p-3"
-          />
+          /* 预览容器：Escape 切回编辑模式（仅预览态生效；焦点在容器内时触发） */
+          <div
+            className="flex min-h-0 flex-1 flex-col"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                onTogglePreview();
+              }
+            }}
+          >
+            <MarkdownView
+              content={value}
+              onToggleTodo={handleToggleTodo}
+              taskMetaList={taskPassthrough?.taskMetaList}
+              today={taskPassthrough?.today}
+              runningTaskKey={taskPassthrough?.runningTaskKey}
+              onTaskMenu={taskPassthrough?.onTaskMenu}
+              className="min-h-0 flex-1 overflow-y-auto p-3"
+            />
+          </div>
         ) : (
           <textarea
             ref={taRef}
@@ -227,7 +242,7 @@ export function MarkdownEditor({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             className="min-h-0 flex-1 resize-none bg-transparent p-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
-            placeholder="记录点什么…"
+            placeholder={emptyGuide ? "记录灵感、待办、笔记…\n支持 Markdown 语法" : "记录点什么…"}
             spellCheck={false}
           />
         )}

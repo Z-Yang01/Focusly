@@ -111,6 +111,7 @@ export function TemplatePicker({
                     size="icon"
                     className="absolute -right-1 -top-1 size-5 rounded-full"
                     title={`删除模板「${tpl.name}」`}
+                    aria-label={`删除模板「${tpl.name}」`}
                     onClick={() => setCustoms(deleteCustomTemplate(tpl.id))}
                   >
                     <Trash2 className="size-3" />
