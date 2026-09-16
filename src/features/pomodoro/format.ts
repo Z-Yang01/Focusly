@@ -83,3 +83,11 @@ export const PHASE_META: Record<string, { emoji: string; label: string }> = {
   short_break: { emoji: "☕", label: "短休" },
   long_break: { emoji: "🌴", label: "长休" },
 };
+
+/** 各阶段默认总时长（秒）：StatePayload 未携带总时长，进度环按此口径推算；
+ *  与后端默认节奏一致（专注 25 分钟 / 短休 5 分钟 / 长休 15 分钟）。 */
+export const PHASE_TOTAL_SEC: Record<string, number> = {
+  focus: 25 * 60,
+  short_break: 5 * 60,
+  long_break: 15 * 60,
+};

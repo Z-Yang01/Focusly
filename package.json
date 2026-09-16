@@ -12,6 +12,7 @@
     "icon": "node scripts/gen-icon.mjs && tauri icon assets/icon.png",
     "test": "vitest run",
     "test:watch": "vitest",
+    "contract-audit": "node scripts/contract-audit.mjs",
     "lint": "eslint src --max-warnings 200"
   },
   "dependencies": {

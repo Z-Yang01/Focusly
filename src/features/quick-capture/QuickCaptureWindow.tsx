@@ -1,13 +1,14 @@
 /** 快速捕获窗口主体（label="quick-capture"）：速记入「收件箱」+ 剪贴板历史侧栏。
  *  窗口由 Rust 以 visible(false) 创建，本组件挂载后调 quickcapture_ready 再显示（防白闪）。
  *  剪贴板捕获只读本机剪贴板并写入本地 SQLite，无任何网络行为。 */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
-import { ClipboardList, PenLine, Pin, PinOff, Trash2, X } from "lucide-react";
+import { Check, ClipboardList, PenLine, Pin, PinOff, Trash2, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { duration, easing, spacing } from "@/design-tokens";
 import { describeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -37,29 +38,51 @@ function previewOf(text: string, max = PREVIEW_MAX): string {
   return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }
 
-function TabButton({
-  active,
-  onClick,
-  label,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  children: ReactNode;
-}) {
+const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
+  { key: "write", label: "速记", icon: PenLine },
+  { key: "history", label: "剪贴板", icon: ClipboardList },
+];
+
+/** 页签切换器：滑动指示条（transform 过渡）标记当前页 */
+function TabSwitcher({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+  const idx = Math.max(
+    0,
+    TABS.findIndex((t) => t.key === tab),
+  );
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:text-foreground",
-        active && "bg-accent text-accent-foreground",
-      )}
+    <div
+      role="tablist"
+      aria-label="快速捕获页签"
+      className="relative flex items-center rounded-md bg-muted/60 p-0.5"
     >
-      {children}
-      {label}
-    </button>
+      <span
+        aria-hidden
+        className="absolute inset-y-0.5 left-0.5 rounded bg-background shadow-sm transition-transform"
+        style={{
+          width: `calc((100% - ${spacing.xs}px) / ${TABS.length})`,
+          transform: `translateX(${idx * 100}%)`,
+          transitionDuration: `${duration.normal}ms`,
+          transitionTimingFunction: easing.standard,
+        }}
+      />
+      {TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          role="tab"
+          aria-selected={tab === t.key}
+          aria-label={t.label}
+          onClick={() => onChange(t.key)}
+          className={cn(
+            "relative z-10 inline-flex h-6 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition-colors",
+            tab === t.key ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <t.icon className="size-3.5" />
+          {t.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -80,6 +103,8 @@ export function QuickCaptureWindow() {
   const [backendOk, setBackendOk] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  /** 保存成功后的短暂"已保存"反馈（duration.normal 后隐藏窗口） */
+  const [savedFlash, setSavedFlash] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const readyRef = useRef(false);
@@ -141,10 +166,11 @@ export function QuickCaptureWindow() {
     void refreshEntries();
   }, [captureClipboard, refreshEntries]);
 
-  // 窗口聚焦：捕获剪贴板 + 把焦点还给正文输入框
+  // 窗口聚焦：捕获剪贴板 + 把焦点还给正文输入框 + 复位保存反馈
   useEffect(() => {
     const un = getCurrentWebviewWindow().onFocusChanged(({ payload: focused }) => {
       if (!focused) return;
+      setSavedFlash(false);
       void captureClipboard();
       if (tab === "write") textareaRef.current?.focus();
     });
@@ -158,7 +184,7 @@ export function QuickCaptureWindow() {
     if (tab === "write") textareaRef.current?.focus();
   }, [tab]);
 
-  /** 保存 = 建行 → 写标题/正文 → 打「收件箱」标签 → 隐藏。空内容不保存直接关闭。 */
+  /** 保存 = 建行 → 写标题/正文 → 打「收件箱」标签 → "已保存"闪现 → 隐藏。空内容不保存直接关闭。 */
   const save = useCallback(async () => {
     if (saving) return;
     if (!content.trim()) {
@@ -173,16 +199,21 @@ export function QuickCaptureWindow() {
       await setNoteTags(note.id, [INBOX_TAG]);
       setTitle("");
       setContent("");
+      setSaving(false);
+      // 短暂成功反馈后再隐藏（savedFlash 状态驱动底部"✓ 已保存"）
+      setSavedFlash(true);
+      await new Promise((resolve) => setTimeout(resolve, duration.normal));
       await hideWindow();
     } catch (err) {
       console.error("速记保存失败", err);
       setSaveError(true);
     } finally {
       setSaving(false);
+      setSavedFlash(false);
     }
   }, [content, title, saving, hideWindow]);
 
-  // 全局键：Esc 关闭（草稿保留）；Ctrl+Enter 保存并关闭
+  // 全局键：Esc 关闭（草稿保留）；Ctrl+Enter 保存并关闭；Ctrl+Tab 切换页签
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -191,6 +222,9 @@ export function QuickCaptureWindow() {
       } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         void save();
+      } else if (e.key === "Tab" && e.ctrlKey) {
+        e.preventDefault();
+        setTab((t) => (t === "write" ? "history" : "write"));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -232,15 +266,11 @@ export function QuickCaptureWindow() {
   };
 
   return (
+    // 与便签窗口一致的容器：rounded-xl + border + bg-background + shadow-xl
     <div className="flex h-screen flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-xl">
-      {/* 头部：页签切换 + 关闭 */}
-      <div data-tauri-drag-region className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
-        <TabButton active={tab === "write"} onClick={() => setTab("write")} label="速记">
-          <PenLine className="size-3.5" />
-        </TabButton>
-        <TabButton active={tab === "history"} onClick={() => setTab("history")} label="剪贴板">
-          <ClipboardList className="size-3.5" />
-        </TabButton>
+      {/* 头部：页签切换（滑动指示条）+ 关闭 */}
+      <div data-tauri-drag-region className="flex h-9 shrink-0 items-center gap-1.5 border-b px-2">
+        <TabSwitcher tab={tab} onChange={setTab} />
         <div className="flex-1" />
         <Button
           variant="ghost"
@@ -271,7 +301,7 @@ export function QuickCaptureWindow() {
             }}
             autoFocus
             placeholder="记点什么…（保存后进入「收件箱」标签）"
-            className="min-h-0 flex-1 resize-none rounded-none border-0 px-3 py-2 shadow-none focus-visible:ring-0"
+            className="min-h-[80px] flex-1 resize-none rounded-none border-0 px-3 py-2 shadow-none focus-visible:ring-0"
           />
         </>
       ) : (
@@ -283,6 +313,7 @@ export function QuickCaptureWindow() {
               size="sm"
               className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
               disabled={entries.length === 0}
+              aria-label="清空剪贴板历史"
               onClick={() => void clearAll()}
             >
               清空
@@ -304,6 +335,7 @@ export function QuickCaptureWindow() {
                       type="button"
                       className="min-w-0 flex-1 rounded text-left outline-none"
                       title="点击填入速记"
+                      aria-label="将此记录填入速记"
                       onClick={() => appendToDraft(entry)}
                     >
                       <span className="block truncate">
@@ -350,10 +382,15 @@ export function QuickCaptureWindow() {
           <span>保存中…</span>
         ) : saveError ? (
           <span className="text-destructive">保存失败，请重试</span>
+        ) : savedFlash ? (
+          <span className="flex animate-fade-in items-center gap-1 text-emerald-600 dark:text-emerald-400">
+            <Check className="size-3.5" />
+            已保存
+          </span>
         ) : (
           <span />
         )}
-        <span>Ctrl+Enter 保存并关闭 · Esc 关闭 · Ctrl+V 粘贴</span>
+        <span>Ctrl+Enter 保存并关闭 · Esc 关闭 · Ctrl+Tab 切换</span>
       </div>
     </div>
   );

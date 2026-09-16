@@ -167,8 +167,10 @@ export interface TaskMetaUpdateArgs {
 export const taskMetaUpdate = (args: TaskMetaUpdateArgs) =>
   invoke<TaskMeta>("task_meta_update", { ...args });
 
-/** 隐藏迷你番茄窗；后端未接线时调用方需静默失败 */
-export const pomodoroMiniHide = () => invoke<void>("pomodoro_mini_hide");
+/** 迷你番茄窗关闭占位。契约审计修复：Rust 端从未注册 pomodoro_mini_hide 命令，
+ *  原 invoke 每次都会 reject（调用方 .catch 静默吞掉），迷你窗实际自行随状态关闭。
+ *  features/pomodoro/api.ts 转发层依赖此导出名，故保留为显式 no-op，不再调用未注册命令。 */
+export const pomodoroMiniHide = async (): Promise<void> => {};
 
 // ---------- 快速捕获 / 剪贴板 ----------
 export const quickCaptureToggle = () => invoke<void>("quickcapture_toggle");

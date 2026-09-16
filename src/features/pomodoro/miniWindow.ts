@@ -8,7 +8,8 @@ import { toast } from "@/stores/toast";
 const LABEL = "pomodoro-mini";
 const POS_KEY = "focusly.pomodoro.pos";
 const WIDTH = 340;
-const HEIGHT = 170;
+/** 240 = 头部 37 + 主体（阶段文字 + 80px 进度环 + 任务行）~128 + 2×2 按钮网格 ~75 */
+const HEIGHT = 240;
 
 interface PhysPoint {
   x: number;

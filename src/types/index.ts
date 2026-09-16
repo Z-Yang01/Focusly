@@ -308,18 +308,24 @@ export interface TaskMetaChangedEvent {
   noteId: string;
 }
 
-/** task_meta 行（结构与 taskMeta.ts 的 MetaLike 兼容，可直接作为 MetaLike[] 传入 mergeTaskMeta） */
+/** task_meta 行（与 Rust db/models.rs TaskMeta 的 serde camelCase 输出严格对应；
+ *  结构与 taskMeta.ts 的 MetaLike 兼容，可直接作为 MetaLike[] 传入 mergeTaskMeta） */
 export interface TaskMeta {
+  noteId: string;
   taskKey: string;
   lineText: string;
   /** todo | done | skipped */
   status: string;
+  estimatePomodoros: number;
+  completedPomodoros: number;
+  /** high | medium | low */
+  priority: string | null;
+  /** RFC3339 UTC */
+  dueAt: string | null;
   /** 跳过日期 YYYY-MM-DD；跨日自动复活为 todo */
   skipDate: string | null;
-  estimate?: number | null;
-  priority?: number | null;
   /** RFC3339 UTC */
-  dueAt?: string | null;
+  updatedAt: string;
 }
 
 /** pomodoro_stats_today 返回 */
