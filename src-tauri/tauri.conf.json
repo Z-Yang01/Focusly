@@ -58,8 +58,7 @@
           "SimpChinese",
           "English"
         ],
-        "displayLanguageSelector": true,
-        "deleteAppDataOnUninstall": false
+        "displayLanguageSelector": true
       }
     }
   }
