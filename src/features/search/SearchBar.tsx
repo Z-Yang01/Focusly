@@ -42,6 +42,7 @@ import {
   type SearchIsFilter,
 } from "@/lib/query-parser";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 import {
   deleteSavedSearch as deleteSavedSearchRemote,
   listSavedSearches,
@@ -381,7 +382,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
     recordRecent();
     openNoteWindow(hit.id).catch((err) => {
       console.error("打开便签失败", err);
-      alert("打开便签失败，请重试");
+      toast.error("打开便签失败，请重试");
     });
     setDismissed(true); // 保留关键词，仅收起面板
   };

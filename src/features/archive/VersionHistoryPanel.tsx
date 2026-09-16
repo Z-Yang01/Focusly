@@ -15,6 +15,7 @@ import { getNote } from "@/lib/api";
 import { diffLines, diffStats, type DiffLine } from "@/lib/diff";
 import { describeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 import { MarkdownView } from "@/features/editor/MarkdownView";
 import {
   listVersions,
@@ -149,13 +150,13 @@ export function VersionHistoryPanel({
     setBusy(true);
     try {
       await restoreVersion(selected.id);
-      alert("已恢复到此版本");
+      toast.success("已恢复到此版本");
       onRestored?.();
       // 恢复后可能出现"恢复前"备份版本，重新拉取
       await reload();
     } catch (err) {
       console.error("恢复版本失败", err);
-      alert(`恢复失败：${errMsg(err)}`);
+      toast.error(`恢复失败：${errMsg(err)}`);
     } finally {
       setBusy(false);
     }

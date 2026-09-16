@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { archiveNote, restoreNote, setNoteFlag, trashNote } from "@/lib/api";
 import { describeTime, snippetOf } from "@/lib/format";
+import { toast } from "@/stores/toast";
 import type { NoteSummary } from "@/types";
 
 export interface NoteCardProps {
@@ -24,7 +25,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
       await setNoteFlag(note.id, "pinned", !note.isPinned);
     } catch (err) {
       console.error("设置置顶失败", err);
-      alert(`操作失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`操作失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -37,7 +38,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
       }
     } catch (err) {
       console.error("归档/恢复失败", err);
-      alert(`操作失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`操作失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -48,7 +49,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
       await trashNote(note.id);
     } catch (err) {
       console.error("删除失败", err);
-      alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`删除失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

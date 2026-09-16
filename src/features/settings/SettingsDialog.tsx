@@ -29,6 +29,7 @@ import { onShortcutError } from "@/lib/tauri";
 import { useTheme } from "@/app/theme";
 import { ShortcutRecorder } from "@/features/shortcuts/ShortcutRecorder";
 import { SETTINGS_KEYS, type AppInfo, type ShortcutAction, type ShortcutEntry } from "@/types";
+import { toast } from "@/stores/toast";
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -87,7 +88,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   useEffect(() => {
     const off = onShortcutError((e) => {
       const name = SHORTCUT_ACTION_NAMES[e.action] ?? e.action;
-      alert(`快捷键 "${name}" 注册失败：${e.message}`);
+      toast.error(`快捷键 "${name}" 注册失败：${e.message}`);
     });
     return () => {
       void off.then((f) => f());
@@ -109,7 +110,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       })
       .catch((err) => {
         console.error("加载设置失败", err);
-        alert(`加载设置失败：${err instanceof Error ? err.message : String(err)}`);
+        toast.error(`加载设置失败：${err instanceof Error ? err.message : String(err)}`);
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -126,7 +127,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       await setSetting(key, value);
     } catch (err) {
       console.error("保存设置失败", err);
-      alert(`保存设置失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`保存设置失败：${err instanceof Error ? err.message : String(err)}`);
       setSettings((s) => ({ ...s, [key]: prev ?? "" }));
     }
   };
@@ -154,7 +155,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setStaged({});
     } catch (err) {
       console.error("保存快捷键失败", err);
-      alert(`保存快捷键失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`保存快捷键失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -166,7 +167,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setStaged({});
     } catch (err) {
       console.error("恢复默认快捷键失败", err);
-      alert(`恢复默认快捷键失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`恢复默认快捷键失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -178,10 +179,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       });
       if (!path) return;
       await exportData(path);
-      alert(`已导出到 ${path}`);
+      toast.success(`已导出到 ${path}`);
     } catch (err) {
       console.error("导出失败", err);
-      alert(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`导出失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -194,10 +195,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       const path = Array.isArray(picked) ? picked[0] : picked;
       if (!path) return;
       const summary = await importData(path);
-      alert(`导入完成：新增 ${summary.importedNotes} 条，跳过 ${summary.skipped} 条`);
+      toast.success(`导入完成：新增 ${summary.importedNotes} 条，跳过 ${summary.skipped} 条`);
     } catch (err) {
       console.error("导入失败", err);
-      alert(`导入失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`导入失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -206,7 +207,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       await revealDataDir();
     } catch (err) {
       console.error("打开数据目录失败", err);
-      alert(`打开数据目录失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`打开数据目录失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -219,11 +220,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       });
       if (!path) return;
       await invoke("export_diagnostics", { path });
-      alert(`诊断包已导出：${path}
+      toast.success(`诊断包已导出：${path}
 （仅含环境信息、数据库健康摘要与日志尾部，不含便签内容）`);
     } catch (err) {
       console.error("导出诊断包失败", err);
-      alert(`导出诊断包失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`导出诊断包失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

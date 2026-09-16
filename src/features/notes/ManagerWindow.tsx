@@ -58,6 +58,7 @@ import { ImageManagerDialog } from "@/features/gallery/ImageManagerDialog";
 import { StatsDialog } from "@/features/pomodoro/StatsDialog";
 import { DndSettingsCard } from "@/features/dnd/DndSettingsCard";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 
 type ViewKey = "all" | "todo" | "archived" | "today" | "trash" | "private";
 
@@ -122,7 +123,7 @@ function ManagerContent() {
       await newNote();
     } catch (err) {
       console.error("新建便签失败", err);
-      alert(`新建便签失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`新建便签失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -133,7 +134,7 @@ function ManagerContent() {
       await openNoteWindow(note.id);
     } catch (err) {
       console.error("从模板创建失败", err);
-      alert(`从模板创建失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`从模板创建失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -142,7 +143,7 @@ function ManagerContent() {
       await invoke("quickcapture_toggle");
     } catch (err) {
       console.error("打开速记箱失败", err);
-      alert(`速记箱暂不可用：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`速记箱暂不可用：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -151,14 +152,14 @@ function ManagerContent() {
       await toggleAllNotes();
     } catch (err) {
       console.error("切换便签可见性失败", err);
-      alert(`操作失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`操作失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
   const handleOpenNote = (id: string) => {
     openNoteWindow(id).catch((err) => {
       console.error("打开便签失败", err);
-      alert("打开便签失败，请重试");
+      toast.error("打开便签失败，请重试");
     });
   };
 

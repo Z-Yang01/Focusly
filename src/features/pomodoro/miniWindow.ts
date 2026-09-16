@@ -3,6 +3,7 @@
  *  恢复时按当前显示器边界校验，越界回退到屏幕右上区域；避免 DPI/插拔后跑位。 */
 import { availableMonitors, PhysicalPosition } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { toast } from "@/stores/toast";
 
 const LABEL = "pomodoro-mini";
 const POS_KEY = "focusly.pomodoro.pos";
@@ -75,7 +76,7 @@ export async function ensureMiniPomodoro(): Promise<void> {
     await ensureMiniPomodoroInner();
   } catch (err) {
     console.error("[pomodoro-mini] 创建/显示失败", err);
-    alert(`迷你番茄窗打开失败: ${String(err)}`);
+    toast.error(`迷你番茄窗打开失败: ${String(err)}`);
   }
 }
 

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { hideAllNotes, newNote, setSetting, showAllNotes, toggleAllNotes } from "@/lib/api";
 import { SETTINGS_KEYS } from "@/types";
+import { toast } from "@/stores/toast";
 
 /** window CustomEvent：打开设置（ManagerWindow 后续接线） */
 export const FOCUSLY_OPEN_SETTINGS = "focusly:open-settings";
@@ -42,12 +43,12 @@ export interface CommandItem {
   run: () => void;
 }
 
-/** invoke 失败时不静默：与项目既有风格一致，console.error + alert */
-function alerting(label: string, action: () => Promise<unknown>): () => void {
+/** invoke 失败时不静默：console.error + toast.error（非 hook 上下文可用的命令式入口） */
+function withErrorToast(label: string, action: () => Promise<unknown>): () => void {
   return () => {
     action().catch((err) => {
       console.error(`${label}失败`, err);
-      alert(`${label}失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`${label}失败：${err instanceof Error ? err.message : String(err)}`);
     });
   };
 }
@@ -59,7 +60,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     group: "便签",
     icon: Plus,
     keywords: "new create 新建 创建 便签 note",
-    run: alerting("新建便签", newNote),
+    run: withErrorToast("新建便签", newNote),
   },
   {
     id: "notes.show-all",
@@ -67,7 +68,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     group: "便签",
     icon: Eye,
     keywords: "show 显示 全部 可见 visible",
-    run: alerting("显示全部便签", showAllNotes),
+    run: withErrorToast("显示全部便签", showAllNotes),
   },
   {
     id: "notes.hide-all",
@@ -75,7 +76,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     group: "便签",
     icon: EyeOff,
     keywords: "hide 隐藏 全部 隐身",
-    run: alerting("隐藏全部便签", hideAllNotes),
+    run: withErrorToast("隐藏全部便签", hideAllNotes),
   },
   {
     id: "notes.toggle-all",
@@ -83,7 +84,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     group: "便签",
     icon: RefreshCw,
     keywords: "toggle 切换 可见性 显示 隐藏",
-    run: alerting("切换便签可见性", toggleAllNotes),
+    run: withErrorToast("切换便签可见性", toggleAllNotes),
   },
   {
     id: "nav.today",
@@ -107,7 +108,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     group: "外观",
     icon: Sun,
     keywords: "theme light 浅色 亮色 白天",
-    run: alerting("切换浅色主题", () => setSetting(SETTINGS_KEYS.theme, "light")),
+    run: withErrorToast("切换浅色主题", () => setSetting(SETTINGS_KEYS.theme, "light")),
   },
   {
     id: "theme.dark",
@@ -115,7 +116,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     group: "外观",
     icon: Moon,
     keywords: "theme dark 深色 暗色 夜间",
-    run: alerting("切换深色主题", () => setSetting(SETTINGS_KEYS.theme, "dark")),
+    run: withErrorToast("切换深色主题", () => setSetting(SETTINGS_KEYS.theme, "dark")),
   },
   {
     id: "theme.system",
@@ -123,7 +124,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     group: "外观",
     icon: Monitor,
     keywords: "theme system 跟随 系统 自动 auto",
-    run: alerting("切换主题", () => setSetting(SETTINGS_KEYS.theme, "system")),
+    run: withErrorToast("切换主题", () => setSetting(SETTINGS_KEYS.theme, "system")),
   },
   {
     id: "app.open-settings",

@@ -14,6 +14,7 @@ import { cancelReminder, listReminders, setReminder } from "@/lib/api";
 import { describeTime, formatLocal, fromDatetimeLocal, parseRfc3339, toDatetimeLocal } from "@/lib/format";
 import type { Note, Reminder, RepeatType } from "@/types";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 
 export interface ReminderPopoverProps {
   /** NoteDetail 也满足该类型（nextReminder 可选） */
@@ -96,7 +97,7 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
       onChanged?.();
     } catch (err) {
       console.error("设置提醒失败", err);
-      alert(`设置提醒失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`设置提醒失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -111,7 +112,7 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
       onChanged?.();
     } catch (err) {
       console.error("清除提醒失败", err);
-      alert(`清除提醒失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`清除提醒失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -120,7 +121,7 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
   const handleCustom = async () => {
     const at = parseRfc3339(fromDatetimeLocal(datetime));
     if (!at) {
-      alert("请选择有效的提醒时间");
+      toast.info("请选择有效的提醒时间");
       return;
     }
     await applyAt(at);
@@ -135,14 +136,14 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
       const parsed = await invoke<NlParsed | null>("parse_time_nl", { input });
       if (!parsed || !parsed.at) {
         setNlPreview(null);
-        alert("无法识别，请换种说法");
+        toast.info("无法识别，请换种说法");
         return;
       }
       setNlPreview(parsed);
     } catch (err) {
       console.error("自然语言时间解析失败", err);
       setNlPreview(null);
-      alert(`解析失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`解析失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setNlBusy(false);
     }
@@ -160,7 +161,7 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
       onChanged?.();
     } catch (err) {
       console.error("设置提醒失败", err);
-      alert(`设置提醒失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`设置提醒失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }

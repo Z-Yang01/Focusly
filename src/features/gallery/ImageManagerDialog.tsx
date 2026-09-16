@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { openNoteWindow } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 import {
   imageCleanupOrphans,
   imageFindDuplicates,
@@ -80,7 +81,7 @@ function DuplicatesTab() {
   const openNote = (noteId: string) => {
     openNoteWindow(noteId).catch((err) => {
       console.error("打开便签失败", err);
-      alert(`打开便签失败：${errMsg(err)}`);
+      toast.error(`打开便签失败：${errMsg(err)}`);
     });
   };
 

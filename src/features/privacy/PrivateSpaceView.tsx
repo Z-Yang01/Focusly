@@ -17,6 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { getNote, openNoteWindow } from "@/lib/api";
 import { describeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 import type { NoteDetail } from "@/types";
 import { MarkdownView } from "@/features/editor/MarkdownView";
 import { listPrivateNotes, setNotePrivacy, type PrivateNote } from "./api";
@@ -155,7 +156,7 @@ export function PrivateSpaceView({ className }: PrivateSpaceViewProps) {
     }
   }, []);
 
-  /** 执行动作：成功后刷新列表，失败 alert */
+  /** 执行动作：成功后刷新列表，失败 toast 提示 */
   const run = useCallback(
     async (action: () => Promise<void>) => {
       if (busy) return;
@@ -165,7 +166,7 @@ export function PrivateSpaceView({ className }: PrivateSpaceViewProps) {
         await refresh();
       } catch (err) {
         console.error("私密空间操作失败", err);
-        alert(`操作失败：${errMsg(err)}`);
+        toast.error(`操作失败：${errMsg(err)}`);
       } finally {
         setBusy(false);
       }

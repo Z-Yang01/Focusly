@@ -13,6 +13,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { describeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 import { MarkdownView } from "@/features/editor/MarkdownView";
 import {
   emptyTrash,
@@ -66,7 +67,7 @@ export function TrashView({ className }: TrashViewProps) {
     void refresh();
   }, [refresh]);
 
-  /** 执行动作：成功后重新拉取，失败 alert */
+  /** 执行动作：成功后重新拉取，失败 toast 提示 */
   const run = useCallback(
     async (action: () => Promise<void>) => {
       if (busy) return;
@@ -76,7 +77,7 @@ export function TrashView({ className }: TrashViewProps) {
         await refresh();
       } catch (err) {
         console.error("回收站操作失败", err);
-        alert(`操作失败：${errMsg(err)}`);
+        toast.error(`操作失败：${errMsg(err)}`);
       } finally {
         setBusy(false);
       }

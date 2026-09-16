@@ -83,6 +83,7 @@ import type {
   ReminderFiredEvent,
 } from "@/types";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/toast";
 import { usePomodoro } from "@/features/pomodoro/usePomodoro";
 import { PomodoroBar } from "@/features/pomodoro/PomodoroBar";
 import { ensureMiniPomodoro } from "@/features/pomodoro/miniWindow";
@@ -251,7 +252,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       mergeNote(n);
     } catch (err) {
       console.error("设置便签标记失败", err);
-      alert(`设置失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`设置失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -261,7 +262,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       mergeNote(n);
     } catch (err) {
       console.error("设置全屏行为失败", err);
-      alert(`设置失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`设置失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -278,7 +279,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
             lines.push(`![${img.filename}](${img.path})`);
           } catch (err) {
             console.error("添加图片失败", err);
-            alert(`添加图片失败：${p}`);
+            toast.error(`添加图片失败：${p}`);
           }
         }
         if (lines.length === 0) return;
@@ -303,7 +304,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       });
     } catch (err) {
       console.error("粘贴图片失败", err);
-      alert("粘贴图片失败：剪贴板中没有图片，或图片写入失败");
+      toast.error("粘贴图片失败：剪贴板中没有图片，或图片写入失败");
     }
   }, [noteId]);
 
@@ -319,7 +320,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       if (paths.length > 0) insertImageMarkdown(paths);
     } catch (err) {
       console.error("选择图片失败", err);
-      alert(`选择图片失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`选择图片失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -382,7 +383,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       await completeReminder(banner.reminderId);
     } catch (err) {
       console.error("完成提醒失败", err);
-      alert(`完成提醒失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`完成提醒失败：${err instanceof Error ? err.message : String(err)}`);
     }
     setBanner(null);
     refreshMeta();
@@ -394,7 +395,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       await snoozeReminder(banner.reminderId, new Date(Date.now() + minutes * 60000).toISOString());
     } catch (err) {
       console.error("稍后提醒失败", err);
-      alert(`稍后提醒失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`稍后提醒失败：${err instanceof Error ? err.message : String(err)}`);
     }
     setBanner(null);
     refreshMeta();
@@ -406,7 +407,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       await cancelReminder(banner.reminderId);
     } catch (err) {
       console.error("关闭提醒失败", err);
-      alert(`关闭提醒失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`关闭提醒失败：${err instanceof Error ? err.message : String(err)}`);
     }
     setBanner(null);
     refreshMeta();
@@ -418,7 +419,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       await closeNoteWindow(noteId);
     } catch (err) {
       console.error("归档失败", err);
-      alert(`归档失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`归档失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -430,7 +431,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       await closeNoteWindow(noteId);
     } catch (err) {
       console.error("删除失败", err);
-      alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`删除失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -500,7 +501,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
         onSelect={() =>
           void showManager().catch((err) => {
             console.error("打开管理器失败", err);
-            alert("打开管理器失败");
+            toast.error("打开管理器失败");
           })
         }
       >
@@ -583,7 +584,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 onOpenNote={() =>
                   void showManager().catch((err) => {
                     console.error("打开管理器失败", err);
-                    alert("打开管理器失败");
+                    toast.error("打开管理器失败");
                   })
                 }
               />
@@ -686,7 +687,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
             onSelect={() =>
               void showManager().catch((err) => {
                 console.error("打开管理器失败", err);
-                alert("打开管理器失败");
+                toast.error("打开管理器失败");
               })
             }
           >

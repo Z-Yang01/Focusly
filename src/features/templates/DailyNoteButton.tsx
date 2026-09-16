@@ -1,10 +1,11 @@
 /** 每日笔记按钮：点击 invoke Rust `daily_get_or_create`（无参 -> Note）。
- *  后端负责找到/创建当天便签并打开窗口，因此成功保持静默；失败 alert 提示。
- *  命令注册前调用会 reject（走 alert 分支），供总控与 TemplatePicker 一起挂 ManagerWindow 新建区。 */
+ *  后端负责找到/创建当天便签并打开窗口，因此成功保持静默；失败 toast 提示。
+ *  命令注册前调用会 reject（走 toast.error 分支），供总控与 TemplatePicker 一起挂 ManagerWindow 新建区。 */
 import { useState, type MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CalendarCheck2 } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/button";
+import { toast } from "@/stores/toast";
 
 /** `daily_get_or_create` 返回的 Note（镜像 src/types#Note，仅声明常用字段，多余字段透传） */
 export interface DailyNoteResult {
@@ -29,7 +30,7 @@ export function DailyNoteButton({ onReady, onClick, ...props }: DailyNoteButtonP
       .then((note) => onReady?.(note))
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
-        alert(`打开每日笔记失败：${msg}`);
+        toast.error(`打开每日笔记失败：${msg}`);
       })
       .finally(() => setBusy(false));
   };
