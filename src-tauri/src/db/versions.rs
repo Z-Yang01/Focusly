@@ -7,7 +7,9 @@ use crate::db::models::{Note, NoteVersion};
 use crate::db::notes;
 use crate::error::{AppError, AppResult};
 
-/// 单张便签的版本保留上限（与 notes::snapshot_version 的清理逻辑一致）
+/// 单张便签的版本保留上限。snapshot_version 的清理 SQL 暂用同值字面量 LIMIT 50，
+/// 两处必须保持一致；供未来统一引用收敛。
+#[allow(dead_code)]
 pub const MAX_VERSIONS_PER_NOTE: i64 = 50;
 
 fn row_to_version(r: &Row) -> rusqlite::Result<NoteVersion> {

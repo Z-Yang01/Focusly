@@ -44,6 +44,8 @@ pub fn mask_snippet(snippet: &str, is_private: bool) -> String {
 
 /// 导出过滤：返回该便签是否应包含在导出中。
 /// 默认（include_private=false）排除私密便签；用户显式选择包含时才放行。
+/// 本函数是私密防线的规范谓词（含单测）；export.rs 接线前内联了同义闭包。
+#[allow(dead_code)]
 pub fn export_filter_note(is_private: bool, include_private: bool) -> bool {
     include_private || !is_private
 }

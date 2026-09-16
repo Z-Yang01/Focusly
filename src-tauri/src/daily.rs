@@ -39,6 +39,9 @@ pub fn daily_date(now: DateTime<Utc>) -> String {
 }
 
 /// 每日笔记标题：「每日笔记 YYYY-MM-DD」（本地时区）。
+/// 标题格式是本模块的对外契约（find_today 按它精确匹配），暂仅单测直接引用，
+/// `get_or_create_daily` 内联了同义 format!，接线/重构时统一收敛到此函数。
+#[allow(dead_code)]
 pub fn daily_title(now: DateTime<Utc>) -> String {
     format!("每日笔记 {}", daily_date(now))
 }

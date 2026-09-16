@@ -156,6 +156,9 @@ pub fn close_note_window(app: &AppHandle, note_id: &str) {
     state.fullscreen_hidden.lock().unwrap().remove(&label);
 }
 
+/// 显示、取消最小化并聚焦指定便签窗口。
+/// 通知点击聚焦便签接线时复用（见 AGENTS.md 已知平台限制：MVP 通知为提示型）。
+#[allow(dead_code)]
 pub fn focus_note_window(app: &AppHandle, note_id: &str) {
     if let Some(win) = app.get_webview_window(&note_label(note_id)) {
         let _ = win.show();
@@ -288,7 +291,10 @@ pub fn save_geometry_now(app: &AppHandle, win: &tauri::WebviewWindow) {
 }
 
 /// tauri 的 HWND（其内部 windows crate 版本可能与本 crate 不同）转换为本 crate 的 HWND。
+/// 当前 hwnd_of 直接按值转换（两版裸指针/宽度一致）；若未来依赖版本布局分叉，
+/// 跨版本 HWND 都必须经此函数转换，故保留。
 #[cfg(windows)]
+#[allow(dead_code)]
 fn to_win32_hwnd(h: windows::Win32::Foundation::HWND) -> windows::Win32::Foundation::HWND {
     h
 }
@@ -410,9 +416,11 @@ pub fn startup_windows(app: &AppHandle) -> AppResult<()> {
 }
 
 /// 供外部模块查询：当前被全屏策略隐藏的窗口集合（调试用）。
+#[allow(dead_code)]
 pub fn hidden_by_fullscreen(state: &AppState) -> HashSet<String> {
     state.fullscreen_hidden.lock().unwrap().clone()
 }
 
-/// 类型别名映射（内部使用）
+/// 窗口几何持久化的 id→(packed x,y,w,h) 映射类型（geometry 存取接口契约）。
+#[allow(dead_code)]
 pub type GeometryMap = HashMap<String, u64>;

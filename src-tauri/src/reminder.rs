@@ -43,6 +43,8 @@ pub fn channel() -> (SchedulerHandle, UnboundedReceiver<()>) {
 }
 
 /// 一步式启动（manage 之后调用，或确认状态已就绪时使用）。
+/// lib.rs 当前用 channel()+spawn_loop 以精确控制启动时序，此便捷入口保留备用。
+#[allow(dead_code)]
 pub fn spawn(app: AppHandle) -> SchedulerHandle {
     let (handle, rx) = channel();
     spawn_loop(app, rx);

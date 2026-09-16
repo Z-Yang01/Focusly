@@ -48,6 +48,8 @@ fn get_by_name(conn: &Connection, name: &str) -> AppResult<SavedSearch> {
     })
 }
 
+/// 按 id 取单条（与 get_by_name 对偶的 DAO 契约；供未来按 id 定位/编辑使用）
+#[allow(dead_code)]
 pub fn get(conn: &Connection, id: &str) -> AppResult<SavedSearch> {
     conn.query_row(
         &format!("SELECT {COLS} FROM saved_searches WHERE id = ?1"),

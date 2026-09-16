@@ -15,6 +15,10 @@
 //!   中午12点=12:00、中午1点=13:00；半夜12点=00:00 次日；上午/早上按原值。
 //! - 日期部分缺省时间默认 09:00。
 //! - 每天/每周X/每个工作日 分别映射 Daily/Weekly/Weekdays，其余 Once。
+//!
+//! 告警说明：入口 parse_time_nl 待提醒设置 UI 接线（见 lib.rs 命令表旁注释），
+//! 接线前整模块暂未被生产路径调用，模块级压制 dead_code（纯函数已由文末单测覆盖）。
+#![allow(dead_code)]
 
 use chrono::{DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, Utc, Weekday};
 

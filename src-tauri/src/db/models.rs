@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+/// 便签状态字面量契约（SQL 暂用字符串字面量，统一引用时收敛到这里）
+#[allow(dead_code)]
 pub const STATUS_ACTIVE: &str = "active";
+#[allow(dead_code)]
 pub const STATUS_ARCHIVED: &str = "archived";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +93,9 @@ impl RepeatType {
     }
 }
 
+/// 提醒状态类型契约：reminders.status 列暂以 String 直读直写，
+/// 此枚举为后续把状态收敛为强类型的预留表示（与列字面量一一对应）。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ReminderStatus {
@@ -101,6 +107,7 @@ pub enum ReminderStatus {
 }
 
 impl ReminderStatus {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             ReminderStatus::Pending => "pending",
@@ -145,6 +152,8 @@ pub enum FullscreenBehavior {
 }
 
 impl FullscreenBehavior {
+    // 与 parse 互为反函数；序列化走 serde rename_all，as_str 供日志/DB 字面量场景预留
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             FullscreenBehavior::Normal => "normal",

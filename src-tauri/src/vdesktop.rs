@@ -52,7 +52,7 @@ mod imp {
     /// IServiceProvider 自定义 vtable（IUnknown×3 + QueryService）。
     #[repr(C)]
     struct ServiceProviderVtbl {
-        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT_REF,
+        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> windows::core::HRESULT,
         add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
         release: unsafe extern "system" fn(*mut c_void) -> u32,
         query_service: unsafe extern "system" fn(
@@ -67,7 +67,7 @@ mod imp {
     /// 未使用的 IsAppIdPinned/PinAppID/UnpinAppID 参数以裸指针占位（x64 指针宽度一致，布局等价）。
     #[repr(C)]
     struct PinnedAppsVtbl {
-        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT_REF,
+        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> windows::core::HRESULT,
         add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
         release: unsafe extern "system" fn(*mut c_void) -> u32,
         is_app_id_pinned: unsafe extern "system" fn(*mut c_void, *const u16, *mut BOOL) -> windows::core::HRESULT,
@@ -77,8 +77,6 @@ mod imp {
         pin_window: unsafe extern "system" fn(*mut c_void, HWND) -> windows::core::HRESULT,
         unpin_window: unsafe extern "system" fn(*mut c_void, HWND) -> windows::core::HRESULT,
     }
-
-    type HRESULT_REF = windows::core::HRESULT;
 
     pub unsafe fn pin_window(hwnd: HWND, pin: bool) -> Result<(), crate::vdesktop::VdError> {
         // CoInitializeEx：S_OK/S_FALSE 视为已初始化（需配对 CoUninitialize）；

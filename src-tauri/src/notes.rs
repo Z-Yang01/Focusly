@@ -195,7 +195,8 @@ pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
     window::close_note_window(app, id);
     let state = app.state::<AppState>();
     let image_paths = state.db.with(|c| {
-        crate::db::search::fts_remove(c, id);
+        // FTS 索引清理失败不阻塞永久删除主流程（与 daily.rs 的 fts_sync 策略一致）
+        let _ = crate::db::search::fts_remove(c, id);
         crate::db::notes::delete(c, id)
     })?;
     for path in &image_paths {
@@ -293,6 +294,8 @@ pub fn restore_note_version(app: &AppHandle, version_id: &str) -> AppResult<Note
 }
 
 /// FTS 全文搜索（排除回收站；私密便签默认排除）。
+/// 服务层包装：notes_cmd::search_notes_v2 暂直连 db::search，本入口作为服务层契约保留。
+#[allow(dead_code)]
 pub fn search_notes_v2(app: &AppHandle, keyword: &str, include_private: bool) -> AppResult<Vec<crate::db::models::SearchHit>> {
     let state = app.state::<AppState>();
     let hits = state.db.with(|c| crate::db::search::search(c, keyword, include_private))?;

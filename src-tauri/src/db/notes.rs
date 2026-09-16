@@ -68,6 +68,8 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Note> {
     })
 }
 
+/// 便签存在性查询（DAO 契约补全；供未来导入去重/外键校验使用）
+#[allow(dead_code)]
 pub fn exists(conn: &Connection, id: &str) -> AppResult<bool> {
     let n: i64 = conn.query_row("SELECT COUNT(*) FROM notes WHERE id=?1", params![id], |r| r.get(0))?;
     Ok(n > 0)

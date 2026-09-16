@@ -45,7 +45,8 @@ unsafe extern "system" fn enum_proc(
 pub fn all_monitors() -> Vec<MonitorInfo> {
     let mut monitors: Vec<MonitorInfo> = Vec::new();
     unsafe {
-        EnumDisplayMonitors(
+        // 返回值仅为 BOOL 表示枚举是否被回调中断（enum_proc 恒返回 true），无需检查
+        let _ = EnumDisplayMonitors(
             None,
             None,
             Some(enum_proc),
