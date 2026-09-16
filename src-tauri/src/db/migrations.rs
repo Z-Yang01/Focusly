@@ -129,6 +129,49 @@ CREATE TABLE layout_presets (
     r#"
 INSERT OR IGNORE INTO shortcuts (action, accelerator, enabled, updated_at) VALUES ('quick_capture', 'Ctrl+Shift+Q', 1, '');
 "#,
+    // v5: 番茄钟（会话统计 + 任务元数据）+ 番茄钟全局快捷键与默认设置
+    r#"
+CREATE TABLE pomodoro_sessions (
+    id TEXT PRIMARY KEY,
+    note_id TEXT,
+    task_key TEXT,
+    task_text_snapshot TEXT,
+    phase TEXT NOT NULL,
+    planned_sec INTEGER NOT NULL,
+    actual_sec INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    status TEXT NOT NULL,
+    interrupt_reason TEXT
+);
+CREATE INDEX idx_pomo_time ON pomodoro_sessions(started_at DESC);
+CREATE INDEX idx_pomo_task ON pomodoro_sessions(note_id, task_key);
+
+CREATE TABLE task_meta (
+    note_id TEXT NOT NULL,
+    task_key TEXT NOT NULL,
+    line_text TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'todo',
+    estimate_pomodoros INTEGER NOT NULL DEFAULT 0,
+    completed_pomodoros INTEGER NOT NULL DEFAULT 0,
+    priority TEXT,
+    due_at TEXT,
+    skip_date TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (note_id, task_key)
+);
+
+INSERT OR IGNORE INTO shortcuts (action, accelerator, enabled, updated_at) VALUES ('pomodoro_toggle', 'Ctrl+Shift+P', 1, '');
+
+INSERT OR IGNORE INTO settings (key, value) VALUES
+    ('pomo_focus_min', '25'),
+    ('pomo_short_min', '5'),
+    ('pomo_long_min', '15'),
+    ('pomo_long_every', '4'),
+    ('pomo_auto_next', 'false'),
+    ('pomo_sound', 'off'),
+    ('pomo_force_remind', 'false');
+"#,
 ];
 
 use rusqlite::Connection;
@@ -168,11 +211,11 @@ mod tests {
             .unwrap();
         assert_eq!(theme, "system");
 
-        // shortcuts 默认值存在（v4 起含 quick_capture）
+        // shortcuts 默认值存在（v5 起含 quick_capture 与 pomodoro_toggle）
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM shortcuts", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 4);
+        assert_eq!(count, 5);
     }
 
     /// 模拟 v1 旧库：只跑第一条迁移并手工把 user_version 置为 1。
@@ -327,6 +370,114 @@ mod tests {
             [],
         );
         assert!(dup.is_err(), "name 唯一约束应生效");
+
+        // 旧数据完整
+        let title: String = conn
+            .query_row("SELECT title FROM notes WHERE id = 'n1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(title, "旧便签");
+    }
+
+    /// 模拟 v3 旧库：跑前三条迁移并手工把 user_version 置为 3。
+    fn setup_v3(conn: &Connection) {
+        for sql in MIGRATIONS.iter().take(3) {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 3).unwrap();
+    }
+
+    #[test]
+    fn v3_to_v4_upgrade_adds_quick_capture_shortcut() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_v3(&conn);
+        run(&conn).unwrap();
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64);
+        let accel: String = conn
+            .query_row("SELECT accelerator FROM shortcuts WHERE action = 'quick_capture'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(accel, "Ctrl+Shift+Q");
+    }
+
+    /// 模拟 v4 旧库：跑前四条迁移并手工把 user_version 置为 4。
+    fn setup_v4(conn: &Connection) {
+        for sql in MIGRATIONS.iter().take(4) {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 4).unwrap();
+    }
+
+    #[test]
+    fn v4_to_v5_upgrade_creates_pomodoro_tables_and_defaults() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_v4(&conn);
+
+        // v4 时代的旧行数据
+        conn.execute(
+            "INSERT INTO notes (id, title, content, created_at, updated_at) \
+             VALUES ('n1', '旧便签', '内容', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        run(&conn).unwrap();
+
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64);
+
+        // 新表存在
+        for table in ["pomodoro_sessions", "task_meta"] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "缺少表 {table}");
+        }
+
+        // 新索引存在
+        for idx in ["idx_pomo_time", "idx_pomo_task"] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    params![idx],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "缺少索引 {idx}");
+        }
+
+        // settings 7 个新键
+        for key in [
+            "pomo_focus_min",
+            "pomo_short_min",
+            "pomo_long_min",
+            "pomo_long_every",
+            "pomo_auto_next",
+            "pomo_sound",
+            "pomo_force_remind",
+        ] {
+            let n: i64 = conn
+                .query_row("SELECT COUNT(*) FROM settings WHERE key = ?1", params![key], |r| {
+                    r.get(0)
+                })
+                .unwrap();
+            assert_eq!(n, 1, "缺少设置 {key}");
+        }
+
+        // shortcuts 新动作
+        let accel: String = conn
+            .query_row(
+                "SELECT accelerator FROM shortcuts WHERE action = 'pomodoro_toggle'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(accel, "Ctrl+Shift+P");
 
         // 旧数据完整
         let title: String = conn

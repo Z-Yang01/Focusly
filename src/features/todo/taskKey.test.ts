@@ -30,7 +30,7 @@ describe("assignTaskKeys", () => {
     const keys = assignTaskKeys(todos).map((t) => t.taskKey);
     const [hash0, occ0] = keys[0].split("-");
     const [hash2, occ2] = keys[2].split("-");
-    expect(hash0).toBe(hash2, "同文本同哈希");
+    expect(hash0).toBe(hash2); // 同文本同哈希
     expect(occ0).toBe("0");
     expect(occ2).toBe("1");
     expect(keys[1]).not.toBe(keys[0]);

@@ -10,6 +10,14 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("autostart", "false"),
     ("start_minimized", "true"),
     ("launch_show_notes", "true"),
+    // 番茄钟（v5 迁移默认值；读取端见 pomodoro.rs settings_from）
+    ("pomo_focus_min", "25"),       // 专注时长（分钟）
+    ("pomo_short_min", "5"),        // 短休时长
+    ("pomo_long_min", "15"),        // 长休时长
+    ("pomo_long_every", "4"),       // 每 N 个专注进入长休
+    ("pomo_auto_next", "false"),    // 阶段结束自动开始下一阶段
+    ("pomo_sound", "off"),          // 提示音（MVP 仅占位）
+    ("pomo_force_remind", "false"), // 勿扰时段仍强制提醒
 ];
 
 pub fn get_all(conn: &Connection) -> AppResult<HashMap<String, String>> {

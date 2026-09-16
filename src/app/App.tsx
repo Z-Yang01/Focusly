@@ -6,6 +6,7 @@ import { getWindowRole } from "@/lib/tauri";
 import { ManagerWindow } from "@/features/notes/ManagerWindow";
 import { NoteWindow } from "@/features/notes/NoteWindow";
 import { QuickCaptureWindow } from "@/features/quick-capture/QuickCaptureWindow";
+import { MiniPomodoroWindow } from "@/features/pomodoro/MiniPomodoroWindow";
 
 export default function App() {
   const [role] = useState(getWindowRole);
@@ -16,6 +17,8 @@ export default function App() {
         <ManagerWindow />
       ) : role.kind === "quick-capture" ? (
         <QuickCaptureWindow />
+      ) : role.kind === "pomodoro-mini" ? (
+        <MiniPomodoroWindow />
       ) : (
         <NoteWindow noteId={role.noteId} />
       )}

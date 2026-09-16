@@ -261,3 +261,37 @@ pub struct LayoutPreset {
     pub data: String,
     pub created_at: String,
 }
+
+/// 番茄钟会话（pomodoro_sessions 表）。status: running | completed | interrupted。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PomodoroSession {
+    pub id: String,
+    pub note_id: Option<String>,
+    pub task_key: Option<String>,
+    pub task_text_snapshot: Option<String>,
+    pub phase: String,
+    pub planned_sec: i64,
+    pub actual_sec: i64,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub status: String,
+    pub interrupt_reason: Option<String>,
+}
+
+/// 任务元数据（task_meta 表，主键 note_id+task_key）。
+/// status: todo | done | skipped；skip_date 记录跳过日期，跨日自动复活为 todo。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskMeta {
+    pub note_id: String,
+    pub task_key: String,
+    pub line_text: String,
+    pub status: String,
+    pub estimate_pomodoros: i64,
+    pub completed_pomodoros: i64,
+    pub priority: Option<String>,
+    pub due_at: Option<String>,
+    pub skip_date: Option<String>,
+    pub updated_at: String,
+}

@@ -5,12 +5,14 @@ pub mod missed;
 pub mod migrations;
 pub mod models;
 pub mod notes;
+pub mod pomodoro_sessions;
 pub mod reminders;
 pub mod saved_searches;
 pub mod search;
 pub mod settings;
 pub mod shortcuts;
 pub mod tags;
+pub mod task_meta;
 pub mod todos_view;
 pub mod versions;
 

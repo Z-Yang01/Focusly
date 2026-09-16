@@ -13,12 +13,14 @@ import { EVENTS } from "@/types";
 export type WindowRole =
   | { kind: "manager" }
   | { kind: "note"; noteId: string }
-  | { kind: "quick-capture" };
+  | { kind: "quick-capture" }
+  | { kind: "pomodoro-mini" };
 
 export function getWindowRole(): WindowRole {
   const label = getCurrentWebviewWindow().label;
   if (label === "manager") return { kind: "manager" };
   if (label === "quick-capture") return { kind: "quick-capture" };
+  if (label === "pomodoro-mini") return { kind: "pomodoro-mini" };
   const noteId = label.replace(/^note-/, "");
   return noteId ? { kind: "note", noteId } : { kind: "manager" };
 }

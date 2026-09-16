@@ -9,6 +9,8 @@ export interface MetaLike {
   lineText: string;
   status: string; // todo | done | skipped
   skipDate: string | null;
+  priority?: string | null;
+  dueAt?: string | null;
 }
 
 export interface TodoLike {
