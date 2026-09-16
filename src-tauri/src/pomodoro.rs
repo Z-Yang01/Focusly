@@ -16,8 +16,9 @@
 //! - 私密便签（is_private=1）：Start 时 task_text 全程置空（不入库快照、不进事件/通知/托盘），
 //!   阶段结束通知前再复查一次（防会话中途切换隐私标志）；
 //! - 勿扰：pomo_force_remind=true 跳过勿扰判定；否则复用 crate::dnd，推迟到勿扰结束再发；
-//! - 全屏：发通知前轮询 `window::monitor::is_foreground_fullscreen()`（2s 间隔，硬顶 4 小时），
-//!   等前台退出全屏再发（通知延迟窗口内的短轮询，事件循环不受阻塞——通知在独立任务里）。
+//! - 全屏：通知延迟等待主路径事件驱动——window/foreground.rs 检测到全屏变化即投递
+//!   `FullscreenChanged`（写 FULLSCREEN_HINT 提示位 + FULLSCREEN_WATCH 唤醒等待方）；
+//!   2s 轮询实时探测仅作兜底（硬顶 4 小时）。等待在独立任务里，事件循环不受阻塞。
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,6 +32,7 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::watch;
 
 use crate::db::pomodoro_sessions;
 use crate::error::AppResult;
@@ -40,7 +42,7 @@ use crate::state::AppState;
 pub const STATE_EVENT: &str = "pomodoro-state";
 pub const FINISHED_EVENT: &str = "pomodoro-finished";
 
-/// 全屏时通知重查间隔（秒）
+/// 全屏时通知重查间隔（秒）——事件驱动等待的超时兜底周期
 const FULLSCREEN_POLL_SECS: u64 = 2;
 /// 全屏等待硬顶：4 小时（防通知永久滞留）
 const MAX_FULLSCREEN_WAIT_SECS: u64 = 4 * 60 * 60;
@@ -94,8 +96,7 @@ pub enum PomodoroCmd {
     },
     AddMinutes(i64),
     CompleteTask,
-    /// 全屏状态变化提示（总控可从 window/foreground.rs 接线；当前仅作通知延迟的提示位）
-    #[allow(dead_code)]
+    /// 全屏状态变化（window/foreground.rs 检测线程投递）：写提示位 + watch 唤醒通知延迟等待
     FullscreenChanged(bool),
     /// 立即重发布一次状态事件
     #[allow(dead_code)]
@@ -360,6 +361,18 @@ enum Machine {
 /// 全屏提示位（FullscreenChanged 命令写入；通知延迟判定时与实时探测取或）。
 static FULLSCREEN_HINT: AtomicBool = AtomicBool::new(false);
 
+/// 全屏状态 watch：FullscreenChanged 命令写入，是通知延迟等待的主路径——
+/// 等待方收到事件立即唤醒复查（window/foreground.rs 变化即投递），
+/// 替代旧的纯 2s 轮询（轮询保留为兜底）。
+static FULLSCREEN_WATCH: OnceLock<watch::Sender<bool>> = OnceLock::new();
+
+/// 订阅全屏状态变化（spawn_notice 的等待任务用）。首次订阅时惰性初始化通道。
+fn fullscreen_watch() -> watch::Receiver<bool> {
+    FULLSCREEN_WATCH
+        .get_or_init(|| watch::channel(false).0)
+        .subscribe()
+}
+
 fn snapshot_of(st: &Machine, now: DateTime<Utc>) -> PomoSnapshot {
     match st {
         Machine::Idle => PomoSnapshot::idle(),
@@ -584,6 +597,11 @@ fn handle_cmd(app: &AppHandle, st: &mut Machine, cmd: PomodoroCmd) {
         }
         PomodoroCmd::FullscreenChanged(v) => {
             FULLSCREEN_HINT.store(v, Ordering::Relaxed);
+            // 事件唤醒通知延迟等待（主路径）。通道由等待方首次订阅时惰性初始化，
+            // 尚无订阅者时跳过——条件里的提示位 + 实时探测 + 2s 兜底轮询保证不丢唤醒。
+            if let Some(tx) = FULLSCREEN_WATCH.get() {
+                let _ = tx.send(v);
+            }
         }
         PomodoroCmd::ForceWake => publish(app, st),
         PomodoroCmd::Toggle => toggle_cmd(app, st),
@@ -862,8 +880,8 @@ fn stop_running(app: &AppHandle, st: &mut Machine, reason: &str) {
 
 // ---------- 通知（全屏延迟 + 勿扰 + 隐私脱敏） ----------
 
-/// 独立任务：全屏时等待（2s 轮询，硬顶 4 小时）→ 勿扰时推迟到窗口结束 →
-/// 复查私密标志脱敏 → 发系统通知。
+/// 独立任务：全屏时等待（主路径事件驱动 + 2s 兜底轮询，硬顶 4 小时）→
+/// 勿扰时推迟到窗口结束 → 复查私密标志脱敏 → 发系统通知。
 fn spawn_notice(
     app: AppHandle,
     title: String,
@@ -874,13 +892,19 @@ fn spawn_notice(
 ) {
     tauri::async_runtime::spawn(async move {
         if wait_fullscreen {
-            let mut waited: u64 = 0;
+            // 主路径：FullscreenChanged 事件（源自 window/foreground.rs 检测线程，
+            // 经命令通道 → FULLSCREEN_WATCH）即时唤醒复查，通知延迟从最坏 ~2s 降到毫秒级；
+            // 兜底：2s 超时醒来照常复查（事件丢失/启动即全屏时仍能前进），
+            // 4 小时硬顶防通知永久滞留。
+            let mut rx = fullscreen_watch();
+            let wait_started = std::time::Instant::now();
             while (FULLSCREEN_HINT.load(Ordering::Relaxed)
                 || crate::window::monitor::is_foreground_fullscreen())
-                && waited < MAX_FULLSCREEN_WAIT_SECS
+                && wait_started.elapsed() < Duration::from_secs(MAX_FULLSCREEN_WAIT_SECS)
             {
-                tokio::time::sleep(Duration::from_secs(FULLSCREEN_POLL_SECS)).await;
-                waited += FULLSCREEN_POLL_SECS;
+                let _ =
+                    tokio::time::timeout(Duration::from_secs(FULLSCREEN_POLL_SECS), rx.changed())
+                        .await;
             }
         }
         if !force_remind {

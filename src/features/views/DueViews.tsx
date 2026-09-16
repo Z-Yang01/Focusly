@@ -5,10 +5,10 @@
  *  feature 内本地 api 函数与类型（不动 lib/api.ts）。
  */
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getDueView } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ---------- 本地类型与 api（与 Rust TodoView/DueNoteSummary camelCase 输出对应） ----------
@@ -28,7 +28,7 @@ interface DueViewData {
 }
 
 function fetchDueView(): Promise<DueViewData> {
-  return invoke<DueViewData>("get_due_view");
+  return getDueView();
 }
 
 // ---------- 视图 ----------

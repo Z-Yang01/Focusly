@@ -1,7 +1,6 @@
 /** 应用设置对话框：外观 / 行为 / 快捷键 / 数据 */
 import { useEffect, useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -16,6 +15,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   exportData,
+  exportDiagnostics,
   getAppInfo,
   getAllSettings,
   getShortcuts,
@@ -219,7 +219,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         filters: [{ name: "诊断文本", extensions: ["txt"] }],
       });
       if (!path) return;
-      await invoke("export_diagnostics", { path });
+      await exportDiagnostics(path);
       toast.success(`诊断包已导出：${path}
 （仅含环境信息、数据库健康摘要与日志尾部，不含便签内容）`);
     } catch (err) {

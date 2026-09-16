@@ -2,8 +2,8 @@
  *  后端负责找到/创建当天便签并打开窗口，因此成功保持静默；失败 toast 提示。
  *  命令注册前调用会 reject（走 toast.error 分支），供总控与 TemplatePicker 一起挂 ManagerWindow 新建区。 */
 import { useState, type MouseEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { CalendarCheck2 } from "lucide-react";
+import { getDailyNote } from "@/lib/api";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { toast } from "@/stores/toast";
 
@@ -26,7 +26,7 @@ export function DailyNoteButton({ onReady, onClick, ...props }: DailyNoteButtonP
     onClick?.(e);
     if (e.defaultPrevented) return;
     setBusy(true);
-    invoke<DailyNoteResult>("daily_get_or_create")
+    getDailyNote()
       .then((note) => onReady?.(note))
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);

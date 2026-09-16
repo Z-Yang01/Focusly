@@ -30,11 +30,11 @@ import {
   listNotes,
   getTags,
   openNoteWindow,
+  quickCaptureToggle,
   toggleAllNotes,
   createNote,
   updateNoteContent,
 } from "@/lib/api";
-import { invoke } from "@tauri-apps/api/core";
 import {
   onFocusSearch,
   onNotesChanged,
@@ -140,7 +140,7 @@ function ManagerContent() {
 
   const handleQuickCapture = async () => {
     try {
-      await invoke("quickcapture_toggle");
+      await quickCaptureToggle();
     } catch (err) {
       console.error("打开速记箱失败", err);
       toast.error(`速记箱暂不可用：${err instanceof Error ? err.message : String(err)}`);

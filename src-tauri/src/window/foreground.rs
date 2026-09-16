@@ -98,6 +98,15 @@ mod imp {
             last = Some(fullscreen);
             log::info!("前台全屏状态变化: fullscreen={fullscreen}");
             crate::window::apply_fullscreen_policy(&app, fullscreen);
+            // 全屏变化 → 同步投递番茄钟调度器（FullscreenChanged：写提示位 + watch
+            // 唤醒通知延迟等待，消除等待处对 2s 轮询的依赖；投递失败仅记日志，
+            // 等待处保留 2s 兜底轮询，不致命）
+            if let Err(e) = crate::pomodoro::send_cmd(
+                &app,
+                crate::pomodoro::PomodoroCmd::FullscreenChanged(fullscreen),
+            ) {
+                log::warn!("FullscreenChanged 投递失败: {e}");
+            }
         }
     }
 }

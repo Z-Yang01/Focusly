@@ -1,6 +1,5 @@
 /** 提醒设置气泡：快捷时间 / 自然语言时间 / 自定义时间 / 重复类型 / 清除 */
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { Bell, BellPlus, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cancelReminder, listReminders, setReminder } from "@/lib/api";
+import { cancelReminder, listReminders, parseTimeNl, setReminder } from "@/lib/api";
 import { describeTime, formatLocal, fromDatetimeLocal, parseRfc3339, toDatetimeLocal } from "@/lib/format";
 import type { Note, Reminder, RepeatType } from "@/types";
 import { cn } from "@/lib/utils";
@@ -133,7 +132,7 @@ export function ReminderPopover({ note, onChanged }: ReminderPopoverProps) {
     if (!input) return;
     setNlBusy(true);
     try {
-      const parsed = await invoke<NlParsed | null>("parse_time_nl", { input });
+      const parsed = await parseTimeNl(input);
       if (!parsed || !parsed.at) {
         setNlPreview(null);
         toast.info("无法识别，请换种说法");

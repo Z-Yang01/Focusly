@@ -65,7 +65,7 @@ export interface NoteVersion {
   title: string;
   content: string;
   /** auto | manual | pre-restore */
-  source: string;
+  source: VersionSource;
   createdAt: string;
 }
 
@@ -179,4 +179,169 @@ export const SETTINGS_KEYS = {
   autostart: "autostart",
   startMinimized: "start_minimized",
   launchShowNotes: "launch_show_notes",
+} as const;
+
+// ============================================================================
+// 以下为 feature api 收敛（features/*/api.ts → lib/api.ts）迁入的类型契约，
+// 均与 Rust 侧 serde camelCase 输出严格对应。
+// ============================================================================
+
+/** 版本保存来源（Rust notes 版本历史 source 列） */
+export type VersionSource = "auto" | "manual" | "pre-restore";
+
+/** 回收站条目（list_deleted_notes 返回） */
+export interface TrashItem {
+  id: string;
+  title: string;
+  content: string;
+  /** RFC3339(UTC) 删除时间 */
+  deletedAt: string;
+  /** 归档时间；从未归档为 null */
+  archivedAt: string | null;
+  /** 最后修改时间 RFC3339(UTC) */
+  updatedAt: string;
+  todoTotal: number;
+  todoDone: number;
+}
+
+/** 重复图片条目（Rust imagemgr::DupEntry serde camelCase 输出） */
+export interface DupEntry {
+  imageId: string;
+  noteId: string;
+  path: string;
+  filename: string;
+  size: number;
+}
+
+/** 一个重复组：同一 SHA-256 内容哈希对应 ≥2 个文件 */
+export interface DupGroup {
+  hash: string;
+  entries: DupEntry[];
+}
+
+/** 布局预设（Rust LayoutPreset serde camelCase） */
+export interface LayoutPreset {
+  id: string;
+  name: string;
+  /** 布局快照 JSON：[[noteId,x,y,w,h],...] */
+  data: string;
+  createdAt: string;
+}
+
+/** 隐私标志（与 Rust notes::set_privacy_flag 的 flag 取值一致） */
+export type PrivacyFlag = "private" | "locked" | "readonly";
+
+/**
+ * 私密便签列表项（list_private_notes 返回 NoteSummary 摊平 JSON）。
+ * 列表 UI 仅渲染标题/徽标/更新时间，content 字段即使返回也一律不展示。
+ */
+export interface PrivateNote {
+  id: string;
+  title: string;
+  isPrivate: boolean;
+  locked: boolean;
+  readonly: boolean;
+  /** RFC3339(UTC) 最后修改时间 */
+  updatedAt: string;
+  /** 后端可能返回，本视图不渲染 */
+  content?: string;
+  todoTotal?: number;
+  todoDone?: number;
+}
+
+/** parse_time_nl 命令返回：at 为 RFC3339 UTC，repeat 为 RepeatType 字面量 */
+export interface NlParsed {
+  at: string;
+  repeat: string;
+}
+
+/** 到期视图中的单条便签（Rust TodoView/DueNoteSummary camelCase 输出） */
+export interface DueNote {
+  id: string;
+  title: string;
+  updatedAt: string;
+  /** 该分区内（逾期/今天/未来7天）的到期任务数 */
+  dueCount: number;
+}
+
+/** get_due_view 返回：逾期 / 今天 / 未来7天 三段分区 */
+export interface DueViewData {
+  overdue: DueNote[];
+  today: DueNote[];
+  next7days: DueNote[];
+}
+
+// ---------- 番茄钟（原 features/pomodoro/types.ts 契约） ----------
+
+export type PomodoroPhase = "focus" | "short_break" | "long_break";
+
+/** 所有 pomodoro_* 写命令的统一返回；noteId/taskKey/taskText 为 null 表示未绑定任务的专注 */
+export interface StatePayload {
+  /** P 的快照恒返回全量；running=false 表示空闲 */
+  running?: boolean;
+  phase: PomodoroPhase;
+  /** RFC3339 UTC；null = 无进行中的阶段（暂停 / 空闲） */
+  endsAt: string | null;
+  paused: boolean;
+  /** 暂停 / 空闲时的静态剩余秒数（运行中权威值是 endsAt） */
+  remainingSec: number;
+  noteId: string | null;
+  taskKey: string | null;
+  /** 私密便签的任务此处为 ""（脱敏） */
+  taskText: string | null;
+  /** 本轮周期内已完成的番茄数 */
+  completedInCycle: number;
+}
+
+/** pomodoro-finished 事件载荷 */
+export interface PomodoroFinishedEvent {
+  phase: PomodoroPhase;
+  nextPhase: PomodoroPhase;
+  noteId: string | null;
+  taskKey: string | null;
+  /** 私密便签任务时为 "" */
+  taskText: string | null;
+}
+
+/** task-meta-changed 事件载荷 */
+export interface TaskMetaChangedEvent {
+  noteId: string;
+}
+
+/** task_meta 行（结构与 taskMeta.ts 的 MetaLike 兼容，可直接作为 MetaLike[] 传入 mergeTaskMeta） */
+export interface TaskMeta {
+  taskKey: string;
+  lineText: string;
+  /** todo | done | skipped */
+  status: string;
+  /** 跳过日期 YYYY-MM-DD；跨日自动复活为 todo */
+  skipDate: string | null;
+  estimate?: number | null;
+  priority?: number | null;
+  /** RFC3339 UTC */
+  dueAt?: string | null;
+}
+
+/** pomodoro_stats_today 返回 */
+export interface StatsToday {
+  focusCount: number;
+  focusSec: number;
+  doneTasks: number;
+  skippedTasks: number;
+  interrupts: number;
+}
+
+/** pomodoro_stats_range(days) 返回的单日统计 */
+export interface DailyStat {
+  /** 本地日期 YYYY-MM-DD */
+  date: string;
+  focusCount: number;
+  focusSec: number;
+}
+
+/** 番茄钟事件名（Rust 侧 emit 同名） */
+export const POMODORO_EVENTS = {
+  state: "pomodoro-state",
+  finished: "pomodoro-finished",
+  taskMetaChanged: "task-meta-changed",
 } as const;
