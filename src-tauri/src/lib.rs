@@ -26,7 +26,7 @@ use tauri::Manager;
 use state::AppState;
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // 单实例：必须最先注册，二次启动时唤起已有实例的管理器
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             window::show_manager(app);
@@ -207,6 +207,18 @@ pub fn run() {
             commands::pomodoro_cmd::task_meta_list,
             commands::pomodoro_cmd::task_meta_update,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running focusly");
+        .build(tauri::generate_context!())
+        .expect("error while building focusly");
+
+    // 退出兜底：事件循环结束时把所有便签窗口的最终几何写库
+    //（去抖 800ms 内直接退出会丢最后一次移动/缩放）
+    app.run(|app, event| {
+        if let tauri::RunEvent::Exit = event {
+            for (label, win) in app.webview_windows() {
+                if label.starts_with("note-") {
+                    window::save_geometry_now(app, &win);
+                }
+            }
+        }
+    });
 }

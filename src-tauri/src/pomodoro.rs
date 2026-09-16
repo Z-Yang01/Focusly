@@ -21,6 +21,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use rusqlite::params;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -128,6 +129,25 @@ pub fn send_cmd(app: &AppHandle, cmd: PomodoroCmd) -> AppResult<()> {
 }
 
 /// 全局快捷键 pomodoro_toggle：Idle→Start（无任务绑定），Running→Pause/Resume。
+pub fn scrub_private_text(app: &AppHandle, note_id: &str) {
+    // 1) 运行快照：匹配便签则清空任务文本并重播事件
+    if let Ok(mut g) = snapshot_cell().lock() {
+        if g.note_id == note_id && !g.task_text.is_empty() {
+            g.task_text = String::new();
+            let _ = app.emit(STATE_EVENT, serde_json::to_value(&*g).unwrap_or_else(|_| json!({})));
+        }
+    }
+    // 2) 会话表：running 状态的任务文本快照清空
+    use tauri::Manager;
+    let state = app.state::<AppState>();
+    let _ = state.db.with(|c| {
+        c.execute(
+            "UPDATE pomodoro_sessions SET task_text_snapshot = '' WHERE note_id = ?1 AND status = 'running'",
+            params![note_id],
+        ).map_err(crate::error::AppError::from)
+    });
+}
+
 pub fn toggle_via_cmd(app: &AppHandle) -> AppResult<()> {
     send_cmd(app, PomodoroCmd::Toggle)
 }
@@ -447,8 +467,24 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<PomodoroCmd>) {
         let waiter = async {
             match deadline {
                 Some(t) => {
-                    let dur = (t - Utc::now()).to_std().unwrap_or(Duration::ZERO);
-                    tokio::time::sleep_until(tokio::time::Instant::now() + dur).await;
+                    // 心跳上限 60s：既驱动托盘 tooltip 刷新，也把系统睡眠/
+                    // 时钟跳变后的调度误差限制在 60s 内（唤醒后立即按 UTC 重算剩余）
+                    loop {
+                        let remaining = (t - Utc::now()).num_seconds().max(0) as u64;
+                        let step = remaining.min(60);
+                        if step == 0 {
+                            return;
+                        }
+                        tokio::time::sleep_until(
+                            tokio::time::Instant::now() + Duration::from_secs(step),
+                        )
+                        .await;
+                        if Utc::now() >= t {
+                            return;
+                        }
+                        // 心跳：刷新托盘 tooltip（仅显示用途，阶段判定仍以绝对时间为准）
+                        crate::tray::set_tooltip(&app, &tooltip_text(&st, Utc::now()));
+                    }
                 }
                 None => std::future::pending::<()>().await,
             }

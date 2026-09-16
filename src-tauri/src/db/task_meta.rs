@@ -309,6 +309,17 @@ pub fn sync_task_meta_from_content(conn: &Connection, note_id: &str, content: &s
 }
 
 
+
+
+/// 删除某便签的全部任务元数据（便签永久删除时调用）。
+pub fn delete_for_note(conn: &Connection, note_id: &str) -> AppResult<usize> {
+    let n = conn.execute(
+        "DELETE FROM task_meta WHERE note_id = ?1",
+        params![note_id],
+    )?;
+    Ok(n)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

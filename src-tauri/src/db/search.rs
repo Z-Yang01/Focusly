@@ -67,6 +67,7 @@ fn search_fts(conn: &Connection, keyword: &str, include_private: bool) -> AppRes
         JOIN notes_fts ON notes_fts.note_id = n.id \
         WHERE notes_fts MATCH ?1 \
           AND n.deleted_at IS NULL \
+          AND n.status = 'active' \
           AND (?2 = 1 OR n.is_private = 0) \
         ORDER BY rank \
         LIMIT {SEARCH_LIMIT}"
@@ -86,6 +87,7 @@ fn search_like(conn: &Connection, keyword: &str, include_private: bool) -> AppRe
         FROM notes n \
         WHERE (n.title LIKE ?1 ESCAPE '\\' OR n.content LIKE ?1 ESCAPE '\\') \
           AND n.deleted_at IS NULL \
+          AND n.status = 'active' \
           AND (?2 = 1 OR n.is_private = 0) \
         ORDER BY n.updated_at DESC \
         LIMIT {SEARCH_LIMIT}"

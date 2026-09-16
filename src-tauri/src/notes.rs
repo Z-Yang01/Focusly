@@ -200,7 +200,12 @@ pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
     let state = app.state::<AppState>();
     let image_paths = state.db.with(|c| {
         // FTS 索引清理失败不阻塞永久删除主流程（与 daily.rs 的 fts_sync 策略一致）
-        let _ = crate::db::search::fts_remove(c, id);
+        if let Err(e) = crate::db::search::fts_remove(c, id) {
+            log::warn!("清除便签 {id} 的 FTS 行失败: {e}");
+        }
+        if let Err(e) = crate::db::task_meta::delete_for_note(c, id) {
+            log::warn!("清理便签 {id} 的任务元数据失败: {e}");
+        }
         crate::db::notes::delete(c, id)
     })?;
     for path in &image_paths {
@@ -279,6 +284,10 @@ pub fn set_privacy_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> A
             },
         )
     })?;
+    // 私密开关即时脱敏：清洗番茄运行快照与会话表残留任务文本
+    if flag == "private" && value {
+        crate::pomodoro::scrub_private_text(app, id);
+    }
     log::info!("便签 {id} 隐私标志 {flag}={value}");
     emit_notes_changed(app, id);
     Ok(note)
@@ -313,7 +322,9 @@ pub fn set_note_tags(app: &AppHandle, id: &str, tags: Vec<String>) -> AppResult<
         state.db.with(|c| -> AppResult<Vec<String>> {
             let existing = crate::db::tags::tags_for_note(c, id)?;
             for name in existing {
-                let _ = crate::db::tags::detach_tag(c, id, &name);
+                if let Err(e) = crate::db::tags::detach_tag(c, id, &name) {
+                    log::warn!("移除标签 {name} 失败: {e}");
+                }
             }
             let mut seen: HashSet<String> = HashSet::new();
             for tag in tags {
@@ -329,10 +340,12 @@ pub fn set_note_tags(app: &AppHandle, id: &str, tags: Vec<String>) -> AppResult<
     // 标签变化 → FTS 索引重同步（tags 列可搜）
     {
         let state = app.state::<AppState>();
-        let _ = state.db.with(|c| -> AppResult<()> {
+        if let Err(e) = state.db.with(|c| -> AppResult<()> {
             let note = crate::db::notes::get(c, id)?;
             crate::db::search::fts_sync(c, id, &note.title, &note.content, &final_tags.join(" "))
-        });
+        }) {
+            log::error!("标签变更后 FTS 同步失败 {id}: {e}");
+        }
     }
     emit_notes_changed(app, id);
     Ok(final_tags)

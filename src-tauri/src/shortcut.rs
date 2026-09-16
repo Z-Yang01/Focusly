@@ -28,7 +28,9 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
     log::info!("快捷键动作触发: {action}");
     match action {
         "toggle_notes" => {
-            let _ = window::toggle_all_notes(app);
+            if let Err(e) = window::toggle_all_notes(app) {
+                log::error!("切换便签显隐失败: {e}");
+            }
         }
         "new_note" => {
             if let Err(e) = crate::notes::create_and_open(app) {
@@ -40,10 +42,14 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
             let _ = app.emit("focus-search", ());
         }
         "quick_capture" => {
-            let _ = crate::quickcapture::toggle(app);
+            if let Err(e) = crate::quickcapture::toggle(app) {
+                log::error!("呼出速记箱失败: {e}");
+            }
         }
         "pomodoro_toggle" => {
-            let _ = crate::pomodoro::toggle_via_cmd(app);
+            if let Err(e) = crate::pomodoro::toggle_via_cmd(app) {
+                log::error!("切换番茄钟失败: {e}");
+            }
         }
         other => log::warn!("未知的快捷键动作: {other}"),
     }
