@@ -31,7 +31,9 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
             let _ = window::toggle_all_notes(app);
         }
         "new_note" => {
-            let _ = crate::notes::create_and_open(app);
+            if let Err(e) = crate::notes::create_and_open(app) {
+                log::error!("快捷键新建便签失败: {e}");
+            }
         }
         "focus_search" => {
             window::show_manager(app);
