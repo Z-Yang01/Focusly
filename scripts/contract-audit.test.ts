@@ -349,3 +349,30 @@ describe("端到端（真实仓库文件）", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// capabilities 权限契约（真实文件）——JS 侧窗口 API 的 ACL 漂移防线
+// ---------------------------------------------------------------------------
+
+describe("capabilities 权限契约（真实仓库文件）", () => {
+  const caps = JSON.parse(readReal(path.join("src-tauri", "capabilities", "default.json")));
+
+  it("P0：便签窗口 onCloseRequested 依赖 destroy() 收尾，必须授予 core:window:allow-destroy", () => {
+    // Tauri 内部对注册了 tauri://close-requested JS 监听器的窗口一律 prevent_close
+    // （tauri manager/window.rs），由 @tauri-apps/api 的 onCloseRequested 包装器
+    // 调用 destroy() 完成关闭。缺权限时该 invoke 被 ACL 拒绝且无人兜底，
+    // 表现为关闭/归档/删除后便签窗口永不销毁（用户视角"点击无反应"）。
+    expect(caps.permissions).toContain("core:window:allow-destroy");
+  });
+
+  it("迷你番茄窗物理定位与速记箱剪贴板捕获所需权限", () => {
+    // miniWindow.ts: win.setPosition(new PhysicalPosition(...))
+    expect(caps.permissions).toContain("core:window:allow-set-position");
+    // QuickCaptureWindow.tsx: readText()（clipboard-manager 默认集为空，需显式授予）
+    expect(caps.permissions).toContain("clipboard-manager:allow-read-text");
+  });
+
+  it("capability 覆盖全部窗口（含动态创建的便签/速记/迷你番茄窗）", () => {
+    expect(caps.windows).toContain("*");
+  });
+});

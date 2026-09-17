@@ -105,13 +105,31 @@ pub enum PomodoroCmd {
     Toggle,
 }
 
+/// 命令信封：`ack` 非空时状态机处理完该命令后回发最新快照（写命令同步返回，见 send_sync）。
+struct CmdEnvelope {
+    cmd: PomodoroCmd,
+    ack: Option<tokio::sync::oneshot::Sender<PomoSnapshot>>,
+}
+
 #[derive(Clone)]
-pub struct PomodoroHandle(UnboundedSender<PomodoroCmd>);
+pub struct PomodoroHandle(UnboundedSender<CmdEnvelope>);
 
 impl PomodoroHandle {
+    /// 投递后立即返回（内部生产者：全屏跟随、托盘/快捷键切换）。
     pub fn send(&self, cmd: PomodoroCmd) -> AppResult<()> {
         self.0
-            .send(cmd)
+            .send(CmdEnvelope { cmd, ack: None })
+            .map_err(|_| crate::error::AppError::Platform("番茄钟调度器已停止".into()))
+    }
+
+    /// 投递并等待状态机处理完成，返回处理后的最新快照。
+    /// 这是写命令的契约返回值（前端 StatePayload）：保证响应时快照已含本次命令效果。
+    pub async fn send_sync(&self, cmd: PomodoroCmd) -> AppResult<PomoSnapshot> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.0
+            .send(CmdEnvelope { cmd, ack: Some(tx) })
+            .map_err(|_| crate::error::AppError::Platform("番茄钟调度器已停止".into()))?;
+        rx.await
             .map_err(|_| crate::error::AppError::Platform("番茄钟调度器已停止".into()))
     }
 }
@@ -119,14 +137,21 @@ impl PomodoroHandle {
 /// 一步式启动：创建通道并拉起状态机循环（lib.rs 在 manage AppState 之前调用，
 /// 返回的 handle 存入 AppState.pomodoro）。
 pub fn spawn(app: AppHandle) -> PomodoroHandle {
-    let (tx, rx) = unbounded_channel();
+    let (tx, rx) = unbounded_channel::<CmdEnvelope>();
     tauri::async_runtime::spawn(loop_task(app, rx));
     PomodoroHandle(tx)
 }
 
-/// 命令层薄封装：经 AppState 里的 handle 投递命令。
+/// 命令层薄封装：经 AppState 里的 handle 投递命令（投递即返回，不等处理）。
 pub fn send_cmd(app: &AppHandle, cmd: PomodoroCmd) -> AppResult<()> {
     app.state::<AppState>().pomodoro.send(cmd)
+}
+
+/// 命令层薄封装（同步投递）：等状态机处理完该命令，返回处理后的最新快照。
+/// 供 pomodoro_* 写命令作为契约返回值（前端 StatePayload，见 types/index.ts）。
+pub async fn send_sync(app: &AppHandle, cmd: PomodoroCmd) -> AppResult<PomoSnapshot> {
+    let handle = app.state::<AppState>().pomodoro.clone();
+    handle.send_sync(cmd).await
 }
 
 /// 私密防线：便签切换为私密时即时脱敏——清空运行快照中的任务文本（并重播事件），
@@ -503,7 +528,7 @@ fn note_is_private(app: &AppHandle, note_id: &str) -> bool {
         .unwrap_or(false)
 }
 
-async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<PomodoroCmd>) {
+async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<CmdEnvelope>) {
     log::info!("番茄钟调度器已启动");
     let mut st = Machine::Idle;
     publish(&app, &st);
@@ -539,8 +564,15 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<PomodoroCmd>) {
             }
         };
         tokio::select! {
-            cmd = rx.recv() => match cmd {
-                Some(cmd) => handle_cmd(&app, &mut st, cmd),
+            env = rx.recv() => match env {
+                Some(env) => {
+                    handle_cmd(&app, &mut st, env.cmd);
+                    // 写命令同步回执：此刻 SNAPSHOT 已含本次命令效果
+                    //（状态变化分支内部都会 publish；无状态变化分支返回当前快照同样正确）
+                    if let Some(ack) = env.ack {
+                        let _ = ack.send(current_snapshot());
+                    }
+                }
                 None => return, // 所有发送端已释放
             },
             _ = waiter => {

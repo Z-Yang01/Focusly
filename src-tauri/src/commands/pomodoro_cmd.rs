@@ -1,9 +1,9 @@
 //! 番茄钟 / 任务元数据命令（薄层：转发 pomodoro.rs 与 db 层）。
 //!
-//! # 总控接线附录（lib.rs 的 generate_handler 追加以下 12 项）
+//! # 总控接线附录（lib.rs 的 generate_handler 追加以下 13 项）
 //! `pomodoro_start, pomodoro_pause, pomodoro_resume, pomodoro_skip, pomodoro_stop,
 //! pomodoro_add_minutes, pomodoro_state, pomodoro_complete_task,
-//! pomodoro_stats_today, pomodoro_stats_range, task_meta_get, task_meta_update`
+//! pomodoro_stats_today, pomodoro_stats_range, task_meta_get, task_meta_list, task_meta_update`
 //!
 //! 前端参数为 camelCase（tauri 自动转换）：如 `pomodoro_start({ noteId, taskKey, taskText })`、
 //! `pomodoro_stop({ reason })`、`pomodoro_add_minutes({ minutes })`、
@@ -18,14 +18,15 @@ use crate::pomodoro::{self, PomoSnapshot, PomodoroCmd};
 use crate::state::AppState;
 
 /// 开始一个专注阶段。note_id/task_key 缺省 = 无绑定任务的通用专注；task_text 缺省 = "专注"。
+/// 返回处理后的最新快照（前端 StatePayload 契约）。
 #[tauri::command]
-pub fn pomodoro_start(
+pub async fn pomodoro_start(
     app: AppHandle,
     note_id: Option<String>,
     task_key: Option<String>,
     task_text: Option<String>,
-) -> AppResult<()> {
-    pomodoro::send_cmd(
+) -> AppResult<PomoSnapshot> {
+    pomodoro::send_sync(
         &app,
         PomodoroCmd::Start {
             note_id: note_id.unwrap_or_default(),
@@ -33,39 +34,41 @@ pub fn pomodoro_start(
             task_text: task_text.unwrap_or_else(|| "专注".into()),
         },
     )
+    .await
 }
 
 #[tauri::command]
-pub fn pomodoro_pause(app: AppHandle) -> AppResult<()> {
-    pomodoro::send_cmd(&app, PomodoroCmd::Pause)
+pub async fn pomodoro_pause(app: AppHandle) -> AppResult<PomoSnapshot> {
+    pomodoro::send_sync(&app, PomodoroCmd::Pause).await
 }
 
 #[tauri::command]
-pub fn pomodoro_resume(app: AppHandle) -> AppResult<()> {
-    pomodoro::send_cmd(&app, PomodoroCmd::Resume)
+pub async fn pomodoro_resume(app: AppHandle) -> AppResult<PomoSnapshot> {
+    pomodoro::send_sync(&app, PomodoroCmd::Resume).await
 }
 
 /// 跳过当前阶段（interrupted + reason="skip"）。
 #[tauri::command]
-pub fn pomodoro_skip(app: AppHandle) -> AppResult<()> {
-    pomodoro::send_cmd(&app, PomodoroCmd::Skip)
+pub async fn pomodoro_skip(app: AppHandle) -> AppResult<PomoSnapshot> {
+    pomodoro::send_sync(&app, PomodoroCmd::Skip).await
 }
 
 /// 停止番茄钟（interrupted + 自定义原因）。
 #[tauri::command]
-pub fn pomodoro_stop(app: AppHandle, reason: Option<String>) -> AppResult<()> {
-    pomodoro::send_cmd(
+pub async fn pomodoro_stop(app: AppHandle, reason: Option<String>) -> AppResult<PomoSnapshot> {
+    pomodoro::send_sync(
         &app,
         PomodoroCmd::Stop {
             reason: reason.unwrap_or_default(),
         },
     )
+    .await
 }
 
 /// 运行中阶段延时 N 分钟（仅非暂停时生效，planned_sec 同加）。
 #[tauri::command]
-pub fn pomodoro_add_minutes(app: AppHandle, minutes: i64) -> AppResult<()> {
-    pomodoro::send_cmd(&app, PomodoroCmd::AddMinutes(minutes))
+pub async fn pomodoro_add_minutes(app: AppHandle, minutes: i64) -> AppResult<PomoSnapshot> {
+    pomodoro::send_sync(&app, PomodoroCmd::AddMinutes(minutes)).await
 }
 
 /// 当前番茄钟快照（Idle / Running 全量状态）。
@@ -75,13 +78,15 @@ pub fn pomodoro_state(_app: AppHandle) -> AppResult<PomoSnapshot> {
 }
 
 /// 完成任务：task_meta 置 done + 便签正文第一条匹配行勾选回写。
+/// 不改变运行中阶段；返回当前快照（前端 StatePayload 契约）。
 #[tauri::command]
 pub fn pomodoro_complete_task(
     app: AppHandle,
     note_id: String,
     task_key: String,
-) -> AppResult<TaskMeta> {
-    pomodoro::complete_task(&app, &note_id, &task_key)
+) -> AppResult<PomoSnapshot> {
+    pomodoro::complete_task(&app, &note_id, &task_key)?;
+    Ok(pomodoro::current_snapshot())
 }
 
 /// 今日统计：{focusCount, focusSec, doneTasks, skippedTasks, interrupts}。
