@@ -80,6 +80,9 @@ export const restoreVersion = (versionId: string) =>
 
 // ---------- 私密空间 ----------
 /** 设置隐私标志（后端命令 set_note_privacy → notes::set_privacy_flag，flag ∈ private/locked/readonly） */
+export const setPinMode = (noteId: string, mode: string) =>
+  invoke<Note>("set_pin_mode", { noteId, mode });
+
 export const setNotePrivacy = (noteId: string, flag: PrivacyFlag, value: boolean) =>
   invoke<Note>("set_note_privacy", { noteId, flag, value });
 /** 私密便签列表（list_private_notes：active 未删 is_private=1 的 NoteSummary） */

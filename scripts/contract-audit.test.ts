@@ -323,7 +323,7 @@ describe("端到端（真实仓库文件）", () => {
   });
 
   it("[快照] 前端调用命令总数", () => {
-    expect(invoked.size).toBe(85);
+    expect(invoked.size).toBe(86);
   });
 
   it("P0：前端调用 ⊆ Rust 注册（无缺失）", () => {

@@ -85,6 +85,7 @@ import type {
   NoteFlag,
   ReminderFiredEvent,
 } from "@/types";
+import { setPinMode } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "@/stores/toast";
 import { usePomodoro } from "@/features/pomodoro/usePomodoro";
@@ -703,6 +704,23 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
 
         {/* 右键菜单 */}
         <ContextMenuContent className="text-sm">
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Pin className="mr-2 size-3.5" />
+              图钉模式
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {(["normal", "topmost", "desktop"] as const).map((m) => (
+                <ContextMenuRadioItem
+                  key={m}
+                  value={m}
+                  onSelect={() => void setPinMode(noteId, m).then(() => refreshMeta())}
+                >
+                  {m === "normal" ? "普通窗口" : m === "topmost" ? "置顶" : "钉桌面"}
+                </ContextMenuRadioItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
           <ContextMenuCheckboxItem
             checked={detail.isPinned}
             onCheckedChange={() => void toggleFlag("pinned")}

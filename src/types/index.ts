@@ -36,6 +36,8 @@ export interface Note {
   isPrivate: boolean;
   locked: boolean;
   readonly: boolean;
+  /** 图钉三态: normal | topmost | desktop */
+  pinMode: "normal" | "topmost" | "desktop";
   /** 恢复窗口时的显示器缩放 (1.0 / 1.25 / 1.5) */
   scale: number | null;
   createdAt: string;
