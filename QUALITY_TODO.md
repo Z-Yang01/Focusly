@@ -42,7 +42,7 @@
 
 ## B 类：P1 新功能
 
-### B1. 今日任务时间轴 + 番茄钟列表 — doing（B1.1–B1.12 代码完成，E2E 验收中）
+### B1. 今日任务时间轴 + 番茄钟列表 — ✅ done（B1.1–B1.13 全部完成）
 需求：独立于便签的每日时间轴视图（daily_tasks 表），支持番茄绑定、完成/跳过、拖拽调时、到点通知、重复规则生成、任务↔便签互通、统计与搜索集成。
 
 - B1.1 迁移 v8：daily_tasks 表 + pomodoro_sessions.daily_task_id 外键 — done（id 用 TEXT uuid，与全库约定一致）
@@ -57,11 +57,14 @@
 - B1.10 便签待办 →"加入今日计划"（右键菜单）；任务 → 转为便签并打开 — done
 - B1.11 统计集成（时间轴头部 + StatsDialog 今日 tab 任务区块）— done
 - B1.12 搜索 token：is:task / is:today / due:today / status:todo|done|skipped → 搜索面板任务分区 — done
-- B1.13 测试：DAO 单测 + 前端纯函数（时间轴布局/重复匹配）+ 门禁 — done（cargo 197 / vitest 248 / clippy+eslint+tsc 全绿；E2E 见下）
+- B1.13 测试：DAO 单测 + 前端纯函数（时间轴布局/重复匹配）+ 门禁 — done（cargo 197 / vitest 248 / clippy+eslint+tsc 全绿）
+- E2E：迁移v8✅ 时间轴渲染✅ 建任务上轴✅ 完成统计 0/1→1/1✅ 搜索分区✅ 新建便签 DPI（320 逻辑px @175%）✅
 
 ---
 
 ## C 类：P2 质量项
 
-### C1. 死代码与告警清理 — todo
-- cargo build 有 1 个 dead_code warning（`window::GeometryMap` 等 `#[allow(dead_code)]` 之外的新增项），本轮清理。
+### C1. 死代码与告警清理 — ✅ done
+- cargo clippy --all-targets 0 告警；cargo build 0 warning（此前 2 条为增量编译瞬态）
+- 备份恢复演练（本轮门禁）：backups/ 共 5 份轮转（最新 02:25 249KB），文件头
+  "SQLite format 3" 校验通过，复制到临时目录可独立打开 ✅
