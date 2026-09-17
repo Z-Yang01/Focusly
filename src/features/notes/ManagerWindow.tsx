@@ -61,6 +61,7 @@ import { ImageManagerDialog } from "@/features/gallery/ImageManagerDialog";
 import { StatsDialog } from "@/features/pomodoro/StatsDialog";
 import { DndSettingsCard } from "@/features/dnd/DndSettingsCard";
 import { cn } from "@/lib/utils";
+import { QuickTodoInput } from "@/features/todo/QuickTodoInput";
 import { toast } from "@/stores/toast";
 
 type ViewKey = "all" | "todo" | "archived" | "today" | "trash" | "private";
@@ -156,6 +157,18 @@ function ManagerContent() {
     } catch (err) {
       console.error("切换便签可见性失败", err);
       toast.error(`操作失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+    // 快速创建待办：新建一张便签，内容即该待办
+  const handleQuickTodo = async (text: string) => {
+    try {
+      const note = await createNote();
+      await updateNoteContent(note.id, "", `- [ ] ${text}`);
+      await openNoteWindow(note.id);
+      toast.success("待办已创建");
+    } catch (err) {
+      toast.error(`创建待办失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -404,7 +417,12 @@ function ManagerContent() {
           )}
           {/* key=view 触发重挂载 + 淡入动画（B1） */}
           <div key={view} className="min-h-0 flex-1 animate-fade-in">
-            {view === "today" ? (
+            {view === "todo" && (
+            <div className="mb-3">
+              <QuickTodoInput onSubmit={handleQuickTodo} />
+            </div>
+          )}
+          {view === "today" ? (
               <TodayOverdueView onOpenNote={handleOpenNote} />
             ) : view === "trash" ? (
               <div className="h-full">
