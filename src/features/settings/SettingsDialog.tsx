@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { isSoundEnabled, setSoundEnabled } from "@/lib/sound";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
@@ -28,8 +29,9 @@ import {
 } from "@/lib/api";
 import { onShortcutError } from "@/lib/tauri";
 import { useTheme } from "@/app/theme";
+import { THEME_PREVIEWS } from "@/features/settings/theme-previews";
 import { ShortcutRecorder } from "@/features/shortcuts/ShortcutRecorder";
-import { SETTINGS_KEYS, type AppInfo, type ShortcutAction, type ShortcutEntry } from "@/types";
+import { SETTINGS_KEYS, type AppInfo, type ShortcutAction, type ShortcutEntry, type ThemeMode } from "@/types";
 import { toast } from "@/stores/toast";
 
 export interface SettingsDialogProps {
@@ -252,24 +254,32 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           <TabsContent value="appearance" className="space-y-3">
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">主题</Label>
-              <RadioGroup
-                value={theme}
-                onValueChange={(v) => setTheme(v as "system" | "light" | "dark")}
-                className="flex gap-4"
-              >
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="system" id="theme-system" />
-                  <Label htmlFor="theme-system" className="text-sm font-normal">跟随系统</Label>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="light" id="theme-light" />
-                  <Label htmlFor="theme-light" className="text-sm font-normal">浅色</Label>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="dark" id="theme-dark" />
-                  <Label htmlFor="theme-dark" className="text-sm font-normal">深色</Label>
-                </div>
-              </RadioGroup>
+              <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="选择主题">
+                {THEME_PREVIEWS.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={theme === t.value}
+                    onClick={() => setTheme(t.value as ThemeMode)}
+                    className={cn(
+                      "group relative overflow-hidden rounded-lg border-2 p-0 text-left transition-all",
+                      theme === t.value
+                        ? "border-primary ring-2 ring-primary/20 shadow-sm"
+                        : "border-border hover:border-primary/40",
+                    )}
+                  >
+                    <div className={cn("h-12 w-full", t.preview)} />
+                    <div className="flex items-center gap-1.5 px-2 py-1.5">
+                      <t.icon className="size-3.5" />
+                      <span className="text-xs font-medium">{t.label}</span>
+                      {theme === t.value && (
+                        <span className="ml-auto size-1.5 rounded-full bg-primary" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </TabsContent>
 
