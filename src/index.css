@@ -76,6 +76,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-pomodoro: var(--pomodoro);
+  --color-pomodoro-light: var(--pomodoro-light);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -87,57 +95,78 @@
 /* 浅色 / 深色变量（shadcn 标准 neutral 色）                            */
 /* ------------------------------------------------------------------ */
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 3.9%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 3.9%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 3.9%);
-  --primary: hsl(240 5.9% 10%);
-  --primary-foreground: hsl(0 0% 98%);
-  --secondary: hsl(240 4.8% 95.9%);
-  --secondary-foreground: hsl(240 5.9% 10%);
-  --muted: hsl(240 4.8% 95.9%);
-  --muted-foreground: hsl(240 3.8% 46.1%);
-  --accent: hsl(240 4.8% 95.9%);
-  --accent-foreground: hsl(240 5.9% 10%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 5.9% 90%);
-  --input: hsl(240 5.9% 90%);
-  --ring: hsl(240 5.9% 10%);
-  --radius: 0.625rem;
+  /* 暖调浅色：微暖象牙底 + 番茄红主色 + 琥珀点缀 */
+  --background: hsl(36 33% 97%);
+  --foreground: hsl(24 10% 8%);
+  --card: hsl(38 40% 99%);
+  --card-foreground: hsl(24 10% 8%);
+  --popover: hsl(38 40% 99%);
+  --popover-foreground: hsl(24 10% 8%);
+  --primary: hsl(16 80% 52%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(36 25% 93%);
+  --secondary-foreground: hsl(24 10% 15%);
+  --muted: hsl(36 20% 93%);
+  --muted-foreground: hsl(24 5% 42%);
+  --accent: hsl(36 25% 92%);
+  --accent-foreground: hsl(24 10% 12%);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(36 15% 87%);
+  --input: hsl(36 15% 87%);
+  --ring: hsl(16 80% 52%);
+  --radius: 0.75rem;
+
+  /* 语义色 */
+  --success: hsl(142 71% 38%);
+  --success-foreground: hsl(0 0% 100%);
+  --warning: hsl(38 92% 50%);
+  --warning-foreground: hsl(24 10% 10%);
+  --info: hsl(207 90% 54%);
+  --info-foreground: hsl(0 0% 100%);
+  --pomodoro: hsl(6 78% 52%);
+  --pomodoro-light: hsl(6 100% 96%);
 
   /* 滚动条 */
-  --scrollbar-thumb: hsl(240 4% 46.1% / 0.3);
-  --scrollbar-thumb-hover: hsl(240 4% 46.1% / 0.5);
+  --scrollbar-thumb: hsl(24 8% 50% / 0.25);
+  --scrollbar-thumb-hover: hsl(24 8% 40% / 0.45);
 
   color-scheme: light;
 }
 
 .dark {
-  --background: hsl(240 10% 3.9%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(240 10% 3.9%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 10% 3.9%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 5.9% 10%);
-  --secondary: hsl(240 3.7% 15.9%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 3.7% 15.9%);
-  --muted-foreground: hsl(240 5% 64.9%);
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(0 62.8% 30.6%);
+  --background: hsl(20 14% 8%);
+  --foreground: hsl(36 20% 92%);
+  --card: hsl(20 12% 12%);
+  --card-foreground: hsl(36 20% 92%);
+  --popover: hsl(20 12% 12%);
+  --popover-foreground: hsl(36 20% 92%);
+  --primary: hsl(16 85% 60%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(20 8% 18%);
+  --secondary-foreground: hsl(36 15% 85%);
+  --muted: hsl(20 8% 16%);
+  --muted-foreground: hsl(36 8% 58%);
+  --accent: hsl(20 8% 18%);
+  --accent-foreground: hsl(36 15% 90%);
+  --destructive: hsl(0 62% 40%);
   --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 3.7% 15.9%);
-  --input: hsl(240 3.7% 15.9%);
-  --ring: hsl(240 4.9% 83.9%);
+  --border: hsl(20 8% 20%);
+  --input: hsl(20 8% 20%);
+  --ring: hsl(16 85% 60%);
 
-  --scrollbar-thumb: hsl(240 5% 84.9% / 0.22);
-  --scrollbar-thumb-hover: hsl(240 5% 84.9% / 0.4);
+  /* 语义色 */
+  --success: hsl(142 60% 42%);
+  --success-foreground: hsl(0 0% 100%);
+  --warning: hsl(38 80% 50%);
+  --warning-foreground: hsl(24 10% 10%);
+  --info: hsl(207 80% 55%);
+  --info-foreground: hsl(0 0% 100%);
+  --pomodoro: hsl(6 80% 55%);
+  --pomodoro-light: hsl(6 40% 14%);
+
+  --scrollbar-thumb: hsl(20 5% 40% / 0.25);
+  --scrollbar-thumb-hover: hsl(20 5% 55% / 0.45);
 
   color-scheme: dark;
 }

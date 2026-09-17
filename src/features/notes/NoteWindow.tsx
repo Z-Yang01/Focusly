@@ -555,9 +555,9 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
     <TooltipProvider delayDuration={300}>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="flex h-screen flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-xl">
+          <div className="flex h-screen flex-col overflow-hidden rounded-xl border border-border/60 bg-gradient-to-b from-card to-background text-sm shadow-lg shadow-primary/5">
             {/* 标题栏 */}
-            <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-0.5 border-b px-1.5">
+            <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-0.5 border-b border-primary/10 bg-gradient-to-r from-primary/[0.04] to-transparent px-1.5">
               <IconButton
                 title={detail.isPinned ? "取消置顶" : "置顶"}
                 onClick={() => void toggleFlag("pinned")}
@@ -667,7 +667,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
             </div>
 
             {/* 底部栏 */}
-            <div className="flex h-8 shrink-0 items-center gap-2 border-t px-2 text-xs text-muted-foreground">
+            <div className="flex h-8 shrink-0 items-center gap-2 border-t border-primary/10 bg-primary/[0.03] px-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 {stats.total > 0 && (
                   <>

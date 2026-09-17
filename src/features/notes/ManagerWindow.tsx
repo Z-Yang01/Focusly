@@ -244,7 +244,10 @@ function ManagerContent() {
     <div className="flex h-screen flex-col bg-background text-sm">
       {/* 顶栏 */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-        <span className="shrink-0 text-sm font-semibold tracking-wide">Focusly</span>
+        <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-wide">
+          <span className="inline-block size-2 rounded-full bg-pomodoro shadow-sm shadow-pomodoro/30" />
+          Focusly
+        </span>
         <Button
           type="button"
           variant="ghost"
@@ -321,7 +324,7 @@ function ManagerContent() {
 
       <div className="flex min-h-0 flex-1">
         {/* 侧栏 */}
-        <aside className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r p-2">
+        <aside className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-gradient-to-b from-primary/[0.03] to-transparent p-2">
           {views.map((v) => (
             <button
               key={v.key}
