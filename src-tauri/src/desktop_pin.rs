@@ -57,10 +57,13 @@ unsafe fn find_workerw(progman: HWND) -> Option<HWND> {
         target: None,
         seen_defview: false,
     };
-    EnumWindows(
+    // EnumWindows 失败时 ctx.target 保持 None，由调用方以 "WorkerW not found" 报错
+    if let Err(e) = EnumWindows(
         Some(enum_proc),
         LPARAM(&mut ctx as *mut WorkerWCtx as isize),
-    );
+    ) {
+        log::warn!("枚举顶层窗口失败，可能找不到桌面层 WorkerW: {e}");
+    }
     ctx.target.map(|p| HWND(p as *mut _))
 }
 
@@ -84,9 +87,11 @@ pub unsafe fn pin_to_desktop(note: HWND) -> AppResult<()> {
 
     let ex = GetWindowLongW(note, GWL_EXSTYLE_IDX) as u32;
     SetWindowLongW(note, GWL_EXSTYLE_IDX, (ex | WS_EX_TOOLWINDOW_VAL) as i32);
-    SetParent(note, workerw);
+    if let Err(e) = SetParent(note, workerw) {
+        log::warn!("桌面嵌入 SetParent 失败，窗口可能未嵌入桌面层: {e}");
+    }
 
-    let _ = SetWindowPos(
+    if let Err(e) = SetWindowPos(
         note,
         HWND_BOTTOM,
         0,
@@ -94,7 +99,9 @@ pub unsafe fn pin_to_desktop(note: HWND) -> AppResult<()> {
         0,
         0,
         SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-    );
+    ) {
+        log::warn!("桌面嵌入 SetWindowPos(HWND_BOTTOM) 失败，窗口层级可能不正确: {e}");
+    }
     Ok(())
 }
 
@@ -106,8 +113,10 @@ pub unsafe fn unpin_from_desktop(note: HWND) -> AppResult<()> {
 
     let ex = GetWindowLongW(note, GWL_EXSTYLE_IDX) as u32;
     SetWindowLongW(note, GWL_EXSTYLE_IDX, (ex & !WS_EX_TOOLWINDOW_VAL) as i32);
-    SetParent(note, HWND::default());
-    let _ = SetWindowPos(
+    if let Err(e) = SetParent(note, HWND::default()) {
+        log::warn!("桌面脱离 SetParent 失败，窗口可能仍嵌在桌面层: {e}");
+    }
+    if let Err(e) = SetWindowPos(
         note,
         HWND_TOP,
         0,
@@ -115,10 +124,14 @@ pub unsafe fn unpin_from_desktop(note: HWND) -> AppResult<()> {
         0,
         0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-    );
+    ) {
+        log::warn!("桌面脱离 SetWindowPos(HWND_TOP) 失败，窗口层级可能不正确: {e}");
+    }
     Ok(())
 }
 
+/// 窗口是否已嵌入桌面层 WorkerW（状态查询，供诊断/未来接线使用）。
+#[allow(dead_code)]
 pub unsafe fn is_on_desktop(note: HWND) -> bool {
     let parent = GetParent(note).unwrap_or_default();
     if parent.0 as isize == 0 {

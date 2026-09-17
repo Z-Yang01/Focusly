@@ -17,7 +17,6 @@
 //! 前端入口：src/features/templates/DailyNoteButton.tsx（成功静默，后端开窗）。
 
 use chrono::{DateTime, Utc};
-use rusqlite::params;
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -52,36 +51,23 @@ pub fn daily_content(date: &str) -> String {
 }
 
 /// 找今天已存在的每日笔记（title 精确匹配 + active + 未删除，取最近更新的一条）。
-/// 只读查询 SQL 写在本文件内；命中后复用 DAO `db::notes::get` 取完整行。
+/// SQL 收敛进 DAO（db::notes::find_id_by_title），本层只做"id → 完整行"编排。
 fn find_today(conn: &rusqlite::Connection, title: &str) -> AppResult<Option<Note>> {
-    let id: Option<String> = {
-        let row = conn.query_row(
-            "SELECT id FROM notes \
-             WHERE title = ?1 AND status = 'active' AND deleted_at IS NULL \
-             ORDER BY updated_at DESC LIMIT 1",
-            params![title],
-            |r| r.get::<_, String>(0),
-        );
-        match row {
-            Ok(id) => Some(id),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(e) => return Err(e.into()),
-        }
-    };
-    match id {
+    match crate::db::notes::find_id_by_title(conn, title)? {
         Some(id) => Ok(Some(crate::db::notes::get(conn, &id)?)),
         None => Ok(None),
     }
 }
 
 /// 创建今天的每日笔记：层叠几何 + 初始正文 + 「每日笔记」标签 + FTS 同步。
+/// 事务边界：建行/几何/标签同事务；FTS 保持"失败仅告警不阻塞创建"语义。
 fn create_today(app: &AppHandle, date: &str) -> AppResult<Note> {
     let title = format!("每日笔记 {date}");
     let content = daily_content(date);
     let state = app.state::<AppState>();
     let active = state.db.with(|c| crate::db::notes::count(c, "active"))?;
     let (x, y) = crate::window::cascade_position(app, active.max(0) as usize);
-    let note = state.db.with(|c| -> AppResult<Note> {
+    state.db.tx(|c| -> AppResult<Note> {
         let note = crate::db::notes::create(c, &title, &content)?;
         crate::db::notes::update_geometry(c, &note.id, x, y, DAILY_NOTE_W, DAILY_NOTE_H, None)?;
         crate::db::tags::attach_tag(c, &note.id, DAILY_TAG)?;
@@ -90,8 +76,7 @@ fn create_today(app: &AppHandle, date: &str) -> AppResult<Note> {
             log::warn!("每日笔记 FTS 同步失败 {}: {e}", note.id);
         }
         crate::db::notes::get(c, &note.id)
-    })?;
-    Ok(note)
+    })
 }
 
 /// 找到今天的每日笔记则直接开窗；没有则创建（打标签 + 层叠位置）再开窗。

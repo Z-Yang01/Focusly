@@ -44,14 +44,21 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("Focusly")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
+            // 托盘动作失败必须留痕：用户点了菜单却无反馈时，日志是唯一线索
             "show_all" => {
-                let _ = window::show_all_notes(app);
+                if let Err(e) = window::show_all_notes(app) {
+                    log::error!("托盘显示全部便签失败: {e}");
+                }
             }
             "hide_all" => {
-                let _ = window::hide_all_notes(app);
+                if let Err(e) = window::hide_all_notes(app) {
+                    log::error!("托盘隐藏全部便签失败: {e}");
+                }
             }
             "new_note" => {
-                let _ = crate::notes::create_and_open(app);
+                if let Err(e) = crate::notes::create_and_open(app) {
+                    log::error!("托盘新建便签失败: {e}");
+                }
             }
             "open_manager" => window::show_manager(app),
             "open_settings" => {

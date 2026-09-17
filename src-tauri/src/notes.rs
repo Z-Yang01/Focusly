@@ -20,15 +20,16 @@ fn emit_notes_changed(app: &AppHandle, note_id: &str) {
 }
 
 /// 只建行并写入层叠几何，不打开窗口（create_note 命令用）。
+/// 建行 + 几何写入同事务，避免半成品行（有行无几何）。
 pub fn create_record(app: &AppHandle) -> AppResult<Note> {
     let state = app.state::<AppState>();
     let active = state.db.with(|c| crate::db::notes::count(c, "active"))?;
     let (x, y) = window::cascade_position(app, active.max(0) as usize);
-    let note = state.db.with(|c| crate::db::notes::create(c, "", ""))?;
-    state.db.with(|c| {
-        crate::db::notes::update_geometry(c, &note.id, x, y, NEW_NOTE_W, NEW_NOTE_H, None)
-    })?;
-    state.db.with(|c| crate::db::notes::get(c, &note.id))
+    state.db.tx(|c| {
+        let note = crate::db::notes::create(c, "", "")?;
+        crate::db::notes::update_geometry(c, &note.id, x, y, NEW_NOTE_W, NEW_NOTE_H, None)?;
+        crate::db::notes::get(c, &note.id)
+    })
 }
 
 /// 新建并打开便签（托盘/快捷键/管理器共用）。
@@ -70,10 +71,12 @@ pub fn get_detail(app: &AppHandle, id: &str) -> AppResult<NoteDetail> {
 }
 
 /// 更新标题/正文（touch 刷新 updated_at）。
-/// 同步：版本快照（source=auto）+ FTS 索引。
+/// 同步：版本快照（source=auto）+ FTS 索引 + task_meta 单向同步。
+/// 事务边界：多步写在同一事务内，任一步 `?` 失败整体回滚；
+/// 快照/FTS/task_meta 保持"失败仅告警不阻塞保存"的既有语义（正文是唯一真源）。
 pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> AppResult<Note> {
     let state = app.state::<AppState>();
-    let note = state.db.with(|c| -> AppResult<Note> {
+    let note = state.db.tx(|c| -> AppResult<Note> {
         let note = crate::db::notes::update(
             c,
             &NoteUpdate {
@@ -205,10 +208,11 @@ pub fn restore(app: &AppHandle, id: &str) -> AppResult<Note> {
 }
 
 /// 永久删除：关窗口 → 删行（级联图片/标签记录）→ 清理图片文件与目录。
+/// 事务边界：FTS/task_meta 清理与删行同事务；删行失败时前两者一并回滚。
 pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
     window::close_note_window(app, id);
     let state = app.state::<AppState>();
-    let image_paths = state.db.with(|c| {
+    let image_paths = state.db.tx(|c| {
         // FTS 索引清理失败不阻塞永久删除主流程（与 daily.rs 的 fts_sync 策略一致）
         if let Err(e) = crate::db::search::fts_remove(c, id) {
             log::warn!("清除便签 {id} 的 FTS 行失败: {e}");
@@ -254,13 +258,7 @@ pub fn restore_from_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
 /// 清空回收站：逐个永久删除。
 pub fn empty_trash(app: &AppHandle) -> AppResult<usize> {
     let state = app.state::<AppState>();
-    let ids: Vec<String> = state.db.with(|c| {
-        let mut stmt = c.prepare("SELECT id FROM notes WHERE deleted_at IS NOT NULL")?;
-        let ids = stmt
-            .query_map([], |r| r.get::<_, String>(0))?
-            .collect::<rusqlite::Result<_>>()?;
-        Ok(ids)
-    })?;
+    let ids = state.db.with(crate::db::notes::list_trash_ids)?;
     let n = ids.len();
     for id in ids {
         delete_permanently(app, &id)?;
@@ -310,9 +308,10 @@ pub fn set_privacy_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> A
 }
 
 /// 恢复到指定历史版本（restore_version 内部先做 pre-restore 快照）。
+/// 事务边界：pre-restore 快照 + 写回 + FTS 同步同事务，避免恢复半途而废。
 pub fn restore_note_version(app: &AppHandle, version_id: &str) -> AppResult<Note> {
     let state = app.state::<AppState>();
-    let note = state.db.with(|c| -> AppResult<Note> {
+    let note = state.db.tx(|c| -> AppResult<Note> {
         let note = crate::db::versions::restore_version(c, version_id)?;
         let tags = crate::db::tags::tags_for_note(c, &note.id)?;
         crate::db::search::fts_sync(c, &note.id, &note.title, &note.content, &tags.join(" "))?;
@@ -325,6 +324,18 @@ pub fn restore_note_version(app: &AppHandle, version_id: &str) -> AppResult<Note
 /// FTS 全文搜索（排除回收站；私密便签默认排除）。
 /// 服务层包装：notes_cmd::search_notes_v2 暂直连 db::search，本入口作为服务层契约保留。
 #[allow(dead_code)]
+pub fn search_notes_v2(
+    app: &AppHandle,
+    keyword: &str,
+    include_private: bool,
+) -> AppResult<Vec<crate::db::models::SearchHit>> {
+    let state = app.state::<AppState>();
+    let hits = state
+        .db
+        .with(|c| crate::db::search::search(c, keyword, include_private))?;
+    Ok(hits)
+}
+
 /// 设置图钉模式：normal / topmost / desktop。
 /// desktop 模式调用 Windows WorkerW 桌面层嵌入。
 pub fn set_pin_mode(app: &AppHandle, id: &str, mode: &str) -> AppResult<Note> {
@@ -391,23 +402,12 @@ pub fn set_pin_mode(app: &AppHandle, id: &str, mode: &str) -> AppResult<Note> {
     Ok(note)
 }
 
-pub fn search_notes_v2(
-    app: &AppHandle,
-    keyword: &str,
-    include_private: bool,
-) -> AppResult<Vec<crate::db::models::SearchHit>> {
-    let state = app.state::<AppState>();
-    let hits = state
-        .db
-        .with(|c| crate::db::search::search(c, keyword, include_private))?;
-    Ok(hits)
-}
-
 /// 重设便签标签：清空现有关联后附着新集合（去重），返回最终标签列表。
+/// 事务边界：标签重写与随后的 FTS 重同步各自成事务，避免半改状态落库。
 pub fn set_note_tags(app: &AppHandle, id: &str, tags: Vec<String>) -> AppResult<Vec<String>> {
     let final_tags = {
         let state = app.state::<AppState>();
-        state.db.with(|c| -> AppResult<Vec<String>> {
+        state.db.tx(|c| -> AppResult<Vec<String>> {
             let existing = crate::db::tags::tags_for_note(c, id)?;
             for name in existing {
                 if let Err(e) = crate::db::tags::detach_tag(c, id, &name) {
@@ -428,7 +428,7 @@ pub fn set_note_tags(app: &AppHandle, id: &str, tags: Vec<String>) -> AppResult<
     // 标签变化 → FTS 索引重同步（tags 列可搜）
     {
         let state = app.state::<AppState>();
-        if let Err(e) = state.db.with(|c| -> AppResult<()> {
+        if let Err(e) = state.db.tx(|c| -> AppResult<()> {
             let note = crate::db::notes::get(c, id)?;
             crate::db::search::fts_sync(c, id, &note.title, &note.content, &final_tags.join(" "))
         }) {

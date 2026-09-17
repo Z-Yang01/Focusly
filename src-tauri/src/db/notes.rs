@@ -623,7 +623,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(get(&conn, &n.id).unwrap().pin_mode.as_deref(), Some("desktop"));
+        assert_eq!(
+            get(&conn, &n.id).unwrap().pin_mode.as_deref(),
+            Some("desktop")
+        );
 
         // 与 scale 同更时两者都生效
         update(
@@ -667,6 +670,9 @@ mod tests {
         soft_delete(&conn, &a.id).unwrap();
         assert_eq!(list_trash_ids(&conn).unwrap(), vec![a.id.clone()]);
         // 软删除后不再参与标题定位
-        assert_eq!(find_id_by_title(&conn, "每日笔记 2026-09-17").unwrap(), None);
+        assert_eq!(
+            find_id_by_title(&conn, "每日笔记 2026-09-17").unwrap(),
+            None
+        );
     }
 }

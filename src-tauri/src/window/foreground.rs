@@ -29,14 +29,21 @@ mod imp {
         }
 
         // 钩子线程：注册 WinEvent 钩子并跑消息循环（钩子依赖本线程的消息泵）
-        let _ = std::thread::Builder::new()
+        // 线程创建失败必须留痕：静默失败会让"全屏自动显隐"功能整体失效且无任何线索
+        if let Err(e) = std::thread::Builder::new()
             .name("focusly-winevent".into())
-            .spawn(hook_thread);
+            .spawn(hook_thread)
+        {
+            log::error!("WinEvent 钩子线程创建失败，全屏自动显隐策略不可用: {e}");
+        }
 
         // 消费者线程：检测全屏并应用策略
-        let _ = std::thread::Builder::new()
+        if let Err(e) = std::thread::Builder::new()
             .name("focusly-fullscreen".into())
-            .spawn(move || consumer_thread(rx, app));
+            .spawn(move || consumer_thread(rx, app))
+        {
+            log::error!("全屏检测消费者线程创建失败，全屏自动显隐策略不可用: {e}");
+        }
     }
 
     unsafe extern "system" fn on_foreground(

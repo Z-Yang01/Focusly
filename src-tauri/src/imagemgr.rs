@@ -13,8 +13,7 @@
 //! - `commands/`：新建薄命令层（参照 images_cmd.rs，`State<AppState>` → 本模块三个 pub fn），
 //!   并在 `generate_handler!` 注册上述三个命令名。
 //!
-//! 说明：按任务边界，本文件持有对 note_images 的只读 SELECT
-//! （`SELECT id, note_id, path, filename FROM note_images`），不修改 db/images.rs。
+//! 说明：note_images 的读取已收敛进 DAO（db::images::list_all），本文件不再持 SQL。
 
 use image::GenericImageView;
 use std::collections::{BTreeMap, HashSet};
@@ -69,7 +68,7 @@ fn to_hex(bytes: &[u8]) -> String {
     out
 }
 
-/// note_images 行的轻量投影（只读，本文件内 SQL）。
+/// note_images 行的轻量投影（来自 DAO db::images::list_all）。
 struct ImageRow {
     id: String,
     note_id: String,
@@ -80,20 +79,16 @@ struct ImageRow {
 /// 读取全表行（先取数后做文件 IO，避免长时间占用数据库锁）。
 fn load_rows(app: &tauri::AppHandle) -> AppResult<Vec<ImageRow>> {
     let state = app.state::<AppState>();
-    state.db.with(|conn| {
-        let mut stmt = conn.prepare("SELECT id, note_id, path, filename FROM note_images")?;
-        let rows = stmt
-            .query_map([], |r| {
-                Ok(ImageRow {
-                    id: r.get(0)?,
-                    note_id: r.get(1)?,
-                    path: r.get(2)?,
-                    filename: r.get(3)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(rows)
-    })
+    let rows = state.db.with(crate::db::images::list_all)?;
+    Ok(rows
+        .into_iter()
+        .map(|img| ImageRow {
+            id: img.id,
+            note_id: img.note_id,
+            path: img.path,
+            filename: img.filename,
+        })
+        .collect())
 }
 
 /// 按文件内容 SHA-256 找重复图片：仅返回 ≥2 条的组；缺失/不可读文件跳过并记日志。

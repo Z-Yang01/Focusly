@@ -177,6 +177,7 @@ pub fn incr_completed(conn: &Connection, note_id: &str, task_key: &str) -> AppRe
 
 /// 生效状态（纯函数，不回写库）：skipped 且 skip_date < today → 复活为 'todo'；
 /// 其余（含 skip_date 缺失的异常行、done、todo）原样返回。
+#[allow(dead_code)]
 pub fn effective_status(meta: &TaskMeta, today: &str) -> String {
     match (meta.status.as_str(), meta.skip_date.as_deref()) {
         ("skipped", Some(d)) if d < today => "todo".to_string(),

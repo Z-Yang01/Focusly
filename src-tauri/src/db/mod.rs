@@ -22,16 +22,6 @@ use std::sync::Mutex;
 
 use crate::error::{AppError, AppResult};
 
-/// 数据库健康摘要（export_diagnostics 用；不含任何便签内容数据）。
-pub struct DbHealth {
-    pub integrity: String,
-    pub notes_active: i64,
-    pub notes_archived: i64,
-    pub notes_trashed: i64,
-    pub sessions_completed: i64,
-    pub reminders_pending: i64,
-}
-
 /// SQLite 连接持有者。所有数据库访问都通过 `Db::with`，
 /// 业务代码不允许散落 SQL（SQL 只存在于 migrations 与 DAO 文件）。
 pub struct Db(Mutex<Connection>);
@@ -69,27 +59,6 @@ impl Db {
         Ok(out)
     }
 
-    /// 诊断用数据库健康摘要（只读；单项查询失败按既有诊断口径降级，不整体报错）。
-    pub fn health(conn: &Connection) -> AppResult<DbHealth> {
-        let count = |sql: &str| -> i64 {
-            conn.query_row(sql, [], |r| r.get(0)).unwrap_or(-1)
-        };
-        Ok(DbHealth {
-            integrity: conn
-                .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
-                .unwrap_or_else(|_| "query_failed".into()),
-            notes_active: count(
-                "SELECT COUNT(*) FROM notes WHERE status='active' AND deleted_at IS NULL",
-            ),
-            notes_archived: count("SELECT COUNT(*) FROM notes WHERE status='archived'"),
-            notes_trashed: count("SELECT COUNT(*) FROM notes WHERE deleted_at IS NOT NULL"),
-            sessions_completed: count(
-                "SELECT COUNT(*) FROM pomodoro_sessions WHERE status='completed'",
-            ),
-            reminders_pending: count("SELECT COUNT(*) FROM reminders WHERE status='pending'"),
-        })
-    }
-
     /// 仅用于测试：直接拿连接跑迁移。
     #[cfg(test)]
     pub fn in_memory() -> AppResult<Self> {
@@ -98,4 +67,33 @@ impl Db {
         db.with(|c| migrations::run(c))?;
         Ok(db)
     }
+}
+
+/// 诊断用数据库健康摘要（export_diagnostics 用；不含任何便签内容数据）。
+pub struct DbHealth {
+    pub integrity: String,
+    pub notes_active: i64,
+    pub notes_archived: i64,
+    pub notes_trashed: i64,
+    pub sessions_completed: i64,
+    pub reminders_pending: i64,
+}
+
+/// 数据库健康摘要（只读；单项查询失败按既有诊断口径降级，不整体报错）。
+pub fn health(conn: &Connection) -> AppResult<DbHealth> {
+    let count = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap_or(-1) };
+    Ok(DbHealth {
+        integrity: conn
+            .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+            .unwrap_or_else(|_| "query_failed".into()),
+        notes_active: count(
+            "SELECT COUNT(*) FROM notes WHERE status='active' AND deleted_at IS NULL",
+        ),
+        notes_archived: count("SELECT COUNT(*) FROM notes WHERE status='archived'"),
+        notes_trashed: count("SELECT COUNT(*) FROM notes WHERE deleted_at IS NOT NULL"),
+        sessions_completed: count(
+            "SELECT COUNT(*) FROM pomodoro_sessions WHERE status='completed'",
+        ),
+        reminders_pending: count("SELECT COUNT(*) FROM reminders WHERE status='pending'"),
+    })
 }

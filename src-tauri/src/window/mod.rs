@@ -114,7 +114,8 @@ fn apply_desktop_pin(app: &AppHandle, win: &tauri::WebviewWindow, note: &Note, p
         }
     };
     if new_state != note.desktop_pin_state {
-        let _ = app.state::<AppState>().db.with(|c| {
+        // 状态落库失败会留痕：下次重建窗口/重启时按旧状态重试（而非静默丢状态）
+        if let Err(e) = app.state::<AppState>().db.with(|c| {
             crate::db::notes::update(
                 c,
                 &crate::db::notes::NoteUpdate {
@@ -135,7 +136,9 @@ fn apply_desktop_pin(app: &AppHandle, win: &tauri::WebviewWindow, note: &Note, p
                     pin_mode: None,
                 },
             )
-        });
+        }) {
+            log::error!("便签 {} 的桌面固定状态 {new_state} 落库失败: {e}", note.id);
+        }
     }
 }
 
@@ -283,24 +286,26 @@ pub fn apply_fullscreen_policy(app: &AppHandle, fullscreen: bool) {
     }
 }
 
-/// 立即保存窗口几何（关闭前兜底）。
+/// 立即保存窗口几何（关闭前兜底）。落库失败仅告警：几何丢失只影响下次打开位置。
 pub fn save_geometry_now(app: &AppHandle, win: &tauri::WebviewWindow) {
-    if note_id_from_label(win.label()).is_none() {
+    let Some(note_id) = note_id_from_label(win.label()) else {
         return;
-    }
+    };
     if let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) {
         let monitor = hwnd_of(win).and_then(monitor::monitor_of_window);
-        let _ = app.state::<AppState>().db.with(|c| {
+        if let Err(e) = app.state::<AppState>().db.with(|c| {
             crate::db::notes::update_geometry(
                 c,
-                note_id_from_label(win.label()).unwrap(),
+                note_id,
                 pos.x,
                 pos.y,
                 size.width as i32,
                 size.height as i32,
                 monitor.as_deref(),
             )
-        });
+        }) {
+            log::error!("便签 {note_id} 几何落库失败: {e}");
+        }
     }
 }
 

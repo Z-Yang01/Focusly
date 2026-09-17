@@ -38,7 +38,10 @@ pub struct SchedulerHandle(UnboundedSender<()>);
 
 impl SchedulerHandle {
     pub fn wake(&self) {
-        let _ = self.0.send(());
+        // 通道只在调度器 loop 退出（应用收尾）后才会发送失败；该告警说明调度器已不可用
+        if self.0.send(()).is_err() {
+            log::warn!("提醒调度器唤醒失败：接收端已关闭");
+        }
     }
 }
 
@@ -102,9 +105,7 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<()>) {
                         break;
                     }
                     // t - now > 0（上面刚判过）；num_seconds 向零取整可能为 0，夹到至少 1s
-                    let step = (t - now)
-                        .num_seconds()
-                        .clamp(1, HEARTBEAT_SECS as i64) as u64;
+                    let step = (t - now).num_seconds().clamp(1, HEARTBEAT_SECS as i64) as u64;
                     let deadline =
                         tokio::time::Instant::now() + std::time::Duration::from_secs(step);
                     tokio::select! {
@@ -272,9 +273,11 @@ fn fire_due(app: &AppHandle) {
             }),
         );
 
-        // 状态流转：once → triggered；重复 → triggered + 新 pending 行
+        // 状态流转：once → triggered；重复 → triggered + 新 pending 行。
+        // 事务边界：置 triggered 与补建下一轮 pending 同事务，
+        // 防止"已触发但下一轮丢失/丢失旧行但未触发"的中间态。
         let repeat = RepeatType::parse(&r.repeat_type);
-        if let Err(e) = state.db.with(|c| {
+        if let Err(e) = state.db.tx(|c| {
             crate::db::reminders::set_status(c, &r.id, "triggered", true)?;
             if repeat != RepeatType::Once {
                 if let Some(next) = crate::db::reminders::next_occurrence(repeat, t, Utc::now()) {

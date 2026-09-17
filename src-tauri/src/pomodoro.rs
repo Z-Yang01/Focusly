@@ -20,7 +20,6 @@
 //!   `FullscreenChanged`（写 FULLSCREEN_HINT 提示位 + FULLSCREEN_WATCH 唤醒等待方）；
 //!   2s 轮询实时探测仅作兜底（硬顶 4 小时）。等待在独立任务里，事件循环不受阻塞。
 
-use rusqlite::params;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -94,6 +93,8 @@ pub enum PomodoroCmd {
         reason: String,
     },
     AddMinutes(i64),
+    /// 状态机内保留：命令层当前直调 pomodoro::complete_task，不经通道
+    #[allow(dead_code)]
     CompleteTask,
     /// 全屏状态变化（window/foreground.rs 检测线程投递）：写提示位 + watch 唤醒通知延迟等待
     FullscreenChanged(bool),
@@ -128,7 +129,8 @@ pub fn send_cmd(app: &AppHandle, cmd: PomodoroCmd) -> AppResult<()> {
     app.state::<AppState>().pomodoro.send(cmd)
 }
 
-/// 全局快捷键 pomodoro_toggle：Idle→Start（无任务绑定），Running→Pause/Resume。
+/// 私密防线：便签切换为私密时即时脱敏——清空运行快照中的任务文本（并重播事件），
+/// 同时清空会话表 running 行的任务文本快照（SQL 在 DAO `clear_task_text_for_note`）。
 pub fn scrub_private_text(app: &AppHandle, note_id: &str) {
     // 1) 运行快照：匹配便签则清空任务文本并重播事件
     if let Ok(mut g) = snapshot_cell().lock() {
@@ -140,15 +142,16 @@ pub fn scrub_private_text(app: &AppHandle, note_id: &str) {
             );
         }
     }
-    // 2) 会话表：running 状态的任务文本快照清空
+    // 2) 会话表：running 状态的任务文本快照清空（SQL 收敛进 DAO；失败必须留痕——
+    //    这是私密防线的一环，静默失败会在会话表残留私密任务文本）
     use tauri::Manager;
     let state = app.state::<AppState>();
-    let _ = state.db.with(|c| {
-        c.execute(
-            "UPDATE pomodoro_sessions SET task_text_snapshot = '' WHERE note_id = ?1 AND status = 'running'",
-            params![note_id],
-        ).map_err(crate::error::AppError::from)
-    });
+    if let Err(e) = state
+        .db
+        .with(|c| pomodoro_sessions::clear_task_text_for_note(c, note_id))
+    {
+        log::error!("私密脱敏：清理便签 {note_id} 的会话任务文本失败: {e}");
+    }
 }
 
 pub fn toggle_via_cmd(app: &AppHandle) -> AppResult<()> {
@@ -222,7 +225,13 @@ pub fn refresh_tooltip_from_snapshot(app: &AppHandle) {
     } else {
         None
     };
-    let text = tooltip_text_for(Phase::parse(&snap.phase), ends_at, pause, &snap.task_text, now);
+    let text = tooltip_text_for(
+        Phase::parse(&snap.phase),
+        ends_at,
+        pause,
+        &snap.task_text,
+        now,
+    );
     crate::tray::set_tooltip(app, &text);
 }
 
@@ -1360,12 +1369,22 @@ mod tests {
         let ends1 = ends0 + chrono::Duration::seconds(600);
         // 新 planned 下正常进行中：actual = 实际运行秒数（不超新 planned）
         assert_eq!(
-            elapsed_sec(planned1, ends1, &None, start + chrono::Duration::seconds(600)),
+            elapsed_sec(
+                planned1,
+                ends1,
+                &None,
+                start + chrono::Duration::seconds(600)
+            ),
             600
         );
         // 休眠越过加时后的 ends_at：夹到新 planned，不超额
         assert_eq!(
-            elapsed_sec(planned1, ends1, &None, ends1 + chrono::Duration::seconds(3600)),
+            elapsed_sec(
+                planned1,
+                ends1,
+                &None,
+                ends1 + chrono::Duration::seconds(3600)
+            ),
             planned1
         );
         // 时钟倒流：不为负

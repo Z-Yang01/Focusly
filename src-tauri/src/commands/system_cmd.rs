@@ -126,24 +126,19 @@ pub fn export_diagnostics(app: AppHandle, path: String) -> AppResult<()> {
         chrono::Local::now().to_rfc3339()
     ));
 
-    // 数据库健康摘要（只统计数量，不输出任何便签内容）
-    let health = state.db.with(|c| -> AppResult<serde_json::Value> {
-        let integrity = c
-            .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
-            .unwrap_or_else(|_| "query_failed".into());
-        let count = |sql: &str| -> i64 {
-            c.query_row(sql, [], |r| r.get(0)).unwrap_or(-1)
-        };
-        Ok(json!({
-            "integrity": integrity,
-            "notes_active": count("SELECT COUNT(*) FROM notes WHERE status='active' AND deleted_at IS NULL"),
-            "notes_archived": count("SELECT COUNT(*) FROM notes WHERE status='archived'"),
-            "notes_trashed": count("SELECT COUNT(*) FROM notes WHERE deleted_at IS NOT NULL"),
-            "sessions_completed": count("SELECT COUNT(*) FROM pomodoro_sessions WHERE status='completed'"),
-            "reminders_pending": count("SELECT COUNT(*) FROM reminders WHERE status='pending'"),
-        }))
-    })?;
-    lines.push(format!("db_health={}", health));
+    // 数据库健康摘要（只统计数量，不输出任何便签内容；SQL 收敛在 db::health）
+    let health = state.db.with(crate::db::health)?;
+    lines.push(format!(
+        "db_health={}",
+        json!({
+            "integrity": health.integrity,
+            "notes_active": health.notes_active,
+            "notes_archived": health.notes_archived,
+            "notes_trashed": health.notes_trashed,
+            "sessions_completed": health.sessions_completed,
+            "reminders_pending": health.reminders_pending,
+        })
+    ));
 
     // 日志尾部（最多 200 行；日志本身不含便签正文）
     let log_path = state.paths.logs.join("focusly.log");
