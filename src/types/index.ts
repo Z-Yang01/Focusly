@@ -12,7 +12,7 @@ export type FullscreenBehavior =
 export type DesktopPinState = "off" | "on" | "unsupported" | "failed";
 export type NoteFilter = "all" | "active" | "archived" | "todo";
 export type NoteFlag = "pinned" | "always_on_top" | "all_desktops";
-export type ThemeMode = "system" | "light" | "dark";
+export type ThemeMode = "system" | "light" | "dark" | "warm" | "forest" | "ocean";
 export type ShortcutAction = "toggle_notes" | "new_note" | "focus_search";
 
 export interface Note {

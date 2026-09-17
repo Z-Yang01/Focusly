@@ -16,12 +16,25 @@ const ThemeContext = createContext<ThemeCtx>({
   setTheme: () => {},
 });
 
+
 function applyTheme(mode: ThemeMode) {
+  const root = document.documentElement;
   const prefersDark =
     window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-  const dark = mode === "dark" || (mode === "system" && prefersDark);
-  document.documentElement.classList.toggle("dark", dark);
-  document.documentElement.style.colorScheme = dark ? "dark" : "light";
+
+  // system → light/dark 二选一；其余为独立主题
+  const resolved = mode === "system" ? (prefersDark ? "dark" : "light") : mode;
+  const isDark = resolved === "dark";
+
+  root.classList.toggle("dark", isDark);
+  root.style.colorScheme = isDark ? "dark" : "light";
+
+  // data-theme 切换 CSS 变量组
+  if (mode === "system" || mode === "light" || mode === "dark") {
+    delete root.dataset.theme;
+  } else {
+    root.dataset.theme = mode;
+  }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

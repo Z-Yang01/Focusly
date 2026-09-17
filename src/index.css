@@ -171,6 +171,173 @@
   color-scheme: dark;
 }
 
+
+/* ------------------------------------------------------------------ */
+/* 多主题：data-theme 切换（warm / forest / ocean / rose）              */
+/* ------------------------------------------------------------------ */
+
+/* 暖阳：橙金暖调，适合长时间阅读 */
+[data-theme="warm"] {
+  --background: hsl(32 40% 96%);
+  --foreground: hsl(20 12% 10%);
+  --card: hsl(34 35% 98%);
+  --card-foreground: hsl(20 12% 10%);
+  --popover: hsl(34 35% 98%);
+  --popover-foreground: hsl(20 12% 10%);
+  --primary: hsl(25 85% 48%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(32 30% 92%);
+  --secondary-foreground: hsl(20 12% 12%);
+  --muted: hsl(32 25% 92%);
+  --muted-foreground: hsl(20 5% 40%);
+  --accent: hsl(32 30% 91%);
+  --accent-foreground: hsl(20 12% 12%);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(30 18% 86%);
+  --input: hsl(30 18% 86%);
+  --ring: hsl(25 85% 48%);
+  --scrollbar-thumb: hsl(25 10% 50% / 0.25);
+  --scrollbar-thumb-hover: hsl(25 10% 40% / 0.45);
+  --success: hsl(142 60% 35%);
+  --warning: hsl(38 90% 45%);
+  --info: hsl(207 80% 50%);
+  --pomodoro: hsl(6 80% 50%);
+  color-scheme: light;
+}
+
+[data-theme="warm"].dark, .dark[data-theme="warm"] {
+  --background: hsl(28 15% 8%);
+  --foreground: hsl(32 25% 92%);
+  --card: hsl(28 12% 12%);
+  --card-foreground: hsl(32 25% 92%);
+  --popover: hsl(28 12% 12%);
+  --popover-foreground: hsl(32 25% 92%);
+  --primary: hsl(28 85% 58%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(28 8% 18%);
+  --secondary-foreground: hsl(32 15% 85%);
+  --muted: hsl(28 8% 16%);
+  --muted-foreground: hsl(32 5% 58%);
+  --accent: hsl(28 8% 18%);
+  --accent-foreground: hsl(32 15% 90%);
+  --destructive: hsl(0 60% 42%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(28 8% 20%);
+  --input: hsl(28 8% 20%);
+  --ring: hsl(28 85% 58%);
+  --scrollbar-thumb: hsl(28 5% 40% / 0.25);
+  --scrollbar-thumb-hover: hsl(28 5% 55% / 0.45);
+  color-scheme: dark;
+}
+
+/* 森林：鼠尾草绿 + 苔藓，护眼舒缓 */
+[data-theme="forest"] {
+  --background: hsl(140 20% 96%);
+  --foreground: hsl(150 15% 10%);
+  --card: hsl(140 25% 98%);
+  --card-foreground: hsl(150 15% 10%);
+  --popover: hsl(140 25% 98%);
+  --popover-foreground: hsl(150 15% 10%);
+  --primary: hsl(155 60% 36%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(140 15% 92%);
+  --secondary-foreground: hsl(150 15% 12%);
+  --muted: hsl(140 12% 92%);
+  --muted-foreground: hsl(150 5% 40%);
+  --accent: hsl(140 15% 91%);
+  --accent-foreground: hsl(150 15% 12%);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(140 12% 86%);
+  --input: hsl(140 12% 86%);
+  --ring: hsl(155 60% 36%);
+  --scrollbar-thumb: hsl(150 10% 50% / 0.25);
+  --scrollbar-thumb-hover: hsl(150 10% 40% / 0.45);
+  --success: hsl(142 71% 38%);
+  --pomodoro: hsl(6 78% 52%);
+  color-scheme: light;
+}
+
+[data-theme="forest"].dark, .dark[data-theme="forest"] {
+  --background: hsl(150 15% 6%);
+  --foreground: hsl(140 20% 90%);
+  --card: hsl(150 12% 10%);
+  --card-foreground: hsl(140 20% 90%);
+  --popover: hsl(150 12% 10%);
+  --popover-foreground: hsl(140 20% 90%);
+  --primary: hsl(152 55% 45%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(150 8% 16%);
+  --secondary-foreground: hsl(140 15% 85%);
+  --muted: hsl(150 8% 14%);
+  --muted-foreground: hsl(140 5% 58%);
+  --accent: hsl(150 8% 16%);
+  --accent-foreground: hsl(140 15% 88%);
+  --destructive: hsl(0 55% 40%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(150 8% 18%);
+  --input: hsl(150 8% 18%);
+  --ring: hsl(152 55% 45%);
+  --scrollbar-thumb: hsl(150 5% 40% / 0.25);
+  --scrollbar-thumb-hover: hsl(150 5% 55% / 0.45);
+  color-scheme: dark;
+}
+
+/* 海洋：蓝青冷调，清爽理性 */
+[data-theme="ocean"] {
+  --background: hsl(200 25% 96%);
+  --foreground: hsl(210 20% 10%);
+  --card: hsl(200 30% 98%);
+  --card-foreground: hsl(210 20% 10%);
+  --popover: hsl(200 30% 98%);
+  --popover-foreground: hsl(210 20% 10%);
+  --primary: hsl(200 80% 38%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(200 15% 92%);
+  --secondary-foreground: hsl(210 20% 12%);
+  --muted: hsl(200 12% 92%);
+  --muted-foreground: hsl(210 5% 40%);
+  --accent: hsl(200 15% 91%);
+  --accent-foreground: hsl(210 20% 12%);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(200 12% 86%);
+  --input: hsl(200 12% 86%);
+  --ring: hsl(200 80% 38%);
+  --scrollbar-thumb: hsl(200 10% 50% / 0.25);
+  --scrollbar-thumb-hover: hsl(200 10% 40% / 0.45);
+  --success: hsl(160 60% 35%);
+  --pomodoro: hsl(6 78% 52%);
+  color-scheme: light;
+}
+
+[data-theme="ocean"].dark, .dark[data-theme="ocean"] {
+  --background: hsl(210 20% 6%);
+  --foreground: hsl(200 20% 90%);
+  --card: hsl(210 15% 10%);
+  --card-foreground: hsl(200 20% 90%);
+  --popover: hsl(210 15% 10%);
+  --popover-foreground: hsl(200 20% 90%);
+  --primary: hsl(200 75% 50%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(210 10% 16%);
+  --secondary-foreground: hsl(200 15% 85%);
+  --muted: hsl(210 8% 14%);
+  --muted-foreground: hsl(200 5% 58%);
+  --accent: hsl(210 10% 16%);
+  --accent-foreground: hsl(200 15% 88%);
+  --destructive: hsl(0 55% 40%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(210 8% 18%);
+  --input: hsl(210 8% 18%);
+  --ring: hsl(200 75% 50%);
+  --scrollbar-thumb: hsl(210 5% 40% / 0.25);
+  --scrollbar-thumb-hover: hsl(210 5% 55% / 0.45);
+  color-scheme: dark;
+}
+
+
 /* ------------------------------------------------------------------ */
 /* 全局基础                                                            */
 /* ------------------------------------------------------------------ */
