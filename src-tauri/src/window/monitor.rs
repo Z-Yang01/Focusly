@@ -102,6 +102,38 @@ pub fn rect_visible_on_any_monitor(x: i32, y: i32, width: i32, height: i32) -> b
     })
 }
 
+#[cfg(windows)]
+/// 主显示器工作区矩形（物理像素，已扣除任务栏）；获取失败返回 None。
+/// 网格排列等平铺场景必须用工作区而非整块显示器，否则便签会盖住任务栏。
+pub fn primary_work_area_rect() -> Option<RECT> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::{
+        MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+    };
+    unsafe {
+        let hmonitor = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
+        let mut info = MONITORINFO::default();
+        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(hmonitor, &mut info).as_bool() {
+            Some(info.rcWork)
+        } else {
+            None
+        }
+    }
+}
+
+/// 主显示器工作区尺寸（物理像素）。
+pub fn primary_work_area_size() -> Option<(i32, i32)> {
+    #[cfg(windows)]
+    {
+        primary_work_area_rect().map(|r| (r.right - r.left, r.bottom - r.top))
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 #[cfg(not(windows))]
 pub fn all_monitors() -> Vec<()> {
     Vec::new()

@@ -34,13 +34,32 @@ pub fn note_id_from_label(label: &str) -> Option<&str> {
     label.strip_prefix(NOTE_LABEL_PREFIX)
 }
 
-/// 为新便签计算层叠位置（主屏右上角开始）。
+/// 新便签默认逻辑尺寸（CSS px）；落库/开窗时按主显示器 DPI 缩放为物理像素，
+/// 避免高 DPI 屏上新建便签过小（320 物理 px 在 175% 缩放下只有 183 逻辑 px）。
+pub fn default_note_size_physical(app: &AppHandle) -> (i32, i32) {
+    let scale = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+    let (w, h) = (
+        (DEFAULT_NOTE_W as f64 * scale).round() as i32,
+        (DEFAULT_NOTE_H as f64 * scale).round() as i32,
+    );
+    // 不超过主显示器工作区（极小屏兜底）
+    let (aw, ah) = monitor::primary_work_area_size().unwrap_or((i32::MAX, i32::MAX));
+    (w.min(aw), h.min(ah))
+}
+
+/// 为新便签计算层叠位置（主屏右上角开始）。宽度按 DPI 缩放后参与计算。
 pub fn cascade_position(app: &AppHandle, existing: usize) -> (i32, i32) {
     let (mut x, mut y) = (100, 80);
     if let Ok(Some(m)) = app.primary_monitor() {
         let pos = m.position();
         let size = m.size();
-        x = pos.x + size.width as i32 - DEFAULT_NOTE_W - 48 - (existing as i32 % 8) * CASCADE_STEP;
+        let (dw, _) = default_note_size_physical(app);
+        x = pos.x + size.width as i32 - dw - 48 - (existing as i32 % 8) * CASCADE_STEP;
         y = pos.y + 64 + (existing as i32 % 8) * CASCADE_STEP;
     }
     (x.max(0), y.max(0))
@@ -60,8 +79,9 @@ pub fn open_note_window(app: &AppHandle, note: &Note) -> AppResult<tauri::Webvie
         .x
         .zip(note.y)
         .unwrap_or_else(|| cascade_position(app, 0));
-    let width = note.width.unwrap_or(DEFAULT_NOTE_W);
-    let height = note.height.unwrap_or(DEFAULT_NOTE_H);
+    let (default_w, default_h) = default_note_size_physical(app);
+    let width = note.width.unwrap_or(default_w);
+    let height = note.height.unwrap_or(default_h);
     if !monitor::rect_visible_on_any_monitor(x, y, width, height) {
         let count = app.webview_windows().len();
         let (cx, cy) = cascade_position(app, count);
