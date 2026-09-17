@@ -11,23 +11,21 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::window;
 
-/// 新便签默认尺寸（与 window::DEFAULT_NOTE_W/H 保持一致）
-const NEW_NOTE_W: i32 = 320;
-const NEW_NOTE_H: i32 = 360;
-
 fn emit_notes_changed(app: &AppHandle, note_id: &str) {
     let _ = app.emit(crate::events::NOTES_CHANGED, json!({ "noteId": note_id }));
 }
 
 /// 只建行并写入层叠几何，不打开窗口（create_note 命令用）。
 /// 建行 + 几何写入同事务，避免半成品行（有行无几何）。
+/// 默认尺寸按主显示器 DPI 缩放（320×360 为逻辑 px），高 DPI 屏不再过小。
 pub fn create_record(app: &AppHandle) -> AppResult<Note> {
     let state = app.state::<AppState>();
     let active = state.db.with(|c| crate::db::notes::count(c, "active"))?;
     let (x, y) = window::cascade_position(app, active.max(0) as usize);
+    let (w, h) = window::default_note_size_physical(app);
     state.db.tx(|c| {
         let note = crate::db::notes::create(c, "", "")?;
-        crate::db::notes::update_geometry(c, &note.id, x, y, NEW_NOTE_W, NEW_NOTE_H, None)?;
+        crate::db::notes::update_geometry(c, &note.id, x, y, w, h, None)?;
         crate::db::notes::get(c, &note.id)
     })
 }

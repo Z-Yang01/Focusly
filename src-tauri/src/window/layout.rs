@@ -100,11 +100,11 @@ fn monitor_device_of(_x: i32, _y: i32, _w: i32, _h: i32) -> Option<String> {
     None
 }
 
-/// 主显示器矩形（物理像素）：保守用 Win32 枚举的第一个显示器矩形（不内缩任务栏）。
+/// 主显示器工作区（物理像素，已扣除任务栏）。网格平铺以工作区为界，
+/// 避免便签铺到任务栏底下；拿不到时退回 Tauri 主显示器矩形。
 #[cfg(windows)]
 fn primary_work_area(app: &AppHandle) -> (i32, i32, i32, i32) {
-    if let Some(m) = super::monitor::all_monitors().first() {
-        let r = m.rect;
+    if let Some(r) = super::monitor::primary_work_area_rect() {
         return (r.left, r.top, r.right - r.left, r.bottom - r.top);
     }
     tauri_primary_area(app)
@@ -127,28 +127,29 @@ fn tauri_primary_area(app: &AppHandle) -> (i32, i32, i32, i32) {
 /// 应用一批 slot：有打开窗口则 set_size/set_position（Physical，尺寸下限与
 /// open_note_window 一致）并 update_geometry 写库；无窗口仅写库（下次
 /// open_note_window 恢复位置）。不动 scale。
+/// 预设/历史坐标可能来自已断开的显示器：先按当前工作区 clamp，保证可见。
 pub fn apply_layout_note(app: &AppHandle, slots: &[WindowSlot]) {
     let state = app.state::<AppState>();
+    let area = primary_work_area(app);
     for slot in slots {
         let label = super::note_label(&slot.note_id);
         let monitor = monitor_device_of(slot.x, slot.y, slot.w, slot.h);
+        let mut rect = (slot.x, slot.y, slot.w, slot.h);
+        if !super::monitor::rect_visible_on_any_monitor(rect.0, rect.1, rect.2, rect.3) {
+            // 越界：clamp 回主工作区（保留尺寸，只拉回位置；尺寸本身不超过工作区）
+            let (ax, ay, aw, ah) = area;
+            rect.2 = rect.2.clamp(120, aw);
+            rect.3 = rect.3.clamp(100, ah);
+            rect.0 = rect.0.clamp(ax, ax + aw - rect.2);
+            rect.1 = rect.1.clamp(ay, ay + ah - rect.3);
+        }
+        let (x, y, w, h) = rect;
         if let Some(win) = app.get_webview_window(&label) {
-            let _ = win.set_size(PhysicalSize::new(
-                slot.w.max(120) as u32,
-                slot.h.max(100) as u32,
-            ));
-            let _ = win.set_position(PhysicalPosition::new(slot.x, slot.y));
+            let _ = win.set_size(PhysicalSize::new(w.max(120) as u32, h.max(100) as u32));
+            let _ = win.set_position(PhysicalPosition::new(x, y));
         }
         if let Err(e) = state.db.with(|c| {
-            crate::db::notes::update_geometry(
-                c,
-                &slot.note_id,
-                slot.x,
-                slot.y,
-                slot.w,
-                slot.h,
-                monitor.as_deref(),
-            )
+            crate::db::notes::update_geometry(c, &slot.note_id, x, y, w, h, monitor.as_deref())
         }) {
             log::warn!("布局几何写库失败 {}: {e}", slot.note_id);
         }
