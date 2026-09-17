@@ -55,11 +55,12 @@ import { DailyNoteButton } from "@/features/templates/DailyNoteButton";
 import { ImageManagerDialog } from "@/features/gallery/ImageManagerDialog";
 import { StatsDialog } from "@/features/pomodoro/StatsDialog";
 import { DndSettingsCard } from "@/features/dnd/DndSettingsCard";
+import { TimelineView } from "@/features/daily-tasks/TimelineView";
 import { cn } from "@/lib/utils";
 import { QuickTodoInput } from "@/features/todo/QuickTodoInput";
 import { toast } from "@/stores/toast";
 
-type ViewKey = "all" | "todo" | "archived" | "today" | "trash" | "private";
+type ViewKey = "all" | "todo" | "plan" | "archived" | "today" | "trash" | "private";
 
 function ManagerContent() {
   const queryClient = useQueryClient();
@@ -84,6 +85,7 @@ function ManagerContent() {
     const onNavigate = (e: Event) => {
       const detail = (e as CustomEvent<NavigateDetail>).detail;
       if (detail.view === "today") setView("today");
+      else if (detail.view === "plan") setView("plan");
       else if (detail.view === "trash") setView("trash");
       else if (detail.view === "search" && detail.query) {
         setView("all");
@@ -197,6 +199,7 @@ function ManagerContent() {
   const views: { key: ViewKey; label: string; icon: typeof StickyNote; count?: number }[] = [
     { key: "all", label: "全部便签", icon: StickyNote, count: activeQuery.data?.length ?? 0 },
     { key: "todo", label: "待办", icon: SquareCheck, count: todoQuery.data?.length ?? 0 },
+    { key: "plan", label: "今日计划", icon: CalendarClock },
     { key: "today", label: "今日 / 逾期", icon: CalendarClock },
     { key: "archived", label: "已归档", icon: Archive, count: archivedQuery.data?.length ?? 0 },
     { key: "trash", label: "回收站", icon: Trash2 },
@@ -397,7 +400,9 @@ function ManagerContent() {
               <QuickTodoInput onSubmit={handleQuickTodo} />
             </div>
           )}
-          {view === "today" ? (
+          {view === "plan" ? (
+              <TimelineView className="h-full" />
+            ) : view === "today" ? (
               <TodayOverdueView onOpenNote={handleOpenNote} />
             ) : view === "trash" ? (
               <div className="h-full">

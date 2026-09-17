@@ -2,6 +2,7 @@
 
 mod commands;
 mod daily;
+mod daily_task;
 mod db;
 mod desktop_pin;
 mod dnd;
@@ -103,6 +104,7 @@ pub fn run() {
             // 7. 全屏检测 + 提醒调度器（依赖已 manage 的状态）
             window::foreground::spawn(app.handle().clone());
             reminder::spawn_loop(app.handle().clone(), scheduler_rx);
+            daily_task::spawn_notifier(app.handle().clone());
 
             Ok(())
         })
@@ -114,6 +116,15 @@ pub fn run() {
             commands::notes_cmd::create_note,
             commands::notes_cmd::new_note,
             commands::notes_cmd::open_note_window,
+            commands::daily_task_cmd::daily_task_create,
+            commands::daily_task_cmd::daily_task_update,
+            commands::daily_task_cmd::daily_task_list,
+            commands::daily_task_cmd::daily_task_set_status,
+            commands::daily_task_cmd::daily_task_set_time,
+            commands::daily_task_cmd::daily_task_delete,
+            commands::daily_task_cmd::daily_task_stats,
+            commands::daily_task_cmd::daily_task_to_note,
+            commands::daily_task_cmd::daily_task_search,
             commands::notes_cmd::get_note,
             commands::notes_cmd::list_notes,
             commands::notes_cmd::update_note_content,

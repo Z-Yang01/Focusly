@@ -2,6 +2,7 @@
  *  后端未就绪时降级为提示 + 重试。 */
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { dailyTaskStats } from "@/lib/api";
 import { pomodoroStatsRange, pomodoroStatsToday } from "./api";
 import { computeStreak, heatTier, humanizeSec, localDateKey } from "./format";
 import type { DailyStat, StatsToday } from "./types";
@@ -54,6 +55,7 @@ function StatCard({ label, value, className }: StatCardProps) {
 
 export function StatsDialog({ open, onOpenChange }: StatsDialogProps) {
   const [today, setToday] = useState<StatsToday | null>(null);
+  const [taskStats, setTaskStats] = useState<import("@/types").DailyTaskStats | null>(null);
   const [days, setDays] = useState<DailyStat[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -66,7 +68,12 @@ export function StatsDialog({ open, onOpenChange }: StatsDialogProps) {
     setFailed(false);
     void (async () => {
       try {
-        const [t, r] = await Promise.all([pomodoroStatsToday(), pomodoroStatsRange(RANGE_DAYS)]);
+        const [t, r, dt] = await Promise.all([
+          pomodoroStatsToday(),
+          pomodoroStatsRange(RANGE_DAYS),
+          dailyTaskStats(localDateKey(new Date())).catch(() => null),
+        ]);
+        setTaskStats(dt);
         if (!alive) return;
         setToday(t);
         setDays(r);
@@ -130,6 +137,18 @@ export function StatsDialog({ open, onOpenChange }: StatsDialogProps) {
               </div>
               <div className="mt-2.5 rounded-lg border px-3 py-2 text-xs text-muted-foreground">
                 中断次数<span className="ml-2 font-medium tabular-nums text-foreground">{today?.interrupts ?? 0}</span>
+              </div>
+              <div className="mt-2.5 rounded-lg border px-3 py-2">
+                <div className="mb-1 text-xs font-medium">今日计划任务</div>
+                {taskStats ? (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>完成 {taskStats.done}/{taskStats.total} · 跳过 {taskStats.skipped}</span>
+                    <span>🍅 {taskStats.completedPomodoros}/{taskStats.estimatePomodoros}</span>
+                    <span className="col-span-2">已完成任务的计划专注时长 {taskStats.plannedFocusMinutes} 分钟</span>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">暂无任务数据</div>
+                )}
               </div>
             </TabsContent>
 

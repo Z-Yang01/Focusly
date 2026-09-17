@@ -301,3 +301,48 @@ pub struct TaskMeta {
     pub skip_date: Option<String>,
     pub updated_at: String,
 }
+
+/// 今日任务（daily_tasks 表）：独立于便签的时间轴任务。
+/// status: todo | done | skipped；repeat_rule: none | daily | weekly | weekday。
+/// repeat_rule != none 的行是"模板"：由 `materialize_recurring` 按日物化为
+/// source_task_id 指向模板、repeat_rule='none' 的实例行。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyTask {
+    pub id: String,
+    /// 本地日期 YYYY-MM-DD
+    pub date: String,
+    /// 本地时刻 HH:MM（可空 = 无固定时间，排在"全天/未排时"区）
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub title: String,
+    pub note: Option<String>,
+    pub estimate_pomodoros: i64,
+    pub completed_pomodoros: i64,
+    /// high | medium | low
+    pub priority: String,
+    /// todo | done | skipped
+    pub status: String,
+    /// 逗号分隔标签（轻量存储，不做关系表）
+    pub tags: Option<String>,
+    pub repeat_rule: String,
+    pub is_private: bool,
+    pub start_notified: bool,
+    /// 重复模板实例的来源模板 id
+    pub source_task_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// 今日任务统计（时间轴头部与番茄统计页共用）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyTaskStats {
+    pub total: i64,
+    pub done: i64,
+    pub skipped: i64,
+    pub estimate_pomodoros: i64,
+    pub completed_pomodoros: i64,
+    /// 已完成任务的计划专注时长（分钟；按 start/end 差值累计，缺 end 按 0）
+    pub planned_focus_minutes: i64,
+}

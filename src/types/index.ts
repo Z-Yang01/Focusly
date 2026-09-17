@@ -353,3 +353,41 @@ export const POMODORO_EVENTS = {
   finished: "pomodoro-finished",
   taskMetaChanged: "task-meta-changed",
 } as const;
+
+/** 今日任务（daily_tasks 表，与 Rust db/models.rs DailyTask serde camelCase 输出对应）。
+ *  status: todo | done | skipped；repeatRule: none | daily | weekly | weekday；
+ *  repeatRule != none 的行是模板，不会出现在日视图（list 先物化实例）。 */
+export interface DailyTask {
+  id: string;
+  /** 本地日期 YYYY-MM-DD */
+  date: string;
+  /** 本地时刻 HH:MM；null = 未排时（排在日视图末尾"未排时"区） */
+  startTime: string | null;
+  endTime: string | null;
+  title: string;
+  note: string | null;
+  estimatePomodoros: number;
+  completedPomodoros: number;
+  /** high | medium | low */
+  priority: string;
+  /** todo | done | skipped */
+  status: string;
+  tags: string | null;
+  repeatRule: string;
+  isPrivate: boolean;
+  startNotified: boolean;
+  sourceTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** daily_task_stats 返回（时间轴头部 + 统计页共用） */
+export interface DailyTaskStats {
+  total: number;
+  done: number;
+  skipped: number;
+  estimatePomodoros: number;
+  completedPomodoros: number;
+  /** 已完成任务的计划专注时长（分钟） */
+  plannedFocusMinutes: number;
+}

@@ -28,6 +28,9 @@ import {
 } from "./api";
 import { RecentSearches, genId, loadLocalSaved, loadRecent, pushRecent, removeRecentItem, writeLocalSaved } from "./RecentSearches";
 import { SearchResults, applyStructuredFilters, moveActive } from "./SearchResults";
+import { localDateKey, parseTaskQuery } from "@/features/daily-tasks/timeline";
+import { dailyTaskSearch } from "@/lib/api";
+import type { DailyTask } from "@/types";
 import { SyntaxHints, buildCompletion, trailingContext, type CompletionOption } from "./SyntaxHints";
 
 export interface SearchBarHandle {
@@ -46,6 +49,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
 ) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
+  const [taskHits, setTaskHits] = useState<DailyTask[]>([]);
   const [searchError, setSearchError] = useState(false);
   const [searching, setSearching] = useState(false);
   const [active, setActive] = useState(-1);
@@ -106,6 +110,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
   useEffect(() => {
     if (!parsed.raw.trim()) {
       setHits([]);
+      setTaskHits([]);
       setSearchError(false);
       setSearching(false);
       setActive(-1);
@@ -137,6 +142,26 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
       clearTimeout(timer);
     };
   }, [parsed]);
+
+  // 任务 token（is:task / is:today / status:… / due:today）→ 并行拉取今日任务
+  useEffect(() => {
+    const tokens = parseTaskQuery(parsed.raw, localDateKey(new Date()));
+    if (!tokens) {
+      setTaskHits([]);
+      return;
+    }
+    let alive = true;
+    dailyTaskSearch(tokens.text, tokens.status ?? undefined, tokens.date ?? undefined)
+      .then((list) => {
+        if (alive) setTaskHits(list);
+      })
+      .catch(() => {
+        if (alive) setTaskHits([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [parsed.raw]);
 
   // tag: 补全首次展开时拉取标签列表
   useEffect(() => {
@@ -371,6 +396,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
           {mode === "results" && (
             <SearchResults
               filtered={filtered}
+              tasks={taskHits}
               parsed={parsed}
               pending={pending}
               active={active}

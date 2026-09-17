@@ -24,7 +24,7 @@ export const FOCUSLY_OPEN_SETTINGS = "focusly:open-settings";
 export const FOCUSLY_NAVIGATE = "focusly:navigate";
 
 export interface NavigateDetail {
-  view: "today" | "trash" | "search";
+  view: "today" | "trash" | "search" | "plan";
   /** view=search 时携带搜索词 */
   query?: string;
 }

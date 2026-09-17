@@ -1,3 +1,4 @@
+pub mod daily_tasks;
 pub mod clipboard;
 pub mod images;
 pub mod layouts;

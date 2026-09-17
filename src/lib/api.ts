@@ -4,6 +4,8 @@ import type {
   AppInfo,
   ClipboardEntry,
   DailyStat,
+  DailyTask,
+  DailyTaskStats,
   DupGroup,
   DueViewData,
   FullscreenBehavior,
@@ -228,3 +230,33 @@ export const noteWindowReady = (noteId: string) => invoke<void>("note_window_rea
 export const closeNoteWindow = (noteId: string) => invoke<void>("close_note_window", { noteId });
 export const openExternal = (url: string) => invoke<void>("open_external", { url });
 export const revealDataDir = () => invoke<void>("reveal_data_dir");
+
+// ---------- 今日任务时间轴 ----------
+export interface DailyTaskInput {
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  title: string;
+  note: string | null;
+  estimatePomodoros: number;
+  priority: string;
+  repeatRule: string;
+  tags: string | null;
+  isPrivate: boolean;
+}
+export const dailyTaskCreate = (input: DailyTaskInput) =>
+  invoke<DailyTask>("daily_task_create", { ...input });
+export const dailyTaskUpdate = (id: string, input: DailyTaskInput) =>
+  invoke<DailyTask>("daily_task_update", { id, ...input });
+export const dailyTaskList = (date: string) => invoke<DailyTask[]>("daily_task_list", { date });
+export const dailyTaskSetStatus = (id: string, status: string) =>
+  invoke<DailyTask>("daily_task_set_status", { id, status });
+export const dailyTaskSetTime = (id: string, startTime: string | null, endTime: string | null) =>
+  invoke<DailyTask>("daily_task_set_time", { id, startTime, endTime });
+export const dailyTaskDelete = (id: string) => invoke<void>("daily_task_delete", { id });
+export const dailyTaskStats = (date: string) =>
+  invoke<DailyTaskStats>("daily_task_stats", { date });
+/** 任务转便签：返回新建便签（不自动开窗，由调用方决定） */
+export const dailyTaskToNote = (id: string) => invoke<Note>("daily_task_to_note", { id });
+export const dailyTaskSearch = (query: string, status?: string, date?: string) =>
+  invoke<DailyTask[]>("daily_task_search", { query, status, date });

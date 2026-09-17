@@ -42,22 +42,22 @@
 
 ## B 类：P1 新功能
 
-### B1. 今日任务时间轴 + 番茄钟列表 — doing
+### B1. 今日任务时间轴 + 番茄钟列表 — doing（B1.1–B1.12 代码完成，E2E 验收中）
 需求：独立于便签的每日时间轴视图（daily_tasks 表），支持番茄绑定、完成/跳过、拖拽调时、到点通知、重复规则生成、任务↔便签互通、统计与搜索集成。
 
-- B1.1 迁移 v8：daily_tasks 表 + pomodoro_sessions.daily_task_id 外键 — todo
-- B1.2 Rust DAO（db/daily_tasks.rs）：CRUD、按日列表、重复模板物化、统计 — todo
-- B1.3 Rust commands + api.ts：daily_task_create/update/delete/list/toggle/to_note — todo
-- B1.4 番茄绑定：start 携带 daily_task_id，完成时 completed_pomodoros+1 — todo
-- B1.5 前端 TimelineView：时间轴、任务块、当前时间线、日期切换、今日进度 — todo
-- B1.6 添加/编辑任务对话框 — todo
-- B1.7 拖拽调整时间块（垂直移动，15 分钟吸附）— todo
-- B1.8 到点通知（复用 Windows 通知 + 勿扰 + 私密脱敏）— todo
-- B1.9 重复规则自动生成次日/每周任务 — todo
-- B1.10 便签待办 ⇄ 今日计划 互通 — todo
-- B1.11 统计集成（今日完成 X/Y · 番茄 A/B、专注时长）— todo
-- B1.12 搜索 token：is:today is:task status:done due:today — todo
-- B1.13 测试：DAO 单测 + 前端纯函数（时间轴布局/重复匹配）+ 门禁 — todo
+- B1.1 迁移 v8：daily_tasks 表 + pomodoro_sessions.daily_task_id 外键 — done（id 用 TEXT uuid，与全库约定一致）
+- B1.2 Rust DAO（db/daily_tasks.rs）：CRUD、按日列表、重复模板物化、统计 — done（10 单测）
+- B1.3 Rust commands + api.ts：daily_task_create/update/delete/list/set_status/set_time/stats/to_note/search — done（9 命令，契约快照 87→96）
+- B1.4 番茄绑定：task_key="daily:<id>" 约定，会话落库 daily_task_id，Focus 完成回写 completed_pomodoros — done
+- B1.5 前端 TimelineView：时间轴、任务块、当前时间线、日期切换、今日进度 — done
+- B1.6 添加/编辑任务对话框（TaskDialog）— done
+- B1.7 拖拽调整时间块（垂直移动，15 分钟吸附，时长不变）— done
+- B1.8 到点通知（独立 30s ticker；勿扰内挂起、时段后补发；私密任务通知脱敏）— done
+- B1.9 重复规则自动生成（daily/weekly/weekday 模板按日物化实例，幂等）— done
+- B1.10 便签待办 →"加入今日计划"（右键菜单）；任务 → 转为便签并打开 — done
+- B1.11 统计集成（时间轴头部 + StatsDialog 今日 tab 任务区块）— done
+- B1.12 搜索 token：is:task / is:today / due:today / status:todo|done|skipped → 搜索面板任务分区 — done
+- B1.13 测试：DAO 单测 + 前端纯函数（时间轴布局/重复匹配）+ 门禁 — done（cargo 197 / vitest 248 / clippy+eslint+tsc 全绿；E2E 见下）
 
 ---
 

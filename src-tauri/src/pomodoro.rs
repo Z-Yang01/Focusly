@@ -779,13 +779,23 @@ fn phase_end(app: &AppHandle, st: &mut Machine) {
     let completed_before = r.completed_in_cycle;
     if finished == Phase::Focus {
         r.completed_in_cycle += 1;
-        if !r.note_id.is_empty() && !r.task_key.is_empty() {
-            let state = app.state::<AppState>();
-            if let Err(e) = state
-                .db
-                .with(|c| crate::db::task_meta::incr_completed(c, &r.note_id, &r.task_key))
-            {
-                log::warn!("番茄钟 completed_pomodoros 累加失败: {e}");
+        let state = app.state::<AppState>();
+        // 今日任务绑定（task_key = "daily:<id>"）：只回写任务完成番茄数
+        match pomodoro_sessions::daily_task_id_of(&r.task_key) {
+            Some(daily_id) => {
+                if let Err(e) = state.db.with(|c| crate::db::daily_tasks::incr_completed(c, daily_id)) {
+                    log::warn!("今日任务 completed_pomodoros 累加失败: {e}");
+                }
+            }
+            None => {
+                if !r.note_id.is_empty() && !r.task_key.is_empty() {
+                    if let Err(e) = state
+                        .db
+                        .with(|c| crate::db::task_meta::incr_completed(c, &r.note_id, &r.task_key))
+                    {
+                        log::warn!("番茄钟 completed_pomodoros 累加失败: {e}");
+                    }
+                }
             }
         }
     }

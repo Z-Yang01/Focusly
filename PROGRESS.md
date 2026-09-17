@@ -19,3 +19,12 @@
 - A4：默认便签尺寸按 DPI 缩放（320×360 逻辑 px）
 - 门禁：cargo test 185 ✅
 - 下一轮：B1.1–B1.3（迁移 v8 + DAO + commands）
+
+### 第 1 轮（02:50–04:20）：B1 主体
+- 迁移 v8（daily_tasks 16 列 + pomodoro_sessions.daily_task_id）
+- db/daily_tasks.rs DAO 10 单测；daily_task.rs 服务（30s 通知 ticker + 转便签）
+- 9 个新命令 + api.ts 封装 + types；契约快照 87→96
+- TimelineView（时间轴/拖拽/当前时间线）+ TaskDialog + 管理器"今日计划"视图
+- 便签任务右键"加入今日计划"；任务转便签；StatsDialog 任务区块；搜索 token
+- 门禁：cargo 197 ✅ vitest 248 ✅ tsc/eslint/clippy/fmt ✅
+- 下一轮：重建 exe → CDP E2E 验收 → 提交推送

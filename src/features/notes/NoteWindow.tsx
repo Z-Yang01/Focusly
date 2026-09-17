@@ -29,6 +29,7 @@ import {
   showManager,
   snoozeReminder,
   trashNote,
+  dailyTaskCreate,
 } from "@/lib/api";
 import { onNotesChanged, onReminderFired, type UnlistenFn } from "@/lib/tauri";
 import { savedAtText } from "@/lib/format";
@@ -865,6 +866,30 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 act: () =>
                   taskMenu &&
                   void pomodoroCompleteTask(noteId, taskMenu.taskKey, taskMenu.lineText),
+              },
+              {
+                label: "📅 加入今日计划",
+                act: () =>
+                  taskMenu &&
+                  void dailyTaskCreate({
+                    date: localDateKey(new Date()),
+                    startTime: null,
+                    endTime: null,
+                    title: taskMenu.lineText,
+                    note: `来自便签：${detail?.title || noteId.slice(0, 8)}`,
+                    estimatePomodoros: 0,
+                    priority: "medium",
+                    repeatRule: "none",
+                    tags: null,
+                    isPrivate: Boolean(detail?.isPrivate),
+                  })
+                    .then(() => toast.success("已加入今日计划"))
+                    .catch((err: unknown) => {
+                      console.error("加入今日计划失败", err);
+                      toast.error(
+                        `加入失败：${err instanceof Error ? err.message : String(err)}`,
+                      );
+                    }),
               },
               ...[1, 2, 3, 5, 8].map((n) => ({
                 label: `🍅 预计番茄数：${n}`,
