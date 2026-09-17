@@ -184,8 +184,8 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
                 "INSERT OR REPLACE INTO notes \
                  (id, title, content, content_format, status, is_pinned, is_always_on_top, \
                   show_on_all_desktops, desktop_pin_state, fullscreen_behavior, x, y, width, height, \
-                  monitor_id, created_at, updated_at, archived_at, deleted_at, is_private, locked, readonly_flag, scale) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+                  monitor_id, created_at, updated_at, archived_at, deleted_at, is_private, locked, readonly_flag, scale, pin_mode) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
                 params![
                     n.id,
                     n.title,
@@ -210,6 +210,8 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
                     n.locked as i64,
                     n.readonly as i64,
                     n.scale,
+                    // 列为 NOT NULL DEFAULT 'normal'；旧导出文件缺省 pinMode 时按建表默认值落库
+                    n.pin_mode.clone().unwrap_or_else(|| "normal".into()),
                 ],
             )?;
             note_ids.insert(n.id.clone());

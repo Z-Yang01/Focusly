@@ -9,10 +9,11 @@
 //! 测试里带了补列垫片（见 tests::setup），v2 落地后垫片自动跳过。
 
 use chrono::{Duration, Local, NaiveDate};
-use rusqlite::{Connection, Row};
+use rusqlite::Connection;
 use serde::Serialize;
 
-use super::models::{Note, NoteSummary};
+use super::models::NoteSummary;
+use super::notes::{row_to_note, NOTE_COLS};
 use crate::error::AppResult;
 
 /// 单条到期视图条目：NoteSummary 平铺 + 该分区内的到期任务数。
@@ -34,41 +35,8 @@ pub struct TodoView {
     pub next7days: Vec<DueNoteSummary>,
 }
 
-// notes.rs 的 row_to_note/NOTE_COLS 是私有的，为了不动那个文件这里本地保留一份
-// （列清单与 v2 迁移后的 notes 表一致：deleted_at/is_private/locked/readonly_flag/scale）。
-const NOTE_COLS: &str =
-    "id, title, content, content_format, status, is_pinned, is_always_on_top, show_on_all_desktops, \
-     desktop_pin_state, fullscreen_behavior, x, y, width, height, monitor_id, created_at, updated_at, archived_at, \
-     deleted_at, is_private, locked, readonly_flag, scale";
-
-fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
-    Ok(Note {
-        id: r.get("id")?,
-        title: r.get("title")?,
-        content: r.get("content")?,
-        content_format: r.get("content_format")?,
-        status: r.get("status")?,
-        is_pinned: r.get::<_, i64>("is_pinned")? != 0,
-        is_always_on_top: r.get::<_, i64>("is_always_on_top")? != 0,
-        show_on_all_desktops: r.get::<_, i64>("show_on_all_desktops")? != 0,
-        desktop_pin_state: r.get("desktop_pin_state")?,
-        fullscreen_behavior: r.get("fullscreen_behavior")?,
-        x: r.get("x")?,
-        y: r.get("y")?,
-        width: r.get("width")?,
-        height: r.get("height")?,
-        monitor_id: r.get("monitor_id")?,
-        created_at: r.get("created_at")?,
-        updated_at: r.get("updated_at")?,
-        archived_at: r.get("archived_at")?,
-        deleted_at: r.get("deleted_at")?,
-        is_private: r.get::<_, i64>("is_private")? != 0,
-        locked: r.get::<_, i64>("locked")? != 0,
-        readonly: r.get::<_, i64>("readonly_flag")? != 0,
-        pin_mode: Some(r.get::<_, String>("pin_mode").unwrap_or_default()),
-        scale: r.get("scale")?,
-    })
-}
+// 列清单与行映射统一复用 db::notes 的 NOTE_COLS/row_to_note（含 pin_mode），
+// 消除本地副本（v6 加列时曾因两处清单漂移导致到期视图读不到 pin_mode）。
 
 /// 提取文本中最后一个合法的 `^YYYY-MM-DD` 到期日。
 /// 用 `str::get` 取子串，避免多字节字符上按字节切片 panic。

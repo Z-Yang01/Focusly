@@ -121,6 +121,18 @@ pub fn list_for_note(conn: &Connection, note_id: &str) -> AppResult<Vec<NoteImag
     Ok(list)
 }
 
+/// 全表图片记录（imagemgr 重复检测/孤儿清理/缩略图用；调用方先取数后做文件 IO）。
+pub fn list_all(conn: &Connection) -> AppResult<Vec<NoteImage>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, note_id, path, filename, width, height, created_at \
+         FROM note_images",
+    )?;
+    let list = stmt
+        .query_map([], row_to_image)?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(list)
+}
+
 pub fn remove(conn: &Connection, images_root: &Path, id: &str) -> AppResult<()> {
     let img = get(conn, id)?;
     conn.execute("DELETE FROM note_images WHERE id=?1", params![id])?;

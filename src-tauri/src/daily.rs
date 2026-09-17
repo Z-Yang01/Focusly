@@ -107,7 +107,7 @@ pub fn get_or_create_daily(app: &AppHandle) -> AppResult<Note> {
     };
     crate::window::open_note_window(app, &note)?;
     if created {
-        let _ = app.emit("notes-changed", json!({ "noteId": note.id }));
+        let _ = app.emit(crate::events::NOTES_CHANGED, json!({ "noteId": note.id }));
         log::info!("已创建每日笔记 {}", note.id);
     }
     Ok(note)

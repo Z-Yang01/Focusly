@@ -91,6 +91,16 @@ pub fn finish(
     Ok(())
 }
 
+/// 私密防线：清空某便签运行中会话的任务文本快照，返回清理行数。
+pub fn clear_task_text_for_note(conn: &Connection, note_id: &str) -> AppResult<usize> {
+    let n = conn.execute(
+        "UPDATE pomodoro_sessions SET task_text_snapshot = '' \
+         WHERE note_id = ?1 AND status = 'running'",
+        params![note_id],
+    )?;
+    Ok(n)
+}
+
 /// 最近一条运行中的会话（应用重启恢复用）。
 pub fn get_running(conn: &Connection) -> AppResult<Option<PomodoroSession>> {
     let r = conn.query_row(

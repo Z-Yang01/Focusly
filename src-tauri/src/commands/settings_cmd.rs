@@ -75,7 +75,7 @@ pub fn set_setting(
         }
     }
 
-    let _ = app.emit("settings-changed", json!({"key": key, "value": value}));
+    let _ = app.emit(crate::events::SETTINGS_CHANGED, json!({"key": key, "value": value}));
     Ok(())
 }
 
@@ -195,7 +195,7 @@ pub fn set_shortcut(
     // 重注册全部（失败条目内部已记录，不影响整体返回）
     crate::shortcut::register_all(&app)?;
     let _ = app.emit(
-        "settings-changed",
+        crate::events::SETTINGS_CHANGED,
         json!({"key": "shortcuts", "action": action, "value": normalized}),
     );
     Ok(())
@@ -206,7 +206,7 @@ pub fn reset_shortcuts(app: AppHandle, state: State<'_, AppState>) -> AppResult<
     state.db.with(crate::db::shortcuts::reset_all)?;
     crate::shortcut::register_all(&app)?;
     let _ = app.emit(
-        "settings-changed",
+        crate::events::SETTINGS_CHANGED,
         json!({"key": "shortcuts", "value": "reset"}),
     );
     Ok(())

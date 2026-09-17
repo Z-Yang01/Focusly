@@ -1346,4 +1346,62 @@ mod tests {
         assert!(s <= n);
         assert!(n - s <= chrono::Duration::hours(25));
     }
+
+    // ---------- 边界补缺（可靠性审查追加） ----------
+
+    #[test]
+    fn elapsed_after_add_minutes_still_clamped() {
+        // AddMinutes 语义：planned_sec 与 ends_at 同加。延时后（含休眠越界）仍按新 planned 夹紧
+        let start = at(2026, 9, 16, 10, 0, 0);
+        let planned0 = 1500i64;
+        let ends0 = start + chrono::Duration::seconds(planned0);
+        // +10 分钟：planned/ends 同步增长
+        let planned1 = planned0 + 600;
+        let ends1 = ends0 + chrono::Duration::seconds(600);
+        // 新 planned 下正常进行中：actual = 实际运行秒数（不超新 planned）
+        assert_eq!(
+            elapsed_sec(planned1, ends1, &None, start + chrono::Duration::seconds(600)),
+            600
+        );
+        // 休眠越过加时后的 ends_at：夹到新 planned，不超额
+        assert_eq!(
+            elapsed_sec(planned1, ends1, &None, ends1 + chrono::Duration::seconds(3600)),
+            planned1
+        );
+        // 时钟倒流：不为负
+        assert_eq!(elapsed_sec(planned1, ends1, &None, start), 0);
+    }
+
+    #[test]
+    fn skip_while_paused_actual_uses_pause_remaining() {
+        // Skip 在暂停态：actual_sec 用暂停时刻的剩余（不吃挂钟），夹在 [0, planned]
+        let start = at(2026, 9, 16, 10, 0, 0);
+        let ends = start + chrono::Duration::seconds(1500);
+        // 跑 10 分钟后暂停（剩余 900s），暂停期间休眠 2 小时再 Skip：actual 仍 = 600
+        let pause = Some((start + chrono::Duration::seconds(600), 900i64));
+        let after_sleep = start + chrono::Duration::seconds(600 + 7200);
+        assert_eq!(elapsed_sec(1500, ends, &pause, after_sleep), 600);
+        // 极端：暂停发生在 ends_at 之后（剩余夹 0）→ actual = planned
+        let pause_zero = Some((ends + chrono::Duration::seconds(60), 0i64));
+        assert_eq!(elapsed_sec(1500, ends, &pause_zero, after_sleep), 1500);
+    }
+
+    #[test]
+    fn snapshot_remaining_nonnegative_when_ends_at_passed() {
+        // ends_at 已过（心跳唤醒间隙读取快照）：remaining 夹 0，不出负数
+        let start = at(2026, 9, 16, 10, 0, 0);
+        let running = Machine::Running(Box::new(RunningState {
+            session_id: "s".into(),
+            note_id: "n1".into(),
+            task_key: "k1".into(),
+            task_text: String::new(),
+            phase: Phase::Focus,
+            planned_sec: 1500,
+            ends_at: start + chrono::Duration::seconds(1500),
+            pause: None,
+            completed_in_cycle: 0,
+        }));
+        let snap = snapshot_of(&running, start + chrono::Duration::seconds(1500 + 90));
+        assert_eq!(snap.remaining_sec, 0);
+    }
 }

@@ -13,7 +13,7 @@ fn now_secs() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
 }
 
-fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
+pub(crate) fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
     Ok(Note {
         id: r.get("id")?,
         title: r.get("title")?,
@@ -42,7 +42,8 @@ fn row_to_note(r: &Row) -> rusqlite::Result<Note> {
     })
 }
 
-const NOTE_COLS: &str =
+/// notes 表全列清单（单一事实源：todos_view 等本地投影统一引用，防止列漂移）。
+pub(crate) const NOTE_COLS: &str =
     "id, title, content, content_format, status, is_pinned, is_always_on_top, show_on_all_desktops, \
      desktop_pin_state, fullscreen_behavior, x, y, width, height, monitor_id, created_at, updated_at, archived_at, \
      deleted_at, is_private, locked, readonly_flag, pin_mode, scale";
@@ -211,9 +212,9 @@ pub fn update(conn: &Connection, u: &NoteUpdate) -> AppResult<Note> {
     }
     if let Some(v) = u.scale {
         bind("scale", Box::new(v));
-        if let Some(ref v) = u.pin_mode {
-            bind("pin_mode", Box::new(v.clone()));
-        }
+    }
+    if let Some(ref v) = u.pin_mode {
+        bind("pin_mode", Box::new(v.clone()));
     }
     if u.touch {
         bind("updated_at", Box::new(now()));
@@ -331,7 +332,14 @@ pub fn delete(conn: &Connection, id: &str) -> AppResult<Vec<String>> {
 }
 
 pub fn search(conn: &Connection, query: &str) -> AppResult<Vec<NoteSummary>> {
-    let q = format!("%{}%", query.replace('%', "\\%").replace('_', "\\_"));
+    // 与 db::search::search_like 同口径：% _ \ 都转义，防止通配符注入
+    let q = format!(
+        "%{}%",
+        query
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
     let sql = format!(
         "SELECT {NOTE_COLS} FROM notes \
          WHERE status='active' AND deleted_at IS NULL \
@@ -377,6 +385,31 @@ pub fn count(conn: &Connection, status: &str) -> AppResult<i64> {
         |r| r.get(0),
     )?;
     Ok(n)
+}
+
+/// 回收站全部便签 id（deleted_at IS NOT NULL），供服务层逐条永久删除。
+pub fn list_trash_ids(conn: &Connection) -> AppResult<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT id FROM notes WHERE deleted_at IS NOT NULL")?;
+    let ids = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(ids)
+}
+
+/// 按 title 精确匹配找 active 未删除便签的 id（每日笔记定位用），取最近更新的一条。
+pub fn find_id_by_title(conn: &Connection, title: &str) -> AppResult<Option<String>> {
+    let row = conn.query_row(
+        "SELECT id FROM notes \
+         WHERE title = ?1 AND status = 'active' AND deleted_at IS NULL \
+         ORDER BY updated_at DESC LIMIT 1",
+        params![title],
+        |r| r.get::<_, String>(0),
+    );
+    match row {
+        Ok(id) => Ok(Some(id)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }
 
 #[cfg(test)]
@@ -562,5 +595,78 @@ mod tests {
         assert_eq!(list(&conn, "archived").unwrap().len(), 1);
         assert_eq!(list(&conn, "todo").unwrap().len(), 0, "归档的不算待办视图");
         assert_eq!(list(&conn, "all").unwrap().len(), 2);
+    }
+
+    /// 回归：pin_mode 不依赖 scale，单独更新也必须落库（set_pin_mode 命令路径）。
+    #[test]
+    fn update_persists_pin_mode_without_scale() {
+        let conn = setup();
+        let n = create(&conn, "图钉", "内容").unwrap();
+        update(
+            &conn,
+            &NoteUpdate {
+                id: n.id.clone(),
+                title: None,
+                content: None,
+                is_pinned: None,
+                is_always_on_top: None,
+                show_on_all_desktops: None,
+                desktop_pin_state: None,
+                fullscreen_behavior: None,
+                monitor_id: None,
+                is_private: None,
+                locked: None,
+                readonly_flag: None,
+                scale: None,
+                pin_mode: Some("desktop".into()),
+                touch: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(get(&conn, &n.id).unwrap().pin_mode.as_deref(), Some("desktop"));
+
+        // 与 scale 同更时两者都生效
+        update(
+            &conn,
+            &NoteUpdate {
+                id: n.id.clone(),
+                title: None,
+                content: None,
+                is_pinned: None,
+                is_always_on_top: None,
+                show_on_all_desktops: None,
+                desktop_pin_state: None,
+                fullscreen_behavior: None,
+                monitor_id: None,
+                is_private: None,
+                locked: None,
+                readonly_flag: None,
+                scale: Some(1.25),
+                pin_mode: Some("topmost".into()),
+                touch: false,
+            },
+        )
+        .unwrap();
+        let n2 = get(&conn, &n.id).unwrap();
+        assert_eq!(n2.pin_mode.as_deref(), Some("topmost"));
+        assert_eq!(n2.scale, Some(1.25));
+    }
+
+    #[test]
+    fn trash_ids_and_title_lookup() {
+        let conn = setup();
+        let a = create(&conn, "每日笔记 2026-09-17", "内容").unwrap();
+        create(&conn, "别的", "x").unwrap();
+
+        assert_eq!(
+            find_id_by_title(&conn, "每日笔记 2026-09-17").unwrap(),
+            Some(a.id.clone())
+        );
+        assert_eq!(find_id_by_title(&conn, "不存在").unwrap(), None);
+
+        soft_delete(&conn, &a.id).unwrap();
+        assert_eq!(list_trash_ids(&conn).unwrap(), vec![a.id.clone()]);
+        // 软删除后不再参与标题定位
+        assert_eq!(find_id_by_title(&conn, "每日笔记 2026-09-17").unwrap(), None);
     }
 }

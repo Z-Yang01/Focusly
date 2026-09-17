@@ -16,7 +16,7 @@ const NEW_NOTE_W: i32 = 320;
 const NEW_NOTE_H: i32 = 360;
 
 fn emit_notes_changed(app: &AppHandle, note_id: &str) {
-    let _ = app.emit("notes-changed", json!({ "noteId": note_id }));
+    let _ = app.emit(crate::events::NOTES_CHANGED, json!({ "noteId": note_id }));
 }
 
 /// 只建行并写入层叠几何，不打开窗口（create_note 命令用）。
@@ -452,7 +452,7 @@ pub fn export_data(app: &AppHandle, path: &str) -> AppResult<()> {
 pub fn import_data(app: &AppHandle, path: &str) -> AppResult<crate::export::ImportSummary> {
     let state = app.state::<AppState>();
     let summary = crate::export::import_from_file(&state.db, path)?;
-    let _ = app.emit("notes-changed", json!({}));
+    let _ = app.emit(crate::events::NOTES_CHANGED, json!({}));
     log::info!("数据导入完成: {summary:?}");
     Ok(summary)
 }

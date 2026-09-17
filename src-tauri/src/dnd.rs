@@ -366,4 +366,57 @@ mod tests {
         assert_eq!(missed_summary_text(0), None, "0 条不发通知");
         assert_eq!(missed_summary_text(-1), None);
     }
+
+    // ---------- 边界补缺（可靠性审查追加） ----------
+
+    #[test]
+    fn boundary_cross_midnight_0659_is_inside() {
+        // 22:00-07:00：06:59 仍在勿扰内（勿扰结束前 1 分钟）
+        let w = window("22:00", "07:00");
+        assert!(in_dnd(hm("06:59"), &w));
+        assert!(!should_notify(&settings("22:00", "07:00"), hm("06:59")));
+    }
+
+    #[test]
+    fn boundary_cross_midnight_0700_is_outside() {
+        // 07:00 整点算勿扰外（左闭右开），通知立即恢复
+        let w = window("22:00", "07:00");
+        assert!(!in_dnd(hm("07:00"), &w));
+        assert!(should_notify(&settings("22:00", "07:00"), hm("07:00")));
+    }
+
+    #[test]
+    fn boundary_zero_window_0000_0000_disabled() {
+        // 00:00-00:00：start==end 视为未启用，任何时刻都不判入勿扰
+        assert!(parse_window("00:00", "00:00").is_none());
+        let zero = Some(DndWindow {
+            start_h: 0,
+            start_m: 0,
+            end_h: 0,
+            end_m: 0,
+        });
+        assert!(!in_dnd(hm("00:00"), &zero));
+        assert!(!in_dnd(hm("12:00"), &zero));
+        assert!(should_notify(&settings("00:00", "00:00"), hm("00:00")));
+    }
+
+    #[test]
+    fn boundary_cross_midnight_2300_0100() {
+        // 窄跨午夜窗口 23:00-01:00，00:30 在窗口内
+        let w = window("23:00", "01:00");
+        assert!(in_dnd(hm("00:30"), &w));
+        assert!(in_dnd(hm("23:00"), &w), "start 时刻算勿扰内");
+        assert!(in_dnd(hm("00:00"), &w));
+        assert!(!in_dnd(hm("01:00"), &w), "end 时刻算勿扰外");
+        assert!(!in_dnd(hm("22:59"), &w));
+    }
+
+    #[test]
+    fn should_notify_empty_settings_fails_open() {
+        // 空设置（无任何键）：始终通知，fail-open
+        let empty: HashMap<String, String> = HashMap::new();
+        assert!(should_notify(&empty, hm("00:00")));
+        assert!(should_notify(&empty, hm("12:00")));
+        assert!(should_notify(&empty, hm("23:59")));
+    }
 }

@@ -214,7 +214,7 @@ pub fn show_all_notes(app: &AppHandle) -> AppResult<()> {
             hidden.remove(label);
         }
     }
-    let _ = app.emit("notes-visibility", true);
+    let _ = app.emit(crate::events::NOTES_VISIBILITY, true);
     Ok(())
 }
 
@@ -228,7 +228,7 @@ pub fn hide_all_notes(app: &AppHandle) -> AppResult<()> {
             hidden.insert(label);
         }
     }
-    let _ = app.emit("notes-visibility", false);
+    let _ = app.emit(crate::events::NOTES_VISIBILITY, false);
     Ok(())
 }
 

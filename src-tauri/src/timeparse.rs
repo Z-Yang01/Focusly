@@ -881,4 +881,61 @@ mod tests {
         // "明天" 后跟无法解析的剩余 → 组合失败
         assert!(parse_time_nl("明天abc def ghi jkl", now_tue_10()).is_none());
     }
+
+    // ---- 边界补缺（可靠性审查追加） ----
+
+    #[test]
+    fn boundary_midnight_0000() {
+        // "0:00"：单数字小时 + 午夜零点合法（h=0 <= 23）→ 当天 00:00
+        let p = parse_time_nl("0:00", now_tue_10()).unwrap();
+        assert_eq!(p.at, local(2026, 9, 15, 0, 0));
+    }
+
+    #[test]
+    fn boundary_last_minute_of_day_2359() {
+        let p = parse_time_nl("23:59", now_tue_10()).unwrap();
+        assert_eq!(p.at, local(2026, 9, 15, 23, 59));
+    }
+
+    #[test]
+    fn boundary_noon_colon_1200() {
+        // 冒号形式不做时段推断：12:00 就是正午 12 点
+        let p = parse_time_nl("12:00", now_tue_10()).unwrap();
+        assert_eq!(p.at, local(2026, 9, 15, 12, 0));
+    }
+
+    #[test]
+    fn boundary_tomorrow_noon_is_noon_not_evening() {
+        // "明天 12:00" = 正午 12 点；没有"下午"前缀不做 +12
+        let p = parse_time_nl("明天 12:00", now_tue_10()).unwrap();
+        assert_eq!(p.at, local(2026, 9, 16, 12, 0));
+        assert_ne!(p.at, local(2026, 9, 17, 0, 0), "不是次日零点");
+    }
+
+    #[test]
+    fn boundary_tonight_semantics() {
+        // "今晚" 未收录为时段/日期关键词 → 整串无法消费 → None（当前语义 = 不解析）
+        let now_23 = Local
+            .with_ymd_and_hms(2026, 9, 15, 23, 0, 0)
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(parse_time_nl("今晚", now_23).is_none(), "今晚 不是关键词");
+        // 等价的已收录表达："晚上12点" 在 23:00 → 进位到次日 00:00（midnight_shift）
+        let p = parse_time_nl("晚上12点", now_23).unwrap();
+        assert_eq!(p.at, local(2026, 9, 16, 0, 0));
+    }
+
+    #[test]
+    fn boundary_long_garbage_input() {
+        // 超长输入（1000 字符无关键词垃圾）→ None，不 panic、不明显耗时
+        let junk = "垃圾".repeat(1000);
+        assert!(parse_time_nl(&junk, now_tue_10()).is_none());
+    }
+
+    #[test]
+    fn boundary_full_width_digits_and_colon() {
+        // 全角数字/冒号经 normalize 归一为半角后正常解析
+        let p = parse_time_nl("１８：３０", now_tue_10()).unwrap();
+        assert_eq!(p.at, local(2026, 9, 15, 18, 30));
+    }
 }

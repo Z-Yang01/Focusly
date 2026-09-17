@@ -92,7 +92,14 @@ fn search_like(
     keyword: &str,
     include_private: bool,
 ) -> AppResult<Vec<SearchHit>> {
-    let pattern = format!("%{}%", keyword.replace('%', "\\%").replace('_', "\\_"));
+    // LIKE 通配符 % _ 与转义符 \ 本身都要转义，否则含 \ 的关键词会吞掉后续字符
+    let pattern = format!(
+        "%{}%",
+        keyword
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
     let sql = format!(
         "SELECT n.id, n.title, n.content AS snip, \
                n.content, n.updated_at, n.is_pinned, n.is_private, n.status \
@@ -385,5 +392,61 @@ mod tests {
             Vec::<String>::new(),
             "tags 聚合来自 note_tags 而非索引"
         );
+    }
+
+    /// FTS5 语法字符（AND/OR/NOT/NEAR/*/^ 等）必须按字面量匹配，不得改变查询语义或报错。
+    #[test]
+    fn fts_keyword_with_syntax_chars_is_literal() {
+        let conn = setup();
+        seed(&conn, "计划A", "第一步：买牛奶 AND 喝咖啡");
+        seed(&conn, "计划B", "第二步 NOT 相关词");
+
+        // 这些串若未转义会触发 FTS5 语法错误或改变语义；作为短语必须字面命中
+        for kw in [
+            "AND",
+            "OR NOT",
+            "NEAR(",
+            "买牛奶 AND",
+            "\"引号\"内容",
+            "*星号*",
+            "^插字符",
+        ] {
+            let hits = search(&conn, kw, false);
+            assert!(hits.is_ok(), "关键词 {kw:?} 不应导致查询失败: {hits:?}");
+        }
+
+        let hits = search(&conn, "买牛奶 AND", false).unwrap();
+        assert_eq!(hits.len(), 1, "字面短语只应命中原文含 AND 的便签");
+        assert_eq!(hits[0].title, "计划A");
+    }
+
+    /// 中文与 emoji 走 FTS（>=3 字符）与 LIKE（<3 字符）两条路径都应正常；
+    /// LIKE 路径的 \ % _ 通配符按字面量匹配（转义符本身也要转义）。
+    #[test]
+    fn fts_handles_cjk_emoji_and_like_escapes() {
+        let conn = setup();
+        seed(&conn, "项目🚀", "包含中文与🚀emoji的正文内容");
+        seed(&conn, "路径笔记", r"C:\users\test 目录");
+        seed(&conn, "百分号", "100% 通过 _下划线_");
+
+        // emoji + 中文，FTS 路径
+        let hits = search(&conn, "中文与🚀emoji", false).unwrap();
+        assert_eq!(hits.len(), 1);
+        // 单字符 emoji：LIKE 降级路径
+        let hits = search(&conn, "🚀", false).unwrap();
+        assert_eq!(hits.len(), 1);
+
+        // LIKE 路径（<3 字符）：反斜杠按字面量匹配，不再吞掉后面的通配符语义
+        let hits = search(&conn, r"\", false).unwrap();
+        assert_eq!(hits.len(), 1, r"单字符 \ 应精确命中含 \ 的正文");
+        assert_eq!(hits[0].title, "路径笔记");
+
+        // % 与 _ 在 LIKE 路径同样按字面量匹配（不当通配符全表命中）
+        let hits = search(&conn, "%", false).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].title, "百分号");
+        let hits = search(&conn, "_", false).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].title, "百分号");
     }
 }

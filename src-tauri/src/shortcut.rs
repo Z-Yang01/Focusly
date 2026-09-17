@@ -39,7 +39,7 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
         }
         "focus_search" => {
             window::show_manager(app);
-            let _ = app.emit("focus-search", ());
+            let _ = app.emit(crate::events::FOCUS_SEARCH, ());
         }
         "quick_capture" => {
             if let Err(e) = crate::quickcapture::toggle(app) {
@@ -82,7 +82,7 @@ pub fn register_all(app: &AppHandle) -> AppResult<()> {
                 let msg = format!("快捷键格式无法解析: {accel}");
                 log::warn!("{msg}: {err}");
                 let _ = app.emit(
-                    "shortcut-error",
+                    crate::events::SHORTCUT_ERROR,
                     json!({"action": entry.action, "message": msg}),
                 );
                 report_shortcut_failure(app, &msg, &err.to_string(), "该快捷键不可用");
@@ -96,7 +96,7 @@ pub fn register_all(app: &AppHandle) -> AppResult<()> {
             let msg = format!("与 {prev} 快捷键冲突");
             log::warn!("快捷键 {accel}: {msg}");
             let _ = app.emit(
-                "shortcut-error",
+                crate::events::SHORTCUT_ERROR,
                 json!({"action": entry.action, "message": msg}),
             );
             report_shortcut_failure(
@@ -112,7 +112,7 @@ pub fn register_all(app: &AppHandle) -> AppResult<()> {
             let msg = format!("快捷键注册失败: {accel}");
             log::error!("{msg}: {err}");
             let _ = app.emit(
-                "shortcut-error",
+                crate::events::SHORTCUT_ERROR,
                 json!({"action": entry.action, "message": msg}),
             );
             report_shortcut_failure(

@@ -56,7 +56,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             "open_manager" => window::show_manager(app),
             "open_settings" => {
                 window::show_manager(app);
-                let _ = app.emit("open-settings", ());
+                let _ = app.emit(crate::events::OPEN_SETTINGS, ());
             }
             "quit" => app.exit(0),
             _ => {}

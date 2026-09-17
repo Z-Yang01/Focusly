@@ -176,6 +176,12 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     r#"
     ALTER TABLE notes ADD COLUMN pin_mode TEXT NOT NULL DEFAULT 'normal';
     "#,
+    // v7: 列表主路径覆盖索引。v1 的 idx_notes_status_updated 建于 deleted_at 列出现之前，
+    // "all" 视图（WHERE deleted_at IS NULL ORDER BY is_pinned DESC, updated_at DESC）只能全表扫描+排序；
+    // 部分索引与该 WHERE/ORDER BY 完全匹配，回收站行不进索引，体积可控。
+    r#"
+    CREATE INDEX idx_notes_alive_order ON notes(is_pinned DESC, updated_at DESC) WHERE deleted_at IS NULL;
+    "#,
 ];
 
 use rusqlite::Connection;
