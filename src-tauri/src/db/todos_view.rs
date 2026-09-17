@@ -134,7 +134,9 @@ pub fn get_due_view(conn: &Connection) -> AppResult<TodoView> {
          ORDER BY updated_at DESC"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let notes = stmt.query_map([], row_to_note)?.collect::<rusqlite::Result<Vec<_>>>()?;
+    let notes = stmt
+        .query_map([], row_to_note)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
     let today = Local::now().date_naive();
     let mut view = TodoView::default();
@@ -145,13 +147,22 @@ pub fn get_due_view(conn: &Connection) -> AppResult<TodoView> {
         }
         let summary = super::notes::to_summary(conn, note)?;
         if o > 0 {
-            view.overdue.push(DueNoteSummary { summary: summary.clone(), due_count: o });
+            view.overdue.push(DueNoteSummary {
+                summary: summary.clone(),
+                due_count: o,
+            });
         }
         if t > 0 {
-            view.today.push(DueNoteSummary { summary: summary.clone(), due_count: t });
+            view.today.push(DueNoteSummary {
+                summary: summary.clone(),
+                due_count: t,
+            });
         }
         if n > 0 {
-            view.next7days.push(DueNoteSummary { summary, due_count: n });
+            view.next7days.push(DueNoteSummary {
+                summary,
+                due_count: n,
+            });
         }
     }
     Ok(view)
@@ -183,7 +194,9 @@ mod tests {
 
     fn offset_date(days: i64) -> String {
         let today = Local::now().date_naive();
-        (today + Duration::days(days)).format("%Y-%m-%d").to_string()
+        (today + Duration::days(days))
+            .format("%Y-%m-%d")
+            .to_string()
     }
 
     #[test]
@@ -202,9 +215,24 @@ mod tests {
     #[test]
     fn buckets_by_local_today() {
         let conn = setup();
-        notes::create(&conn, "逾期便签", &format!("- [ ] 交房租 ^{} !高", offset_date(-1))).unwrap();
-        notes::create(&conn, "今日便签", &format!("- [ ] 站会 ^{}", offset_date(0))).unwrap();
-        notes::create(&conn, "本周便签", &format!("- [ ] 复盘 ^{}", offset_date(3))).unwrap();
+        notes::create(
+            &conn,
+            "逾期便签",
+            &format!("- [ ] 交房租 ^{} !高", offset_date(-1)),
+        )
+        .unwrap();
+        notes::create(
+            &conn,
+            "今日便签",
+            &format!("- [ ] 站会 ^{}", offset_date(0)),
+        )
+        .unwrap();
+        notes::create(
+            &conn,
+            "本周便签",
+            &format!("- [ ] 复盘 ^{}", offset_date(3)),
+        )
+        .unwrap();
         notes::create(&conn, "无日期便签", "- [ ] 没有到期日").unwrap();
         notes::create(
             &conn,
@@ -255,8 +283,11 @@ mod tests {
         let a = notes::create(&conn, "已归档", &format!("- [ ] x ^{}", offset_date(-1))).unwrap();
         notes::archive(&conn, &a.id).unwrap();
         let b = notes::create(&conn, "已删除", &format!("- [ ] y ^{}", offset_date(-1))).unwrap();
-        conn.execute("UPDATE notes SET deleted_at = ?1 WHERE id = ?2", params!["2026-01-01T00:00:00Z", b.id])
-            .unwrap();
+        conn.execute(
+            "UPDATE notes SET deleted_at = ?1 WHERE id = ?2",
+            params!["2026-01-01T00:00:00Z", b.id],
+        )
+        .unwrap();
 
         let v = get_due_view(&conn).unwrap();
         assert!(v.overdue.is_empty());
@@ -268,8 +299,11 @@ mod tests {
     fn excludes_private_notes() {
         let conn = setup();
         notes::create(&conn, "私密便签", &format!("- [ ] x ^{}", offset_date(-1))).unwrap();
-        conn.execute("UPDATE notes SET is_private = 1 WHERE title = '私密便签'", params![])
-            .unwrap();
+        conn.execute(
+            "UPDATE notes SET is_private = 1 WHERE title = '私密便签'",
+            params![],
+        )
+        .unwrap();
         let v = get_due_view(&conn).unwrap();
         assert!(v.overdue.is_empty(), "私密便签不应出现在到期视图");
     }

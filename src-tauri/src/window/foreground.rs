@@ -9,7 +9,7 @@ mod imp {
 
     use tauri::AppHandle;
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK, UnhookWinEvent};
+    use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
     use windows::Win32::UI::WindowsAndMessaging::{
         DispatchMessageW, GetMessageW, TranslateMessage, MSG,
     };

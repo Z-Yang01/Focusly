@@ -52,7 +52,7 @@ pub fn grid_slots(
         cols
     };
     let cols = effective_cols.clamp(1, n);
-    let rows = (n + cols - 1) / cols;
+    let rows = n.div_ceil(cols);
 
     let usable_w = (area_w - gap * (cols as i32 - 1)).max(0);
     let usable_h = (area_h - gap * (rows as i32 - 1)).max(0);
@@ -205,7 +205,7 @@ pub fn save_preset(app: &AppHandle, name: &str) -> AppResult<LayoutPreset> {
 /// 全部布局预设（按名称排序）。
 pub fn list_presets(app: &AppHandle) -> AppResult<Vec<LayoutPreset>> {
     let state = app.state::<AppState>();
-    state.db.with(|c| crate::db::layouts::list(c))
+    state.db.with(crate::db::layouts::list)
 }
 
 /// 删除布局预设。

@@ -60,7 +60,7 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
 pub fn register_all(app: &AppHandle) -> AppResult<()> {
     let entries = {
         let state = app.state::<AppState>();
-        state.db.with(|c| crate::db::shortcuts::list(c))?
+        state.db.with(crate::db::shortcuts::list)?
     };
 
     app.global_shortcut().unregister_all().ok();
@@ -81,7 +81,10 @@ pub fn register_all(app: &AppHandle) -> AppResult<()> {
             Err(err) => {
                 let msg = format!("快捷键格式无法解析: {accel}");
                 log::warn!("{msg}: {err}");
-                let _ = app.emit("shortcut-error", json!({"action": entry.action, "message": msg}));
+                let _ = app.emit(
+                    "shortcut-error",
+                    json!({"action": entry.action, "message": msg}),
+                );
                 report_shortcut_failure(app, &msg, &err.to_string(), "该快捷键不可用");
                 continue;
             }
@@ -92,7 +95,10 @@ pub fn register_all(app: &AppHandle) -> AppResult<()> {
         if let Some(prev) = map.insert(canonical.clone(), entry.action.clone()) {
             let msg = format!("与 {prev} 快捷键冲突");
             log::warn!("快捷键 {accel}: {msg}");
-            let _ = app.emit("shortcut-error", json!({"action": entry.action, "message": msg}));
+            let _ = app.emit(
+                "shortcut-error",
+                json!({"action": entry.action, "message": msg}),
+            );
             report_shortcut_failure(
                 app,
                 &msg,
@@ -105,8 +111,16 @@ pub fn register_all(app: &AppHandle) -> AppResult<()> {
         if let Err(err) = app.global_shortcut().register(key.as_str()) {
             let msg = format!("快捷键注册失败: {accel}");
             log::error!("{msg}: {err}");
-            let _ = app.emit("shortcut-error", json!({"action": entry.action, "message": msg}));
-            report_shortcut_failure(app, &msg, &err.to_string(), "组合键可能被其他应用占用，请在设置中更换");
+            let _ = app.emit(
+                "shortcut-error",
+                json!({"action": entry.action, "message": msg}),
+            );
+            report_shortcut_failure(
+                app,
+                &msg,
+                &err.to_string(),
+                "组合键可能被其他应用占用，请在设置中更换",
+            );
             map.remove(&canonical);
             continue;
         }

@@ -65,10 +65,7 @@ unsafe fn find_workerw(progman: HWND) -> Option<HWND> {
 }
 
 pub unsafe fn get_progman() -> AppResult<HWND> {
-    let cls: Vec<u16> = "Progman"
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
+    let cls: Vec<u16> = "Progman".encode_utf16().chain(std::iter::once(0)).collect();
     let hwnd = FindWindowW(PCWSTR::from_raw(cls.as_ptr()), None)
         .map_err(|e| AppError::Platform(format!("Progman not found: {e}")))?;
     if hwnd.is_invalid() {

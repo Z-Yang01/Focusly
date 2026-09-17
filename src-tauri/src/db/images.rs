@@ -73,7 +73,14 @@ pub fn add_rgba(
         .ok_or_else(|| AppError::Image("无法解码 RGBA 数据".into()))?
         .save_with_format(&dest, image::ImageFormat::Png)?;
 
-    insert(conn, note_id, &dest.to_string_lossy(), &filename, Some(width as i32), Some(height as i32))
+    insert(
+        conn,
+        note_id,
+        &dest.to_string_lossy(),
+        &filename,
+        Some(width as i32),
+        Some(height as i32),
+    )
 }
 
 fn insert(

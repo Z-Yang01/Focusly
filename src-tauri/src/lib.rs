@@ -2,8 +2,8 @@
 
 mod commands;
 mod daily;
-mod desktop_pin;
 mod db;
+mod desktop_pin;
 mod dnd;
 mod error;
 mod export;

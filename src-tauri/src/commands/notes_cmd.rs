@@ -49,7 +49,12 @@ pub fn update_note_content(
 
 /// flag: pinned | always_on_top | all_desktops。
 #[tauri::command]
-pub fn set_note_flag(app: AppHandle, note_id: String, flag: String, value: bool) -> AppResult<Note> {
+pub fn set_note_flag(
+    app: AppHandle,
+    note_id: String,
+    flag: String,
+    value: bool,
+) -> AppResult<Note> {
     notes::set_flag(&app, &note_id, &flag, value)
 }
 
@@ -85,11 +90,7 @@ pub fn search_notes(state: State<'_, AppState>, query: String) -> AppResult<Vec<
 
 /// 重设便签标签，返回最终标签列表。
 #[tauri::command]
-pub fn set_note_tags(
-    app: AppHandle,
-    note_id: String,
-    tags: Vec<String>,
-) -> AppResult<Vec<String>> {
+pub fn set_note_tags(app: AppHandle, note_id: String, tags: Vec<String>) -> AppResult<Vec<String>> {
     notes::set_note_tags(&app, &note_id, tags)
 }
 
@@ -104,7 +105,7 @@ pub struct TagCount {
 
 #[tauri::command]
 pub fn get_tags(state: State<'_, AppState>) -> AppResult<Vec<TagCount>> {
-    let pairs = state.db.with(|c| crate::db::tags::all_tags_with_counts(c))?;
+    let pairs = state.db.with(crate::db::tags::all_tags_with_counts)?;
     Ok(pairs
         .into_iter()
         .map(|(name, count)| TagCount { name, count })
@@ -150,7 +151,12 @@ pub fn restore_version(app: AppHandle, version_id: String) -> AppResult<Note> {
 }
 
 #[tauri::command]
-pub fn set_note_privacy(app: AppHandle, note_id: String, flag: String, value: bool) -> AppResult<Note> {
+pub fn set_note_privacy(
+    app: AppHandle,
+    note_id: String,
+    flag: String,
+    value: bool,
+) -> AppResult<Note> {
     notes::set_privacy_flag(&app, &note_id, &flag, value)
 }
 
@@ -168,12 +174,12 @@ pub fn search_notes_v2(
 
 #[tauri::command]
 pub fn list_private_notes(state: State<'_, AppState>) -> AppResult<Vec<NoteSummary>> {
-    state.db.with(|c| crate::db::notes::list_private(c))
+    state.db.with(crate::db::notes::list_private)
 }
 
 #[tauri::command]
 pub fn get_due_view(state: State<'_, AppState>) -> AppResult<crate::db::todos_view::TodoView> {
-    state.db.with(|c| crate::db::todos_view::get_due_view(c))
+    state.db.with(crate::db::todos_view::get_due_view)
 }
 
 // ---------- 图钉三态（normal / topmost / desktop） ----------

@@ -74,7 +74,12 @@ pub fn all_pending(conn: &Connection) -> AppResult<Vec<Reminder>> {
     Ok(list)
 }
 
-pub fn set_status(conn: &Connection, id: &str, status: &str, mark_triggered: bool) -> AppResult<()> {
+pub fn set_status(
+    conn: &Connection,
+    id: &str,
+    status: &str,
+    mark_triggered: bool,
+) -> AppResult<()> {
     if mark_triggered {
         conn.execute(
             "UPDATE reminders SET status=?2, triggered_at=?3 WHERE id=?1",
@@ -195,14 +200,23 @@ mod tests {
         assert_eq!(next_occurrence(RepeatType::Once, at, now), None);
 
         let daily = next_occurrence(RepeatType::Daily, at, now).unwrap();
-        assert_eq!(daily, chrono::Utc.with_ymd_and_hms(2026, 9, 16, 9, 0, 0).unwrap());
+        assert_eq!(
+            daily,
+            chrono::Utc.with_ymd_and_hms(2026, 9, 16, 9, 0, 0).unwrap()
+        );
 
         let weekly = next_occurrence(RepeatType::Weekly, at, now).unwrap();
-        assert_eq!(weekly, chrono::Utc.with_ymd_and_hms(2026, 9, 17, 9, 0, 0).unwrap());
+        assert_eq!(
+            weekly,
+            chrono::Utc.with_ymd_and_hms(2026, 9, 17, 9, 0, 0).unwrap()
+        );
 
         // 2026-09-12 是周六：工作日提醒从周五(9/11)推进到周一(9/14) 09:00
         let fri = chrono::Utc.with_ymd_and_hms(2026, 9, 11, 9, 0, 0).unwrap();
         let wd = next_occurrence(RepeatType::Weekdays, fri, now).unwrap();
-        assert_eq!(wd, chrono::Utc.with_ymd_and_hms(2026, 9, 16, 9, 0, 0).unwrap());
+        assert_eq!(
+            wd,
+            chrono::Utc.with_ymd_and_hms(2026, 9, 16, 9, 0, 0).unwrap()
+        );
     }
 }

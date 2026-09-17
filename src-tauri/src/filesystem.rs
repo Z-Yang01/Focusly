@@ -128,7 +128,11 @@ pub fn journal_error(
         .and_then(|mut f| {
             if f.metadata().map(|m| m.len() == 0).unwrap_or(true) {
                 use std::io::Write;
-                writeln!(f, "# Focusly 错误日志 — {} ({category})\n", chrono::Local::now().format("%Y-%m-%d"))?;
+                writeln!(
+                    f,
+                    "# Focusly 错误日志 — {} ({category})\n",
+                    chrono::Local::now().format("%Y-%m-%d")
+                )?;
             }
             f.write_all(entry.as_bytes())
         });
@@ -170,19 +174,14 @@ mod tests {
         // 建 7 份备份验证轮转（时间戳秒级分辨率，间隔 >1s 保证文件名唯一）
         for i in 0..7 {
             std::thread::sleep(std::time::Duration::from_millis(1100));
-            db.with(|c| {
-                crate::db::notes::create(c, &format!("n{i}"), "")
-            }).unwrap();
+            db.with(|c| crate::db::notes::create(c, &format!("n{i}"), ""))
+                .unwrap();
             backup_database(&db, &paths).unwrap();
         }
         let count = std::fs::read_dir(&paths.backups)
             .unwrap()
             .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.file_name()
-                    .to_string_lossy()
-                    .starts_with("database-")
-            })
+            .filter(|e| e.file_name().to_string_lossy().starts_with("database-"))
             .count();
         assert!(count <= 5, "备份应轮转，实际 {count} 份");
 
@@ -206,9 +205,8 @@ mod tests {
         let paths = AppPaths::init(tmp.path().to_path_buf()).unwrap();
         let db = Db::open(&paths.db).unwrap();
         db.with(|c| migrations::run(c)).unwrap();
-        db.with(|c| {
-            crate::db::notes::create(c, "演练便签", "重要数据")
-        }).unwrap();
+        db.with(|c| crate::db::notes::create(c, "演练便签", "重要数据"))
+            .unwrap();
 
         backup_database(&db, &paths).unwrap();
 
@@ -230,11 +228,9 @@ mod tests {
         let db2 = Db::open(&paths.db).unwrap();
         let (title, content): (String, String) = db2
             .with(|c| {
-                c.query_row(
-                    "SELECT title, content FROM notes LIMIT 1",
-                    [],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
+                c.query_row("SELECT title, content FROM notes LIMIT 1", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
                 .map_err(crate::error::AppError::from)
             })
             .unwrap();
@@ -268,7 +264,13 @@ mod tests {
     #[test]
     fn inside_root_check() {
         let root = Path::new("C:/data/Focusly/images");
-        assert!(is_inside_root(root, Path::new("C:/data/Focusly/images/n1/a.png")));
-        assert!(!is_inside_root(root, Path::new("C:/Windows/system32/a.png")));
+        assert!(is_inside_root(
+            root,
+            Path::new("C:/data/Focusly/images/n1/a.png")
+        ));
+        assert!(!is_inside_root(
+            root,
+            Path::new("C:/Windows/system32/a.png")
+        ));
     }
 }

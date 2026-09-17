@@ -19,12 +19,19 @@ pub fn quickcapture_ready(app: AppHandle) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn clipboard_add(app: AppHandle, content: String, kind: String) -> AppResult<crate::db::models::ClipboardEntry> {
+pub fn clipboard_add(
+    app: AppHandle,
+    content: String,
+    kind: String,
+) -> AppResult<crate::db::models::ClipboardEntry> {
     crate::quickcapture::add_entry(&app, &content, &kind)
 }
 
 #[tauri::command]
-pub fn clipboard_list(app: AppHandle, limit: Option<i64>) -> AppResult<Vec<crate::db::models::ClipboardEntry>> {
+pub fn clipboard_list(
+    app: AppHandle,
+    limit: Option<i64>,
+) -> AppResult<Vec<crate::db::models::ClipboardEntry>> {
     crate::quickcapture::list_entries(&app, limit.unwrap_or(50))
 }
 

@@ -172,7 +172,6 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('pomo_sound', 'off'),
     ('pomo_force_remind', 'false');
 "#,
-
     // v6: 便签图钉三态（normal / topmost / desktop）
     r#"
     ALTER TABLE notes ADD COLUMN pin_mode TEXT NOT NULL DEFAULT 'normal';
@@ -207,12 +206,16 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         run(&conn).unwrap();
         run(&conn).unwrap();
-        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(v, MIGRATIONS.len() as i64);
 
         // settings 默认值存在
         let theme: String = conn
-            .query_row("SELECT value FROM settings WHERE key='theme'", [], |r| r.get(0))
+            .query_row("SELECT value FROM settings WHERE key='theme'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(theme, "system");
 
@@ -246,11 +249,17 @@ mod tests {
             [],
         )
         .unwrap();
-        conn.execute("INSERT INTO note_tags (note_id, tag_id) VALUES ('n1', 't1')", []).unwrap();
+        conn.execute(
+            "INSERT INTO note_tags (note_id, tag_id) VALUES ('n1', 't1')",
+            [],
+        )
+        .unwrap();
 
         run(&conn).unwrap();
 
-        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(v, MIGRATIONS.len() as i64);
 
         // 旧数据完整
@@ -265,7 +274,11 @@ mod tests {
         assert_eq!(content, "# 旧内容\n- [ ] 任务");
         assert_eq!(status, "active");
         let tags: i64 = conn
-            .query_row("SELECT COUNT(*) FROM note_tags WHERE note_id = 'n1'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM note_tags WHERE note_id = 'n1'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(tags, 1);
 
@@ -290,7 +303,9 @@ mod tests {
             )
             .unwrap();
         assert_eq!(fts_tables, 1);
-        let fts_rows: i64 = conn.query_row("SELECT COUNT(*) FROM notes_fts", [], |r| r.get(0)).unwrap();
+        let fts_rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM notes_fts", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(fts_rows, 0);
 
         // 新表存在
@@ -351,7 +366,9 @@ mod tests {
 
         run(&conn).unwrap();
 
-        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(v, MIGRATIONS.len() as i64);
 
         // layout_presets 表存在
@@ -396,12 +413,16 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         setup_v3(&conn);
         run(&conn).unwrap();
-        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(v, MIGRATIONS.len() as i64);
         let accel: String = conn
-            .query_row("SELECT accelerator FROM shortcuts WHERE action = 'quick_capture'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT accelerator FROM shortcuts WHERE action = 'quick_capture'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(accel, "Ctrl+Shift+Q");
     }
@@ -429,7 +450,9 @@ mod tests {
 
         run(&conn).unwrap();
 
-        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(v, MIGRATIONS.len() as i64);
 
         // 新表存在
@@ -467,9 +490,11 @@ mod tests {
             "pomo_force_remind",
         ] {
             let n: i64 = conn
-                .query_row("SELECT COUNT(*) FROM settings WHERE key = ?1", params![key], |r| {
-                    r.get(0)
-                })
+                .query_row(
+                    "SELECT COUNT(*) FROM settings WHERE key = ?1",
+                    params![key],
+                    |r| r.get(0),
+                )
                 .unwrap();
             assert_eq!(n, 1, "缺少设置 {key}");
         }

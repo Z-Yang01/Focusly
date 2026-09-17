@@ -38,7 +38,11 @@ pub fn fts_remove(conn: &Connection, note_id: &str) -> AppResult<()> {
 /// - 长度 < 3 字符：trigram 无法分词，降级为 title/content LIKE 查询，按 updated_at DESC，
 ///   snippet 手工截取 keyword 前后约 40 字符并包 <mark>。
 /// 两者都排除回收站（deleted_at IS NOT NULL）与私密便签（include_private=false 时）。
-pub fn search(conn: &Connection, keyword: &str, include_private: bool) -> AppResult<Vec<SearchHit>> {
+pub fn search(
+    conn: &Connection,
+    keyword: &str,
+    include_private: bool,
+) -> AppResult<Vec<SearchHit>> {
     let keyword = keyword.trim();
     if keyword.is_empty() {
         return Ok(Vec::new());
@@ -56,7 +60,11 @@ fn finish_hit(conn: &Connection, mut hit: SearchHit) -> AppResult<SearchHit> {
     Ok(hit)
 }
 
-fn search_fts(conn: &Connection, keyword: &str, include_private: bool) -> AppResult<Vec<SearchHit>> {
+fn search_fts(
+    conn: &Connection,
+    keyword: &str,
+    include_private: bool,
+) -> AppResult<Vec<SearchHit>> {
     // 双引号包成短语查询，转义内部引号，避免关键词中的 FTS5 语法字符（AND/OR/NEAR/* 等）改变语义
     let phrase = format!("\"{}\"", keyword.replace('"', "\"\""));
     let sql = format!(
@@ -79,7 +87,11 @@ fn search_fts(conn: &Connection, keyword: &str, include_private: bool) -> AppRes
     hits.into_iter().map(|h| finish_hit(conn, h)).collect()
 }
 
-fn search_like(conn: &Connection, keyword: &str, include_private: bool) -> AppResult<Vec<SearchHit>> {
+fn search_like(
+    conn: &Connection,
+    keyword: &str,
+    include_private: bool,
+) -> AppResult<Vec<SearchHit>> {
     let pattern = format!("%{}%", keyword.replace('%', "\\%").replace('_', "\\_"));
     let sql = format!(
         "SELECT n.id, n.title, n.content AS snip, \
@@ -137,10 +149,7 @@ fn manual_snippet(title: &str, body: &str, keyword: &str) -> String {
 fn highlight_around(s: &str, keyword: &str) -> Option<String> {
     let lower = s.to_lowercase();
     let kw_lower = keyword.to_lowercase();
-    let pos = match lower.find(&kw_lower) {
-        Some(p) => p,
-        None => return None,
-    };
+    let pos = lower.find(&kw_lower)?;
     // lower 与 s 的字节偏移在常见中英文场景一致；极端 Unicode 大小写转换变长时向前找合法边界
     let mut pos = pos.min(s.len());
     while pos > 0 && !s.is_char_boundary(pos) {
@@ -180,11 +189,7 @@ fn highlight_around(s: &str, keyword: &str) -> Option<String> {
 
 /// 取前 n 个字符，超出补省略号。
 fn take_chars(s: &str, n: usize) -> String {
-    let cut = s
-        .char_indices()
-        .nth(n)
-        .map(|(i, _)| i)
-        .unwrap_or(s.len());
+    let cut = s.char_indices().nth(n).map(|(i, _)| i).unwrap_or(s.len());
     if cut < s.len() {
         format!("{}…", &s[..cut])
     } else {
@@ -192,13 +197,11 @@ fn take_chars(s: &str, n: usize) -> String {
     }
 }
 
-
 /// 全量重建 FTS 索引：导入数据、批量修复后调用，保证搜索可见性（P0-2）。
 /// 只索引未进入回收站的便签；归档与私密过滤由查询侧负责。
 pub fn fts_rebuild_all(conn: &Connection) -> AppResult<()> {
     conn.execute("DELETE FROM notes_fts", [])?;
-    let mut stmt = conn
-        .prepare("SELECT id, title, content FROM notes WHERE deleted_at IS NULL")?;
+    let mut stmt = conn.prepare("SELECT id, title, content FROM notes WHERE deleted_at IS NULL")?;
     let rows: Vec<(String, String, String)> = stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<rusqlite::Result<_>>()?;
@@ -240,20 +243,30 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert!(sql.contains("trigram"), "notes_fts 应使用 trigram 分词器: {sql}");
+        assert!(
+            sql.contains("trigram"),
+            "notes_fts 应使用 trigram 分词器: {sql}"
+        );
     }
 
     #[test]
     fn fts_finds_keyword_substring_and_highlights() {
         let conn = setup();
-        let a = seed(&conn, "MediaFlow 开发计划", "第一步：搭建 MediaFlow 的 RAG 管道");
+        let a = seed(
+            &conn,
+            "MediaFlow 开发计划",
+            "第一步：搭建 MediaFlow 的 RAG 管道",
+        );
         let b = seed(&conn, "学习", "去研究 MediaFlow RAG");
         seed(&conn, "无关", "别的什么都不要写");
         crate::db::tags::attach_tag(&conn, &a.id, "工作").unwrap();
 
         let hits = search(&conn, "MediaFlow", false).unwrap();
         assert_eq!(hits.len(), 2);
-        assert!(hits.iter().all(|h| h.snippet.contains("<mark>")), "FTS 路径应有高亮");
+        assert!(
+            hits.iter().all(|h| h.snippet.contains("<mark>")),
+            "FTS 路径应有高亮"
+        );
         let ha = hits.iter().find(|h| h.id == a.id).unwrap();
         assert_eq!(ha.tags, vec!["工作"]);
         assert_eq!(ha.title, "MediaFlow 开发计划");
@@ -306,10 +319,17 @@ mod tests {
     #[test]
     fn private_and_deleted_excluded() {
         let conn = setup();
-        let a = seed(&conn, "MediaFlow 笔记", "MediaFlow 正文内容足够长以支持 trigram");
+        let a = seed(
+            &conn,
+            "MediaFlow 笔记",
+            "MediaFlow 正文内容足够长以支持 trigram",
+        );
         let b = seed(&conn, "私密 MediaFlow", "私密正文 MediaFlow 的内容");
-        conn.execute("UPDATE notes SET is_private = 1 WHERE id = ?1", params![b.id])
-            .unwrap();
+        conn.execute(
+            "UPDATE notes SET is_private = 1 WHERE id = ?1",
+            params![b.id],
+        )
+        .unwrap();
 
         assert_eq!(search(&conn, "MediaFlow", false).unwrap().len(), 1);
         assert_eq!(search(&conn, "MediaFlow", true).unwrap().len(), 2);
@@ -329,7 +349,14 @@ mod tests {
         assert_eq!(search(&conn, "MediaFlow", true).unwrap().len(), 1);
 
         // 重新同步后恢复（仍被 deleted 过滤）
-        fts_sync(&conn, &a.id, "MediaFlow 笔记", "MediaFlow 正文内容足够长以支持 trigram", "").unwrap();
+        fts_sync(
+            &conn,
+            &a.id,
+            "MediaFlow 笔记",
+            "MediaFlow 正文内容足够长以支持 trigram",
+            "",
+        )
+        .unwrap();
         assert_eq!(search(&conn, "MediaFlow", true).unwrap().len(), 1);
     }
 
@@ -341,9 +368,11 @@ mod tests {
         fts_sync(&conn, &a.id, "标题A", "正文A", "工作流 学习记录").unwrap();
 
         let rows: i64 = conn
-            .query_row("SELECT COUNT(*) FROM notes_fts WHERE note_id = ?1", params![a.id], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM notes_fts WHERE note_id = ?1",
+                params![a.id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(rows, 1, "重复同步不应产生重复索引行");
 
@@ -351,6 +380,10 @@ mod tests {
         let hits = search(&conn, "工作流", false).unwrap();
         assert_eq!(hits.len(), 1, "tags 列可搜索");
         assert_eq!(hits[0].id, a.id);
-        assert_eq!(hits[0].tags, Vec::<String>::new(), "tags 聚合来自 note_tags 而非索引");
+        assert_eq!(
+            hits[0].tags,
+            Vec::<String>::new(),
+            "tags 聚合来自 note_tags 而非索引"
+        );
     }
 }

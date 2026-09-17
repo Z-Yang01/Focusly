@@ -35,9 +35,9 @@ pub fn cancel_reminder(
     state: State<'_, AppState>,
     reminder_id: String,
 ) -> AppResult<()> {
-    state.db.with(|c| {
-        crate::db::reminders::set_status(c, &reminder_id, "cancelled", false)
-    })?;
+    state
+        .db
+        .with(|c| crate::db::reminders::set_status(c, &reminder_id, "cancelled", false))?;
     state.scheduler.wake();
     let _ = app; // 预留：如需通知前端可在此 emit
     Ok(())
@@ -49,9 +49,9 @@ pub fn complete_reminder(
     state: State<'_, AppState>,
     reminder_id: String,
 ) -> AppResult<()> {
-    state.db.with(|c| {
-        crate::db::reminders::set_status(c, &reminder_id, "done", false)
-    })?;
+    state
+        .db
+        .with(|c| crate::db::reminders::set_status(c, &reminder_id, "done", false))?;
     state.scheduler.wake();
     let _ = app; // 预留：如需通知前端可在此 emit
     Ok(())

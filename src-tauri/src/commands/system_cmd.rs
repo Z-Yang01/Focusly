@@ -1,8 +1,8 @@
 //! 系统/窗口命令（薄层）：显隐窗口、退出、导入导出、外部链接、应用信息。
 
 use serde_json::json;
-use tauri::{AppHandle, State};
 use tauri::Manager;
+use tauri::{AppHandle, State};
 
 use crate::error::{AppError, AppResult};
 use crate::export::ImportSummary;
@@ -105,7 +105,6 @@ pub fn get_app_info(state: State<'_, AppState>) -> serde_json::Value {
     })
 }
 
-
 /// 导出诊断包：版本/系统信息/数据库健康摘要/日志副本（不含便签内容、不含私密数据）。
 /// 写入用户通过 dialog save 选择的路径（前端负责选路径）。
 #[tauri::command]
@@ -122,7 +121,10 @@ pub fn export_diagnostics(app: AppHandle, path: String) -> AppResult<()> {
         std::env::consts::OS,
         std::env::consts::ARCH
     ));
-    lines.push(format!("generated_at={}", chrono::Local::now().to_rfc3339()));
+    lines.push(format!(
+        "generated_at={}",
+        chrono::Local::now().to_rfc3339()
+    ));
 
     // 数据库健康摘要（只统计数量，不输出任何便签内容）
     let health = state.db.with(|c| -> AppResult<serde_json::Value> {
@@ -153,9 +155,14 @@ pub fn export_diagnostics(app: AppHandle, path: String) -> AppResult<()> {
         }
     }
 
-    std::fs::write(&path, lines.join("
-"))
-        .map_err(|e| crate::error::AppError::Io(format!("写入诊断包失败: {e}")))?;
+    std::fs::write(
+        &path,
+        lines.join(
+            "
+",
+        ),
+    )
+    .map_err(|e| crate::error::AppError::Io(format!("写入诊断包失败: {e}")))?;
     log::info!("诊断包已导出: {path}");
     Ok(())
 }

@@ -129,7 +129,11 @@ mod tests {
             add(&conn, &format!("再塞{i}"), "text").unwrap();
         }
         let all = list(&conn, 1000).unwrap();
-        assert_eq!(all.len(), (MAX_ITEMS + 1) as usize, "100 条未固定 + 1 条固定");
+        assert_eq!(
+            all.len(),
+            (MAX_ITEMS + 1) as usize,
+            "100 条未固定 + 1 条固定"
+        );
         assert_eq!(all[0].id, keep.id, "pinned 排最前");
         assert!(all.iter().any(|e| e.id == keep.id), "pinned 不参与淘汰");
         assert_eq!(all[1].content, format!("再塞{}", MAX_ITEMS + 9));

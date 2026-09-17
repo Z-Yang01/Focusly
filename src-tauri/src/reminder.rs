@@ -1,7 +1,6 @@
 //! 提醒调度器：tokio 事件驱动（无轮询）。
 //! 依据最近的 pending 提醒睡眠，到点触发通知；插入/修改/提醒后由 `SchedulerHandle::wake()` 唤醒重算。
 
-
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::json;
 use tauri::{AppHandle, Emitter, Manager};
@@ -57,12 +56,18 @@ pub fn spawn_loop(app: AppHandle, rx: UnboundedReceiver<()>) {
         let state = app.state::<AppState>();
         let summary = state
             .db
-            .with(|c| crate::db::missed::count_missed(c))
+            .with(crate::db::missed::count_missed)
             .ok()
-            .and_then(|n| crate::dnd::missed_summary_text(n));
+            .and_then(crate::dnd::missed_summary_text);
         if let Some(text) = summary {
             use tauri_plugin_notification::NotificationExt;
-            if let Err(e) = app.notification().builder().title("Focusly").body(&text).show() {
+            if let Err(e) = app
+                .notification()
+                .builder()
+                .title("Focusly")
+                .body(&text)
+                .show()
+            {
                 log::warn!("错过提醒汇总通知发送失败: {e}");
             }
         }
@@ -85,7 +90,9 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<()>) {
                 if t <= now {
                     fire_due(&app);
                 } else {
-                    let dur = (t - now).to_std().unwrap_or(std::time::Duration::from_secs(1));
+                    let dur = (t - now)
+                        .to_std()
+                        .unwrap_or(std::time::Duration::from_secs(1));
                     let deadline = tokio::time::Instant::now() + dur;
                     tokio::select! {
                         _ = tokio::time::sleep_until(deadline) => fire_due(&app),
@@ -101,7 +108,7 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<()>) {
 /// 解析失败的行记日志并跳过。
 fn next_pending_time(app: &AppHandle) -> Option<DateTime<Utc>> {
     let state = app.state::<AppState>();
-    let pending = match state.db.with(|c| crate::db::reminders::all_pending(c)) {
+    let pending = match state.db.with(crate::db::reminders::all_pending) {
         Ok(list) => list,
         Err(e) => {
             log::error!("读取待触发提醒失败: {e}");
@@ -111,10 +118,12 @@ fn next_pending_time(app: &AppHandle) -> Option<DateTime<Utc>> {
     let mut min: Option<DateTime<Utc>> = None;
     for r in pending {
         match parse(&r.remind_at) {
-            Ok(t) => min = Some(match min {
-                Some(m) => m.min(t),
-                None => t,
-            }),
+            Ok(t) => {
+                min = Some(match min {
+                    Some(m) => m.min(t),
+                    None => t,
+                })
+            }
             Err(_) => log::error!("提醒 {} 的 remind_at 非法: {}", r.id, r.remind_at),
         }
     }
@@ -128,7 +137,7 @@ fn fire_due(app: &AppHandle) {
     let cutoff = now - chrono::Duration::hours(STALE_CUTOFF_HOURS);
 
     let due: Vec<Reminder> = {
-        let pending = match state.db.with(|c| crate::db::reminders::all_pending(c)) {
+        let pending = match state.db.with(crate::db::reminders::all_pending) {
             Ok(list) => list,
             Err(e) => {
                 log::error!("fire_due 读取提醒失败: {e}");
@@ -152,7 +161,7 @@ fn fire_due(app: &AppHandle) {
     // 勿扰时段：一次读取（空键 = 关闭勿扰，fail-open）
     let settings = state
         .db
-        .with(|c| crate::db::settings::get_all(c))
+        .with(crate::db::settings::get_all)
         .unwrap_or_default();
     let dnd_window = crate::dnd::parse_window(
         settings.get("dnd_start").map(String::as_str).unwrap_or(""),
@@ -186,10 +195,9 @@ fn fire_due(app: &AppHandle) {
         if !crate::dnd::should_notify(&settings, now_local) {
             if let Some(w) = &dnd_window {
                 let exit_utc = crate::dnd::next_exit_utc(now, w);
-                if let Err(e) = state
-                    .db
-                    .with(|c| crate::db::reminders::snooze_to(c, &r.id, &crate::reminder::fmt(exit_utc)))
-                {
+                if let Err(e) = state.db.with(|c| {
+                    crate::db::reminders::snooze_to(c, &r.id, &crate::reminder::fmt(exit_utc))
+                }) {
                     log::error!("勿扰推迟提醒 {} 失败: {e}", r.id);
                 } else {
                     log::info!("提醒 {} 处于勿扰时段，推迟到 {}", r.id, exit_utc);
@@ -199,16 +207,14 @@ fn fire_due(app: &AppHandle) {
         }
 
         // 便签标题与摘要（私密便签通知脱敏：不下发原文标题与内容）
-        let (title, content, is_private) = match state
-            .db
-            .with(|c| crate::db::notes::get(c, &r.note_id))
-        {
-            Ok(n) => (n.title, n.content, n.is_private),
-            Err(e) => {
-                log::warn!("提醒 {} 关联的便签 {} 不存在: {e}", r.id, r.note_id);
-                ("提醒".to_string(), String::new(), false)
-            }
-        };
+        let (title, content, is_private) =
+            match state.db.with(|c| crate::db::notes::get(c, &r.note_id)) {
+                Ok(n) => (n.title, n.content, n.is_private),
+                Err(e) => {
+                    log::warn!("提醒 {} 关联的便签 {} 不存在: {e}", r.id, r.note_id);
+                    ("提醒".to_string(), String::new(), false)
+                }
+            };
         let (notice_title, _) = crate::privacy::notification_text(&title, &content, is_private);
         let snippet = crate::privacy::mask_snippet(&markdown_snippet(&content, 80), is_private);
         if let Err(e) = app
@@ -266,7 +272,9 @@ fn fire_due(app: &AppHandle) {
 
 /// 内容摘要：去 markdown 符号、折叠空白、截断到 max 字符。
 fn markdown_snippet(content: &str, max_chars: usize) -> String {
-    const MARKDOWN_CHARS: &[char] = &['#', '*', '`', '_', '~', '[', ']', '(', ')', '>', '!', '|', '-'];
+    const MARKDOWN_CHARS: &[char] = &[
+        '#', '*', '`', '_', '~', '[', ']', '(', ')', '>', '!', '|', '-',
+    ];
     let cleaned: String = content
         .lines()
         .map(str::trim)

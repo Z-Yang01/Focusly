@@ -12,9 +12,8 @@ pub const DEFAULT_SHORTCUTS: &[(&str, &str)] = &[
 ];
 
 pub fn list(conn: &Connection) -> AppResult<Vec<ShortcutEntry>> {
-    let mut stmt = conn.prepare(
-        "SELECT action, accelerator, enabled FROM shortcuts ORDER BY action ASC",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT action, accelerator, enabled FROM shortcuts ORDER BY action ASC")?;
     let rows = stmt
         .query_map([], |r| {
             Ok(ShortcutEntry {

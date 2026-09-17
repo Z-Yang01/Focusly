@@ -5,8 +5,8 @@
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    EnumDisplayMonitors, GetMonitorInfoW, MonitorFromWindow, HDC, HMONITOR, MONITORINFOEXW,
-    MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    EnumDisplayMonitors, GetMonitorInfoW, MonitorFromWindow, HDC, HMONITOR, MONITORINFO,
+    MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
 };
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
@@ -28,9 +28,18 @@ unsafe extern "system" fn enum_proc(
     let monitors = &mut *(lparam.0 as *mut Vec<MonitorInfo>);
     let mut info = MONITORINFOEXW::default();
     info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
-    if GetMonitorInfoW(hmonitor, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO).as_bool() {
+    if GetMonitorInfoW(
+        hmonitor,
+        &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
+    )
+    .as_bool()
+    {
         let device = String::from_utf16_lossy(
-            &info.szDevice[..info.szDevice.iter().position(|&c| c == 0).unwrap_or(info.szDevice.len())],
+            &info.szDevice[..info
+                .szDevice
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(info.szDevice.len())],
         );
         monitors.push(MonitorInfo {
             device,
@@ -63,12 +72,21 @@ pub fn monitor_of_window(hwnd: HWND) -> Option<String> {
     let mut info = MONITORINFOEXW::default();
     info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
     unsafe {
-        if !GetMonitorInfoW(nearest, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO).as_bool() {
+        if !GetMonitorInfoW(
+            nearest,
+            &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
+        )
+        .as_bool()
+        {
             return None;
         }
     }
     Some(String::from_utf16_lossy(
-        &info.szDevice[..info.szDevice.iter().position(|&c| c == 0).unwrap_or(info.szDevice.len())],
+        &info.szDevice[..info
+            .szDevice
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(info.szDevice.len())],
     ))
 }
 
@@ -97,9 +115,7 @@ pub fn rect_visible_on_any_monitor(_x: i32, _y: i32, _w: i32, _h: i32) -> bool {
 #[cfg(windows)]
 /// 前台窗口是否处于全屏（矩形铺满所在显示器且非系统 UI）。
 pub fn is_foreground_fullscreen() -> bool {
-    use windows::Win32::Graphics::Dwm::{
-        DwmGetWindowAttribute, DWMWINDOWATTRIBUTE,
-    };
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWINDOWATTRIBUTE};
     use windows::Win32::UI::Shell::SHQueryUserNotificationState;
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
@@ -163,7 +179,9 @@ mod tests {
         // 有显示器的环境下至少能枚举到一个
         if !monitors.is_empty() {
             assert!(super::rect_visible_on_any_monitor(0, 0, 100, 100));
-            assert!(!super::rect_visible_on_any_monitor(-20000, -20000, 100, 100));
+            assert!(!super::rect_visible_on_any_monitor(
+                -20000, -20000, 100, 100
+            ));
         }
     }
 }

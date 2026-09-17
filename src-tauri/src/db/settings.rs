@@ -5,8 +5,8 @@ use rusqlite::{params, Connection};
 use crate::error::AppResult;
 
 pub const DEFAULTS: &[(&str, &str)] = &[
-    ("theme", "system"),            // system | light | dark
-    ("close_action", "tray"),       // tray | quit
+    ("theme", "system"),      // system | light | dark
+    ("close_action", "tray"), // tray | quit
     ("autostart", "false"),
     ("start_minimized", "true"),
     ("launch_show_notes", "true"),

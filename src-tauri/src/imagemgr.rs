@@ -16,10 +16,10 @@
 //! 说明：按任务边界，本文件持有对 note_images 的只读 SELECT
 //! （`SELECT id, note_id, path, filename FROM note_images`），不修改 db/images.rs。
 
-use std::collections::{BTreeMap, HashSet};
-use std::path::{Path, PathBuf};
 use image::GenericImageView;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};

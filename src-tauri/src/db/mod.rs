@@ -1,8 +1,8 @@
 pub mod clipboard;
 pub mod images;
 pub mod layouts;
-pub mod missed;
 pub mod migrations;
+pub mod missed;
 pub mod models;
 pub mod notes;
 pub mod pomodoro_sessions;

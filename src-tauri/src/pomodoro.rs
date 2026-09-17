@@ -20,9 +20,9 @@
 //!   `FullscreenChanged`（写 FULLSCREEN_HINT 提示位 + FULLSCREEN_WATCH 唤醒等待方）；
 //!   2s 轮询实时探测仅作兜底（硬顶 4 小时）。等待在独立任务里，事件循环不受阻塞。
 
+use rusqlite::params;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use rusqlite::params;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -135,7 +135,10 @@ pub fn scrub_private_text(app: &AppHandle, note_id: &str) {
     if let Ok(mut g) = snapshot_cell().lock() {
         if g.note_id == note_id && !g.task_text.is_empty() {
             g.task_text = String::new();
-            let _ = app.emit(STATE_EVENT, serde_json::to_value(&*g).unwrap_or_else(|_| json!({})));
+            let _ = app.emit(
+                STATE_EVENT,
+                serde_json::to_value(&*g).unwrap_or_else(|_| json!({})),
+            );
         }
     }
     // 2) 会话表：running 状态的任务文本快照清空
@@ -269,7 +272,7 @@ pub fn fmt_mmss(total_sec: i64) -> String {
 /// 完成 completed_focus_in_cycle 个焦点（含本次）后的休息类型；
 /// long_every <= 0 视为 1 防御性处理（不 panic）。
 pub fn break_after(completed_focus_in_cycle: u32, long_every: u32) -> Phase {
-    if long_every > 0 && completed_focus_in_cycle % long_every == 0 {
+    if long_every > 0 && completed_focus_in_cycle.is_multiple_of(long_every) {
         Phase::LongBreak
     } else {
         Phase::ShortBreak
@@ -448,7 +451,7 @@ fn read_settings(app: &AppHandle) -> PomoSettings {
         let state = app.state::<AppState>();
         state
             .db
-            .with(|c| crate::db::settings::get_all(c))
+            .with(crate::db::settings::get_all)
             .unwrap_or_default()
     };
     settings_from(&map)
@@ -912,7 +915,7 @@ fn spawn_notice(
                 let state = app.state::<AppState>();
                 state
                     .db
-                    .with(|c| crate::db::settings::get_all(c))
+                    .with(crate::db::settings::get_all)
                     .unwrap_or_default()
             };
             let now_local = chrono::Local::now().time();
@@ -951,11 +954,7 @@ fn spawn_notice(
 /// 在 24h 内则补一条阶段结束通知（脱敏+勿扰，超 24h 忽略——错过汇总已覆盖）。
 pub fn recover(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let running = state
-        .db
-        .with(|c| pomodoro_sessions::get_running(c))
-        .ok()
-        .flatten();
+    let running = state.db.with(pomodoro_sessions::get_running).ok().flatten();
     let Some(s) = running else { return };
     let now = Utc::now();
     let started = crate::reminder::parse(&s.started_at).unwrap_or(now);

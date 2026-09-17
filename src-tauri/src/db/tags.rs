@@ -38,24 +38,25 @@ pub fn attach_tag(conn: &Connection, note_id: &str, name: &str) -> AppResult<Vec
         return Err(crate::error::AppError::Invalid("标签名不能为空".into()));
     }
     if name.len() > 32 {
-        return Err(crate::error::AppError::Invalid("标签名过长（最多 32 字符）".into()));
+        return Err(crate::error::AppError::Invalid(
+            "标签名过长（最多 32 字符）".into(),
+        ));
     }
-    let tag_id: String = match conn.query_row(
-        "SELECT id FROM tags WHERE name = ?1",
-        params![name],
-        |r| r.get(0),
-    ) {
-        Ok(id) => id,
-        Err(rusqlite::Error::QueryReturnedNoRows) => {
-            let id = Uuid::new_v4().to_string();
-            conn.execute(
-                "INSERT INTO tags (id, name, created_at) VALUES (?1, ?2, ?3)",
-                params![id, name, now()],
-            )?;
-            id
-        }
-        Err(e) => return Err(e.into()),
-    };
+    let tag_id: String =
+        match conn.query_row("SELECT id FROM tags WHERE name = ?1", params![name], |r| {
+            r.get(0)
+        }) {
+            Ok(id) => id,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                let id = Uuid::new_v4().to_string();
+                conn.execute(
+                    "INSERT INTO tags (id, name, created_at) VALUES (?1, ?2, ?3)",
+                    params![id, name, now()],
+                )?;
+                id
+            }
+            Err(e) => return Err(e.into()),
+        };
     conn.execute(
         "INSERT OR IGNORE INTO note_tags (note_id, tag_id) VALUES (?1, ?2)",
         params![note_id, tag_id],

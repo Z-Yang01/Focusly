@@ -373,9 +373,15 @@ mod tests {
         let note = src
             .with(|c| crate::db::notes::create(c, "导出测试", "# 内容\n- [ ] 买牛奶"))
             .unwrap();
-        src.with(|c| crate::db::tags::attach_tag(c, &note.id, "工作")).unwrap();
+        src.with(|c| crate::db::tags::attach_tag(c, &note.id, "工作"))
+            .unwrap();
         src.with(|c| {
-            crate::db::reminders::create(c, &note.id, "2026-10-01T09:00:00+00:00", RepeatType::Daily)
+            crate::db::reminders::create(
+                c,
+                &note.id,
+                "2026-10-01T09:00:00+00:00",
+                RepeatType::Daily,
+            )
         })
         .unwrap();
 
@@ -495,9 +501,7 @@ mod tests {
         assert_eq!(summary.imported_notes, 0);
         assert_eq!(summary.skipped, 3, "指向不存在便签的外键数据应跳过");
         let tags: i64 = db
-            .with(|c| {
-                Ok(c.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0))?)
-            })
+            .with(|c| Ok(c.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0))?))
             .unwrap();
         assert_eq!(tags, 0, "被跳过的标签不应入库");
     }

@@ -72,7 +72,9 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<Note> {
 /// 便签存在性查询（DAO 契约补全；供未来导入去重/外键校验使用）
 #[allow(dead_code)]
 pub fn exists(conn: &Connection, id: &str) -> AppResult<bool> {
-    let n: i64 = conn.query_row("SELECT COUNT(*) FROM notes WHERE id=?1", params![id], |r| r.get(0))?;
+    let n: i64 = conn.query_row("SELECT COUNT(*) FROM notes WHERE id=?1", params![id], |r| {
+        r.get(0)
+    })?;
     Ok(n > 0)
 }
 
@@ -82,7 +84,10 @@ pub fn exists(conn: &Connection, id: &str) -> AppResult<bool> {
 /// - all: 未删除的全部
 pub fn list(conn: &Connection, filter: &str) -> AppResult<Vec<NoteSummary>> {
     let (where_clause, params_slice): (String, Vec<&dyn rusqlite::ToSql>) = match filter {
-        "archived" => ("WHERE status = 'archived' AND deleted_at IS NULL".into(), vec![]),
+        "archived" => (
+            "WHERE status = 'archived' AND deleted_at IS NULL".into(),
+            vec![],
+        ),
         "todo" => (
             "WHERE status = 'active' AND deleted_at IS NULL \
              AND (content LIKE '%- [ ]%' OR content LIKE '%- [x]%')"
@@ -91,7 +96,10 @@ pub fn list(conn: &Connection, filter: &str) -> AppResult<Vec<NoteSummary>> {
         ),
         "trash" => ("WHERE deleted_at IS NOT NULL".into(), vec![]),
         "all" => ("WHERE deleted_at IS NULL".into(), vec![]),
-        _ => ("WHERE status = 'active' AND deleted_at IS NULL".into(), vec![]),
+        _ => (
+            "WHERE status = 'active' AND deleted_at IS NULL".into(),
+            vec![],
+        ),
     };
     let sql = format!(
         "SELECT {NOTE_COLS} FROM notes {where_clause} \
@@ -203,9 +211,9 @@ pub fn update(conn: &Connection, u: &NoteUpdate) -> AppResult<Note> {
     }
     if let Some(v) = u.scale {
         bind("scale", Box::new(v));
-    if let Some(ref v) = u.pin_mode {
-        bind("pin_mode", Box::new(v.clone()));
-    }
+        if let Some(ref v) = u.pin_mode {
+            bind("pin_mode", Box::new(v.clone()));
+        }
     }
     if u.touch {
         bind("updated_at", Box::new(now()));
@@ -256,7 +264,10 @@ pub fn archive(conn: &Connection, id: &str) -> AppResult<Note> {
 }
 
 pub fn restore(conn: &Connection, id: &str) -> AppResult<Note> {
-    conn.execute("UPDATE notes SET status='active', archived_at=NULL WHERE id=?1", params![id])?;
+    conn.execute(
+        "UPDATE notes SET status='active', archived_at=NULL WHERE id=?1",
+        params![id],
+    )?;
     get(conn, id)
 }
 
@@ -286,7 +297,9 @@ pub fn snapshot_version(conn: &Connection, note_id: &str, source: &str) -> AppRe
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => AppError::Invalid(format!("便签不存在: {note_id}")),
+            rusqlite::Error::QueryReturnedNoRows => {
+                AppError::Invalid(format!("便签不存在: {note_id}"))
+            }
             other => AppError::Db(other.to_string()),
         })?;
     let version_id = Uuid::new_v4().to_string();
@@ -337,7 +350,9 @@ pub fn all_active_with_windows(conn: &Connection) -> AppResult<Vec<Note>> {
         "SELECT {NOTE_COLS} FROM notes WHERE status='active' AND deleted_at IS NULL ORDER BY created_at ASC"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let notes = stmt.query_map([], row_to_note)?.collect::<rusqlite::Result<_>>()?;
+    let notes = stmt
+        .query_map([], row_to_note)?
+        .collect::<rusqlite::Result<_>>()?;
     Ok(notes)
 }
 
@@ -349,7 +364,9 @@ pub fn list_private(conn: &Connection) -> AppResult<Vec<NoteSummary>> {
          ORDER BY updated_at DESC"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let notes: Vec<Note> = stmt.query_map([], row_to_note)?.collect::<rusqlite::Result<_>>()?;
+    let notes: Vec<Note> = stmt
+        .query_map([], row_to_note)?
+        .collect::<rusqlite::Result<_>>()?;
     notes.into_iter().map(|n| to_summary(conn, n)).collect()
 }
 

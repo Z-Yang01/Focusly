@@ -38,7 +38,7 @@ const SHORTCUT_ACTIONS: &[&str] = &[
 
 #[tauri::command]
 pub fn get_all_settings(state: State<'_, AppState>) -> AppResult<HashMap<String, String>> {
-    state.db.with(|c| crate::db::settings::get_all(c))
+    state.db.with(crate::db::settings::get_all)
 }
 
 #[tauri::command]
@@ -51,7 +51,9 @@ pub fn set_setting(
     if !SETTING_KEYS.contains(&key.as_str()) {
         return Err(AppError::Invalid(format!("未知设置项: {key}")));
     }
-    state.db.with(|c| crate::db::settings::set(c, &key, &value))?;
+    state
+        .db
+        .with(|c| crate::db::settings::set(c, &key, &value))?;
 
     if key == "autostart" {
         use tauri_plugin_autostart::ManagerExt;
@@ -79,7 +81,7 @@ pub fn set_setting(
 
 #[tauri::command]
 pub fn get_shortcuts(state: State<'_, AppState>) -> AppResult<Vec<ShortcutEntry>> {
-    state.db.with(|c| crate::db::shortcuts::list(c))
+    state.db.with(crate::db::shortcuts::list)
 }
 
 /// 校验并归一化组合键：小写；每段 ∈ {ctrl,shift,alt,super} 或单字符 / F1-F24；修饰键在前。
@@ -118,9 +120,29 @@ fn validate_accelerator(accelerator: &str) -> AppResult<String> {
             .unwrap_or(false);
         // 命名按键（tauri 全局快捷键支持的小写形式）
         const NAMED_KEYS: &[&str] = &[
-            "space", "tab", "enter", "backspace", "delete", "insert", "home", "end",
-            "pageup", "pagedown", "up", "down", "left", "right", "esc", "escape",
-            "minus", "equal", "comma", "period", "slash", "backslash", "semicolon",
+            "space",
+            "tab",
+            "enter",
+            "backspace",
+            "delete",
+            "insert",
+            "home",
+            "end",
+            "pageup",
+            "pagedown",
+            "up",
+            "down",
+            "left",
+            "right",
+            "esc",
+            "escape",
+            "minus",
+            "equal",
+            "comma",
+            "period",
+            "slash",
+            "backslash",
+            "semicolon",
         ];
         let valid = part.chars().count() == 1 || is_fkey || NAMED_KEYS.contains(&part.as_str());
         if !valid {
@@ -132,7 +154,9 @@ fn validate_accelerator(accelerator: &str) -> AppResult<String> {
         key_part = part;
     }
     if !has_key {
-        return Err(AppError::Invalid(format!("快捷键缺少主按键: {accelerator}")));
+        return Err(AppError::Invalid(format!(
+            "快捷键缺少主按键: {accelerator}"
+        )));
     }
     // 归一化：修饰键按 ctrl→shift→alt→super 排序置于前端，主键在后，整体小写
     seen_mods.sort_by_key(|m| MODIFIERS.iter().position(|x| x == m).unwrap_or(usize::MAX));
@@ -154,7 +178,7 @@ pub fn set_shortcut(
     let normalized = validate_accelerator(&accelerator)?;
 
     // 冲突：其他动作已占用该组合键
-    let entries = state.db.with(|c| crate::db::shortcuts::list(c))?;
+    let entries = state.db.with(crate::db::shortcuts::list)?;
     if let Some(other) = entries
         .iter()
         .find(|e| e.action != action && e.accelerator.eq_ignore_ascii_case(&normalized))
@@ -165,7 +189,9 @@ pub fn set_shortcut(
         )));
     }
 
-    state.db.with(|c| crate::db::shortcuts::set(c, &action, &normalized))?;
+    state
+        .db
+        .with(|c| crate::db::shortcuts::set(c, &action, &normalized))?;
     // 重注册全部（失败条目内部已记录，不影响整体返回）
     crate::shortcut::register_all(&app)?;
     let _ = app.emit(
@@ -177,7 +203,7 @@ pub fn set_shortcut(
 
 #[tauri::command]
 pub fn reset_shortcuts(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    state.db.with(|c| crate::db::shortcuts::reset_all(c))?;
+    state.db.with(crate::db::shortcuts::reset_all)?;
     crate::shortcut::register_all(&app)?;
     let _ = app.emit(
         "settings-changed",
@@ -192,19 +218,34 @@ mod tests {
 
     #[test]
     fn accelerator_validation() {
-        assert_eq!(validate_accelerator("Ctrl+Shift+Space").unwrap(), "ctrl+shift+space");
-        assert_eq!(validate_accelerator("ctrl+shift+n").unwrap(), "ctrl+shift+n");
+        assert_eq!(
+            validate_accelerator("Ctrl+Shift+Space").unwrap(),
+            "ctrl+shift+space"
+        );
+        assert_eq!(
+            validate_accelerator("ctrl+shift+n").unwrap(),
+            "ctrl+shift+n"
+        );
         assert_eq!(validate_accelerator("Alt+F4").unwrap(), "alt+f4");
         assert_eq!(validate_accelerator("F5").unwrap(), "f5");
         assert_eq!(validate_accelerator("super+q").unwrap(), "super+q");
-        assert_eq!(validate_accelerator("ctrl+alt+F12").unwrap(), "ctrl+alt+f12");
+        assert_eq!(
+            validate_accelerator("ctrl+alt+F12").unwrap(),
+            "ctrl+alt+f12"
+        );
 
         // 非法输入
         assert!(validate_accelerator("").is_err());
         assert!(validate_accelerator("ctrl").is_err(), "缺少主按键");
         // 修饰键顺序无语义（tauri 注册时归一化），乱序合法
-        assert_eq!(validate_accelerator("shift+ctrl+n").unwrap(), "ctrl+shift+n");
-        assert!(validate_accelerator("ctrl+ctrl+n").is_err(), "主按键后不得再出现修饰键");
+        assert_eq!(
+            validate_accelerator("shift+ctrl+n").unwrap(),
+            "ctrl+shift+n"
+        );
+        assert!(
+            validate_accelerator("ctrl+ctrl+n").is_err(),
+            "主按键后不得再出现修饰键"
+        );
         assert!(validate_accelerator("ctrl+foo").is_err(), "多字符非法按键");
         assert!(validate_accelerator("ctrl+f25").is_err(), "F 键范围 1-24");
         assert!(validate_accelerator("ctrl++n").is_err(), "空段非法");
@@ -219,12 +260,16 @@ pub fn save_search(
     name: String,
     query: String,
 ) -> AppResult<crate::db::models::SavedSearch> {
-    state.db.with(|c| crate::db::saved_searches::save(c, &name, &query))
+    state
+        .db
+        .with(|c| crate::db::saved_searches::save(c, &name, &query))
 }
 
 #[tauri::command]
-pub fn list_saved_searches(state: State<'_, AppState>) -> AppResult<Vec<crate::db::models::SavedSearch>> {
-    state.db.with(|c| crate::db::saved_searches::list(c))
+pub fn list_saved_searches(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<crate::db::models::SavedSearch>> {
+    state.db.with(crate::db::saved_searches::list)
 }
 
 #[tauri::command]

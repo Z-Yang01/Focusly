@@ -36,7 +36,11 @@ impl log::Log for FileLogger {
         };
         // 文件被外部删除/轮转时自动重建
         if guard.is_none() {
-            if let Ok(f) = OpenOptions::new().create(true).append(true).open(&self.path) {
+            if let Ok(f) = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)
+            {
                 *guard = Some(f);
             }
         }
@@ -52,7 +56,11 @@ impl log::Log for FileLogger {
                     let rotated = self.path.with_extension("log.1");
                     let _ = std::fs::remove_file(&rotated);
                     let _ = std::fs::rename(&self.path, &rotated);
-                    if let Ok(nf) = OpenOptions::new().create(true).append(true).open(&self.path) {
+                    if let Ok(nf) = OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&self.path)
+                    {
                         *guard = Some(nf);
                     }
                 }
@@ -69,7 +77,11 @@ pub fn init(logs_dir: &PathBuf) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let file = OpenOptions::new().create(true).append(true).open(&path).ok();
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .ok();
     let logger = Box::new(FileLogger {
         file: Mutex::new(file),
         path,

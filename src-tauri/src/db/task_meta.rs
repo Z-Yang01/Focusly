@@ -186,7 +186,7 @@ pub fn effective_status(meta: &TaskMeta, today: &str) -> String {
 
 /// 任务文本规范化：trim + 连续空白折叠为单空格（匹配口径与 `mark_done_content_line` 一致）。
 pub fn normalize_task_text(s: &str) -> String {
-    s.trim().split_whitespace().collect::<Vec<_>>().join(" ")
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// 在正文中找到第 1 个"去掉行首缩进后、复选框后的文本规范化后恰等于 line_text"
@@ -225,7 +225,6 @@ pub fn mark_done_content_line(content: &str, line_text: &str) -> Option<String> 
     }
 }
 
-
 // ---------- 任务身份算法（与前端 taskKey.ts 严格对齐） ----------
 
 /// FNV-1a 32 位哈希（按 UTF-16 码元迭代，与 JS charCodeAt 完全一致），
@@ -239,13 +238,16 @@ pub fn fnv1a32(input: &str) -> String {
     format!("{h:08x}")
 }
 
-
 /// 从便签正文解析待办行：(行文本, 是否勾选)。匹配规则与前端 parseTodos 一致。
 fn extract_task_lines(content: &str) -> Vec<(String, bool)> {
     let mut out = Vec::new();
     for line in content.split('\n') {
         let t = line.trim_start();
-        let rest = match t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")).or_else(|| t.strip_prefix("+ ")) {
+        let rest = match t
+            .strip_prefix("- ")
+            .or_else(|| t.strip_prefix("* "))
+            .or_else(|| t.strip_prefix("+ "))
+        {
             Some(r) => r,
             None => continue,
         };
@@ -268,7 +270,11 @@ fn extract_task_lines(content: &str) -> Vec<(String, bool)> {
 /// - meta 为 skipped → 不受勾选影响（跳过是独立维度）
 /// - 无 meta 的未勾选行不建行（避免空记录膨胀）
 /// 返回更新的行数。
-pub fn sync_task_meta_from_content(conn: &Connection, note_id: &str, content: &str) -> AppResult<usize> {
+pub fn sync_task_meta_from_content(
+    conn: &Connection,
+    note_id: &str,
+    content: &str,
+) -> AppResult<usize> {
     let mut changed = 0usize;
     let mut seen: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     for (raw_text, checked) in extract_task_lines(content) {
@@ -308,15 +314,9 @@ pub fn sync_task_meta_from_content(conn: &Connection, note_id: &str, content: &s
     Ok(changed)
 }
 
-
-
-
 /// 删除某便签的全部任务元数据（便签永久删除时调用）。
 pub fn delete_for_note(conn: &Connection, note_id: &str) -> AppResult<usize> {
-    let n = conn.execute(
-        "DELETE FROM task_meta WHERE note_id = ?1",
-        params![note_id],
-    )?;
+    let n = conn.execute("DELETE FROM task_meta WHERE note_id = ?1", params![note_id])?;
     Ok(n)
 }
 
@@ -348,7 +348,8 @@ mod tests {
         assert_eq!(metas[0].line_text, "任务乙");
 
         // 取消勾选乙 → meta 回退 todo
-        sync_task_meta_from_content(&conn, &note.id, "# 实机验收\n- [ ] 任务甲\n- [ ] 任务乙").unwrap();
+        sync_task_meta_from_content(&conn, &note.id, "# 实机验收\n- [ ] 任务甲\n- [ ] 任务乙")
+            .unwrap();
         let metas = list_for_note(&conn, &note.id).unwrap();
         let yi = metas.iter().find(|m| m.line_text == "任务乙").unwrap();
         assert_eq!(yi.status, "todo");
@@ -359,16 +360,20 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         migrations::run(&conn).unwrap();
         let note = crate::db::notes::create(&conn, "t", "- [ ] 被跳过的任务").unwrap();
-        upsert(&conn, &TaskMetaUpsert {
-            note_id: note.id.clone(),
-            task_key: crate::db::task_meta::fnv1a32("被跳过的任务") + "-0",
-            line_text: "被跳过的任务".into(),
-            status: Some("skipped".into()),
-            estimate: None,
-            priority: None,
-            due_at: None,
-            clear_skip: false,
-        }).unwrap();
+        upsert(
+            &conn,
+            &TaskMetaUpsert {
+                note_id: note.id.clone(),
+                task_key: crate::db::task_meta::fnv1a32("被跳过的任务") + "-0",
+                line_text: "被跳过的任务".into(),
+                status: Some("skipped".into()),
+                estimate: None,
+                priority: None,
+                due_at: None,
+                clear_skip: false,
+            },
+        )
+        .unwrap();
         sync_task_meta_from_content(&conn, &note.id, "- [ ] 被跳过的任务").unwrap();
         let metas = list_for_note(&conn, &note.id).unwrap();
         assert_eq!(metas[0].status, "skipped", "跳过态不受未勾选同步影响");

@@ -4,7 +4,10 @@ use crate::error::AppResult;
 use tauri::AppHandle;
 
 #[tauri::command]
-pub fn layout_save_preset(app: AppHandle, name: String) -> AppResult<crate::db::models::LayoutPreset> {
+pub fn layout_save_preset(
+    app: AppHandle,
+    name: String,
+) -> AppResult<crate::db::models::LayoutPreset> {
     crate::window::layout::save_preset(&app, &name)
 }
 

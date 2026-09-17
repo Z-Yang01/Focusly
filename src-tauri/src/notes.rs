@@ -57,8 +57,15 @@ pub fn get_detail(app: &AppHandle, id: &str) -> AppResult<NoteDetail> {
         let note = crate::db::notes::get(c, id)?;
         let images = crate::db::images::list_for_note(c, id)?;
         let tags = crate::db::tags::tags_for_note(c, id)?;
-        let next_reminder = crate::db::reminders::pending_for_note(c, id)?.into_iter().next();
-        Ok(NoteDetail { note, images, tags, next_reminder })
+        let next_reminder = crate::db::reminders::pending_for_note(c, id)?
+            .into_iter()
+            .next();
+        Ok(NoteDetail {
+            note,
+            images,
+            tags,
+            next_reminder,
+        })
     })
 }
 
@@ -215,7 +222,10 @@ pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
         crate::db::images::delete_file_best_effort(&state.paths.images, path);
     }
     crate::db::images::cleanup_note_dir(&state.paths.images, id);
-    log::info!("便签已永久删除 {id}（清理 {} 个图片文件）", image_paths.len());
+    log::info!(
+        "便签已永久删除 {id}（清理 {} 个图片文件）",
+        image_paths.len()
+    );
     emit_notes_changed(app, id);
     Ok(())
 }
@@ -233,7 +243,9 @@ pub fn move_to_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
 /// 从回收站恢复。
 pub fn restore_from_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
     let state = app.state::<AppState>();
-    let note = state.db.with(|c| crate::db::notes::restore_from_trash(c, id))?;
+    let note = state
+        .db
+        .with(|c| crate::db::notes::restore_from_trash(c, id))?;
     log::info!("便签已从回收站恢复 {id}");
     emit_notes_changed(app, id);
     Ok(note)
@@ -379,9 +391,15 @@ pub fn set_pin_mode(app: &AppHandle, id: &str, mode: &str) -> AppResult<Note> {
     Ok(note)
 }
 
-pub fn search_notes_v2(app: &AppHandle, keyword: &str, include_private: bool) -> AppResult<Vec<crate::db::models::SearchHit>> {
+pub fn search_notes_v2(
+    app: &AppHandle,
+    keyword: &str,
+    include_private: bool,
+) -> AppResult<Vec<crate::db::models::SearchHit>> {
     let state = app.state::<AppState>();
-    let hits = state.db.with(|c| crate::db::search::search(c, keyword, include_private))?;
+    let hits = state
+        .db
+        .with(|c| crate::db::search::search(c, keyword, include_private))?;
     Ok(hits)
 }
 

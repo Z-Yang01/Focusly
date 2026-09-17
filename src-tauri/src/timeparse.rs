@@ -178,10 +178,7 @@ fn parse_compact(s: &str, now: DateTime<Utc>) -> Option<ParsedTime> {
     let mut at = local.with_timezone(&Utc);
 
     // 周X/周末 可能落在今天（默认 09:00 已过）：+7 天保证严格未来
-    if matches!(
-        date_hit,
-        Some(DateHit::PlainWeekday(_) | DateHit::Weekend)
-    ) {
+    if matches!(date_hit, Some(DateHit::PlainWeekday(_) | DateHit::Weekend)) {
         while at <= now {
             at += Duration::days(7);
         }
@@ -220,10 +217,10 @@ fn parse_relative(s: &str) -> Option<Duration> {
             .unwrap_or(rest);
         match strip_first(no_ge, &["小时", "小時", "钟头", "鐘頭"]) {
             Some(r) => (60i64, r),
-            None => match strip_first(rest, &["天", "日"]) {
-                Some(r) => (60 * 24, r),
-                None => return None,
-            },
+            None => {
+                let r = strip_first(rest, &["天", "日"])?;
+                (60 * 24, r)
+            }
         }
     };
     if !matches_suffix_hou(rest) {
@@ -234,7 +231,10 @@ fn parse_relative(s: &str) -> Option<Duration> {
 
 /// 剩余部分必须是 "后/後" 或 "之后/以後" 等并到串尾。
 fn matches_suffix_hou(rest: &str) -> bool {
-    let rest = rest.strip_prefix('之').or_else(|| rest.strip_prefix('以')).unwrap_or(rest);
+    let rest = rest
+        .strip_prefix('之')
+        .or_else(|| rest.strip_prefix('以'))
+        .unwrap_or(rest);
     rest == "后" || rest == "後"
 }
 
@@ -267,7 +267,11 @@ fn strip_repeat(s: &str) -> Option<(RepeatType, Option<DateHit>, &str)> {
     for k in ["每星期", "每礼拜", "每周"] {
         if let Some(rest) = s.strip_prefix(k) {
             let (wd, used) = match_weekday(rest)?;
-            return Some((RepeatType::Weekly, Some(DateHit::PlainWeekday(wd)), &rest[used..]));
+            return Some((
+                RepeatType::Weekly,
+                Some(DateHit::PlainWeekday(wd)),
+                &rest[used..],
+            ));
         }
     }
     for k in ["每个工作日", "每個工作日", "每个上班日", "工作日"] {
@@ -324,7 +328,16 @@ enum DateHit {
 fn strip_date(s: &str) -> (Option<DateHit>, &str) {
     let fixed = |hit: DateHit, used: usize| (Some(hit), &s[used..]);
 
-    for (k, days) in [("大后天", 3i64), ("大後天", 3), ("后天", 2), ("後天", 2), ("明天", 1), ("明日", 1), ("今天", 0), ("今日", 0)] {
+    for (k, days) in [
+        ("大后天", 3i64),
+        ("大後天", 3),
+        ("后天", 2),
+        ("後天", 2),
+        ("明天", 1),
+        ("明日", 1),
+        ("今天", 0),
+        ("今日", 0),
+    ] {
         if let Some(rest) = s.strip_prefix(k) {
             return fixed(DateHit::Offset(days), s.len() - rest.len());
         }
@@ -432,11 +445,11 @@ struct TimeOfDay {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DayPart {
-    Am,      // 上午/早上：按原值
-    Noon,    // 中午：12→12，1..=2→+12
-    Pm,      // 下午：1..=11→+12，12→12
-    Evening, // 晚上：1..=11→+12，12→0(+shift)
-    Midnight // 半夜/凌晨：12→0(+shift)，其余原值
+    Am,       // 上午/早上：按原值
+    Noon,     // 中午：12→12，1..=2→+12
+    Pm,       // 下午：1..=11→+12，12→12
+    Evening,  // 晚上：1..=11→+12，12→0(+shift)
+    Midnight, // 半夜/凌晨：12→0(+shift)，其余原值
 }
 
 fn strip_time(s: &str) -> (Option<TimeOfDay>, &str) {

@@ -10,10 +10,14 @@ use crate::state::AppState;
 
 /// 从文件添加图片（校验扩展名，拷贝进 images/<note_id>/）。
 #[tauri::command]
-pub fn add_image(state: State<'_, AppState>, note_id: String, path: String) -> AppResult<NoteImage> {
-    state.db.with(|c| {
-        crate::db::images::add_file(c, &state.paths.images, &note_id, Path::new(&path))
-    })
+pub fn add_image(
+    state: State<'_, AppState>,
+    note_id: String,
+    path: String,
+) -> AppResult<NoteImage> {
+    state
+        .db
+        .with(|c| crate::db::images::add_file(c, &state.paths.images, &note_id, Path::new(&path)))
 }
 
 /// 剪贴板粘贴的 RGBA 原始字节，编码 PNG 后入库。

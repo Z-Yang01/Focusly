@@ -43,7 +43,9 @@ fn get_by_name(conn: &Connection, name: &str) -> AppResult<SavedSearch> {
         row_to_saved,
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => AppError::Invalid(format!("保存的搜索不存在: {name}")),
+        rusqlite::Error::QueryReturnedNoRows => {
+            AppError::Invalid(format!("保存的搜索不存在: {name}"))
+        }
         other => AppError::Db(other.to_string()),
     })
 }
@@ -57,14 +59,18 @@ pub fn get(conn: &Connection, id: &str) -> AppResult<SavedSearch> {
         row_to_saved,
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => AppError::Invalid(format!("保存的搜索不存在: {id}")),
+        rusqlite::Error::QueryReturnedNoRows => {
+            AppError::Invalid(format!("保存的搜索不存在: {id}"))
+        }
         other => AppError::Db(other.to_string()),
     })
 }
 
 /// 全部保存的搜索，按名称排序。
 pub fn list(conn: &Connection) -> AppResult<Vec<SavedSearch>> {
-    let mut stmt = conn.prepare(&format!("SELECT {COLS} FROM saved_searches ORDER BY name ASC"))?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COLS} FROM saved_searches ORDER BY name ASC"
+    ))?;
     let list = stmt
         .query_map([], row_to_saved)?
         .collect::<rusqlite::Result<_>>()?;
@@ -112,10 +118,7 @@ mod tests {
     #[test]
     fn save_rejects_blank_name() {
         let conn = setup();
-        assert!(matches!(
-            save(&conn, "   ", "q"),
-            Err(AppError::Invalid(_))
-        ));
+        assert!(matches!(save(&conn, "   ", "q"), Err(AppError::Invalid(_))));
     }
 
     #[test]

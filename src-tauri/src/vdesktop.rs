@@ -32,18 +32,21 @@ pub fn set_window_pinned(
 
 #[cfg(windows)]
 mod imp {
+    use super::{
+        CLSID_IMMERSIVE_SHELL, CLSID_VIRTUAL_DESKTOP_PINNED_APPS, IID_VIRTUAL_DESKTOP_PINNED_APPS,
+    };
     use std::ffi::c_void;
-    use super::{CLSID_IMMERSIVE_SHELL, CLSID_VIRTUAL_DESKTOP_PINNED_APPS, IID_VIRTUAL_DESKTOP_PINNED_APPS};
-    use windows::core::{GUID, Interface as _};
+    use windows::core::{Interface as _, GUID};
     use windows::Win32::Foundation::{BOOL, HWND};
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_LOCAL_SERVER,
-        COINIT_APARTMENTTHREADED, IServiceProvider,
+        CoCreateInstance, CoInitializeEx, CoUninitialize, IServiceProvider, CLSCTX_LOCAL_SERVER,
+        COINIT_APARTMENTTHREADED,
     };
 
     /// combaseapi.h: RPC_E_CHANGED_MODE（0x80010106）——线程已按其他套间模型初始化。
     /// 不同 windows crate 版本导出位置不一致，直接本地定义。
-    const RPC_E_CHANGED_MODE: windows::core::HRESULT = windows::core::HRESULT(0x8001_0106u32 as i32);
+    const RPC_E_CHANGED_MODE: windows::core::HRESULT =
+        windows::core::HRESULT(0x8001_0106u32 as i32);
 
     fn guid(s: &str) -> GUID {
         GUID::from_u128(u128::from_str_radix(s.replace('-', "").as_str(), 16).expect("合法 GUID"))
@@ -52,7 +55,11 @@ mod imp {
     /// IServiceProvider 自定义 vtable（IUnknown×3 + QueryService）。
     #[repr(C)]
     struct ServiceProviderVtbl {
-        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> windows::core::HRESULT,
+        query_interface: unsafe extern "system" fn(
+            *mut c_void,
+            *const GUID,
+            *mut *mut c_void,
+        ) -> windows::core::HRESULT,
         add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
         release: unsafe extern "system" fn(*mut c_void) -> u32,
         query_service: unsafe extern "system" fn(
@@ -67,13 +74,19 @@ mod imp {
     /// 未使用的 IsAppIdPinned/PinAppID/UnpinAppID 参数以裸指针占位（x64 指针宽度一致，布局等价）。
     #[repr(C)]
     struct PinnedAppsVtbl {
-        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> windows::core::HRESULT,
+        query_interface: unsafe extern "system" fn(
+            *mut c_void,
+            *const GUID,
+            *mut *mut c_void,
+        ) -> windows::core::HRESULT,
         add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
         release: unsafe extern "system" fn(*mut c_void) -> u32,
-        is_app_id_pinned: unsafe extern "system" fn(*mut c_void, *const u16, *mut BOOL) -> windows::core::HRESULT,
+        is_app_id_pinned:
+            unsafe extern "system" fn(*mut c_void, *const u16, *mut BOOL) -> windows::core::HRESULT,
         pin_app_id: unsafe extern "system" fn(*mut c_void, *const u16) -> windows::core::HRESULT,
         unpin_app_id: unsafe extern "system" fn(*mut c_void, *const u16) -> windows::core::HRESULT,
-        is_window_pinned: unsafe extern "system" fn(*mut c_void, HWND, *mut BOOL) -> windows::core::HRESULT,
+        is_window_pinned:
+            unsafe extern "system" fn(*mut c_void, HWND, *mut BOOL) -> windows::core::HRESULT,
         pin_window: unsafe extern "system" fn(*mut c_void, HWND) -> windows::core::HRESULT,
         unpin_window: unsafe extern "system" fn(*mut c_void, HWND) -> windows::core::HRESULT,
     }
@@ -103,8 +116,8 @@ mod imp {
 
         let shell: IServiceProvider = CoCreateInstance(&shell_clsid, None, CLSCTX_LOCAL_SERVER)
             .map_err(|e| {
-            crate::vdesktop::VdError::Unsupported(format!("ImmersiveShell 服务不可用: {e}"))
-        })?;
+                crate::vdesktop::VdError::Unsupported(format!("ImmersiveShell 服务不可用: {e}"))
+            })?;
 
         // 手工调用 IServiceProvider::QueryService（泛型版要求 windows-core Interface trait，
         // 我们的对象是手工 vtable，因此直接走 vtable 槽位）
@@ -133,7 +146,11 @@ mod imp {
             return Ok(());
         }
 
-        let hr = if pin { (vtbl.pin_window)(obj, hwnd) } else { (vtbl.unpin_window)(obj, hwnd) };
+        let hr = if pin {
+            (vtbl.pin_window)(obj, hwnd)
+        } else {
+            (vtbl.unpin_window)(obj, hwnd)
+        };
         (vtbl.release)(obj);
         if hr.is_err() {
             return Err(crate::vdesktop::VdError::Failed(if pin {
@@ -167,7 +184,10 @@ mod tests {
 
     #[test]
     fn pin_guids_documented() {
-        assert_eq!(CLSID_IMMERSIVE_SHELL, "c2f03a33-21f5-47fa-b4bb-156362a2f239");
+        assert_eq!(
+            CLSID_IMMERSIVE_SHELL,
+            "c2f03a33-21f5-47fa-b4bb-156362a2f239"
+        );
         assert_eq!(
             CLSID_VIRTUAL_DESKTOP_PINNED_APPS,
             "b5a399e7-1c87-46b8-88e9-fc5747b171bd"

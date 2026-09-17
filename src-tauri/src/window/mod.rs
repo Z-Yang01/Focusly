@@ -8,9 +8,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent,
+};
 
-use crate::db::models::{Note, FullscreenBehavior};
+use crate::db::models::{FullscreenBehavior, Note};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -53,7 +56,10 @@ pub fn open_note_window(app: &AppHandle, note: &Note) -> AppResult<tauri::Webvie
         return Ok(win);
     }
 
-    let (mut x, mut y) = note.x.zip(note.y).unwrap_or_else(|| cascade_position(app, 0));
+    let (mut x, mut y) = note
+        .x
+        .zip(note.y)
+        .unwrap_or_else(|| cascade_position(app, 0));
     let width = note.width.unwrap_or(DEFAULT_NOTE_W);
     let height = note.height.unwrap_or(DEFAULT_NOTE_H);
     if !monitor::rect_visible_on_any_monitor(x, y, width, height) {
@@ -74,7 +80,10 @@ pub fn open_note_window(app: &AppHandle, note: &Note) -> AppResult<tauri::Webvie
         .visible(false)
         .build()?;
 
-    let _ = win.set_size(PhysicalSize::new(width.max(120) as u32, height.max(100) as u32));
+    let _ = win.set_size(PhysicalSize::new(
+        width.max(120) as u32,
+        height.max(100) as u32,
+    ));
     let _ = win.set_position(PhysicalPosition::new(x, y));
 
     if note.show_on_all_desktops {
@@ -136,8 +145,12 @@ pub fn note_window_ready(app: &AppHandle, note_id: &str) -> AppResult<()> {
     let win = app
         .get_webview_window(&label)
         .ok_or_else(|| AppError::Window(format!("窗口不存在: {label}")))?;
-    let note = app.state::<AppState>().db.with(|c| crate::db::notes::get(c, note_id))?;
-    let _ = win.set_always_on_top(note.is_always_on_top || note.fullscreen_behavior == "always_top");
+    let note = app
+        .state::<AppState>()
+        .db
+        .with(|c| crate::db::notes::get(c, note_id))?;
+    let _ =
+        win.set_always_on_top(note.is_always_on_top || note.fullscreen_behavior == "always_top");
     if let (Some(x), Some(y)) = (note.x, note.y) {
         let size = win.outer_size().unwrap_or(PhysicalSize::new(320, 360));
         if monitor::rect_visible_on_any_monitor(x, y, size.width as i32, size.height as i32) {
@@ -187,7 +200,7 @@ pub fn hide_manager(app: &AppHandle) {
 pub fn show_all_notes(app: &AppHandle) -> AppResult<()> {
     let labels: Vec<String> = {
         let state = app.state::<AppState>();
-        let notes = state.db.with(|c| crate::db::notes::all_active_with_windows(c))?;
+        let notes = state.db.with(crate::db::notes::all_active_with_windows)?;
         notes.iter().map(|n| note_label(&n.id)).collect()
     };
     {
@@ -221,8 +234,7 @@ pub fn hide_all_notes(app: &AppHandle) -> AppResult<()> {
 
 pub fn toggle_all_notes(app: &AppHandle) -> AppResult<()> {
     let any_visible = app.webview_windows().iter().any(|(label, win)| {
-        note_id_from_label(label).is_some()
-            && win.is_visible().unwrap_or(false)
+        note_id_from_label(label).is_some() && win.is_visible().unwrap_or(false)
     });
     if any_visible {
         hide_all_notes(app)
@@ -235,7 +247,7 @@ pub fn toggle_all_notes(app: &AppHandle) -> AppResult<()> {
 pub fn apply_fullscreen_policy(app: &AppHandle, fullscreen: bool) {
     let state = app.state::<AppState>();
     let mut hidden = lock_ok(&state.fullscreen_hidden);
-    let Ok(notes) = state.db.with(|c| crate::db::notes::all_active_with_windows(c)) else {
+    let Ok(notes) = state.db.with(crate::db::notes::all_active_with_windows) else {
         return;
     };
     for note in notes {
@@ -294,7 +306,9 @@ pub fn save_geometry_now(app: &AppHandle, win: &tauri::WebviewWindow) {
 
 /// 锁中毒容错：即使持锁线程 panic 也能恢复（锁内操作均为简单集合读写，安全）。
 fn lock_ok<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// tauri 的 HWND（其内部 windows crate 版本可能与本 crate 不同）转换为本 crate 的 HWND。
@@ -381,7 +395,8 @@ fn schedule_geometry_save(app: &AppHandle, label: &str) {
 pub fn apply_note_flags(app: &AppHandle, note: &Note) {
     let label = note_label(&note.id);
     if let Some(win) = app.get_webview_window(&label) {
-        let _ = win.set_always_on_top(note.is_always_on_top || note.fullscreen_behavior == "always_top");
+        let _ = win
+            .set_always_on_top(note.is_always_on_top || note.fullscreen_behavior == "always_top");
     }
     if note.show_on_all_desktops || note.desktop_pin_state == "on" {
         if let Some(win) = app.get_webview_window(&label) {
@@ -405,7 +420,7 @@ pub fn startup_windows(app: &AppHandle) -> AppResult<()> {
         == "true";
 
     if launch_show_notes {
-        let notes = state.db.with(|c| crate::db::notes::all_active_with_windows(c))?;
+        let notes = state.db.with(crate::db::notes::all_active_with_windows)?;
         for note in notes {
             if let Err(e) = open_note_window(app, &note) {
                 log::error!("启动打开便签失败 {}: {e}", note.id);
