@@ -38,9 +38,8 @@ use crate::db::pomodoro_sessions;
 use crate::error::AppResult;
 use crate::state::AppState;
 
-/// 前端事件名（约定见 src/types/index.ts#EVENTS，由总控同步追加）
-pub const STATE_EVENT: &str = "pomodoro-state";
-pub const FINISHED_EVENT: &str = "pomodoro-finished";
+/// 前端事件名（约定见 src/types/index.ts#EVENTS；字符串统一定义在 crate::events）
+pub use crate::events::{POMODORO_FINISHED as FINISHED_EVENT, POMODORO_STATE as STATE_EVENT};
 
 /// 全屏时通知重查间隔（秒）——事件驱动等待的超时兜底周期
 const FULLSCREEN_POLL_SECS: u64 = 2;
@@ -200,6 +199,31 @@ pub fn current_snapshot() -> PomoSnapshot {
         .lock()
         .map(|g| g.clone())
         .unwrap_or_else(|_| PomoSnapshot::idle())
+}
+
+/// 从运行中快照刷新托盘 tooltip（reminder.rs 的 60s 心跳复用）：
+/// 系统睡眠唤醒后仅显示用的时间可能失真，按墙钟重算剩余。
+/// 非 Running / ends_at 解析失败时不动托盘，避免覆盖 Idle 的 "Focusly" 静态文案；
+/// 纯显示用途，阶段结束判定仍由番茄钟自身事件循环按 UTC 绝对时间执行。
+pub fn refresh_tooltip_from_snapshot(app: &AppHandle) {
+    let snap = current_snapshot();
+    if !snap.running {
+        return;
+    }
+    let Some(raw) = snap.ends_at.as_deref() else {
+        return;
+    };
+    let Ok(ends_at) = crate::reminder::parse(raw) else {
+        return;
+    };
+    let now = Utc::now();
+    let pause = if snap.paused {
+        Some((now, snap.remaining_sec))
+    } else {
+        None
+    };
+    let text = tooltip_text_for(Phase::parse(&snap.phase), ends_at, pause, &snap.task_text, now);
+    crate::tray::set_tooltip(app, &text);
 }
 
 // ---------- 设置（settings 表 → 强类型） ----------
@@ -581,6 +605,9 @@ fn handle_cmd(app: &AppHandle, st: &mut Machine, cmd: PomodoroCmd) {
         PomodoroCmd::AddMinutes(mins) => {
             if let Machine::Running(r) = st {
                 if r.pause.is_none() && mins > 0 {
+                    // 边界防御：钳到 10_000 分钟（约 7 天，与设置解析的 10_000 上限同源），
+                    // 防 ends_at/planned_sec 算术溢出 panic（chrono 加法溢出会 panic）
+                    let mins = mins.min(10_000);
                     r.ends_at += chrono::Duration::minutes(mins);
                     r.planned_sec += mins * 60;
                     publish(app, st);

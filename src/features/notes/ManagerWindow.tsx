@@ -97,6 +97,7 @@ function ManagerContent() {
         searchRef.current?.focus();
       }
     };
+    const onOpenSettingsEvent = () => setSettingsOpen(true);
     const offs = [
       onNotesChanged(() => {
         void queryClient.invalidateQueries({ queryKey: ["notes"] });
@@ -107,10 +108,11 @@ function ManagerContent() {
       onOpenSettings(() => setSettingsOpen(true)),
     ];
     window.addEventListener(FOCUSLY_NAVIGATE, onNavigate);
-    window.addEventListener(FOCUSLY_OPEN_SETTINGS, () => setSettingsOpen(true));
+    window.addEventListener(FOCUSLY_OPEN_SETTINGS, onOpenSettingsEvent);
     return () => {
       offs.forEach((p) => void p.then((f) => f()));
       window.removeEventListener(FOCUSLY_NAVIGATE, onNavigate);
+      window.removeEventListener(FOCUSLY_OPEN_SETTINGS, onOpenSettingsEvent);
     };
   }, [queryClient, setNotesVisible]);
 
@@ -470,10 +472,14 @@ function ManagerContent() {
 
 export function ManagerWindow() {
   // 管理器窗口独立的 React Query 实例（每个 Tauri 窗口一个 JS 上下文）
+  // staleTime 30s：数据变更由 notes-changed 事件驱动 invalidateQueries，
+  // 无需依赖默认的挂载/聚焦即 refetch（refetchOnWindowFocus 已关闭）
   const [client] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+        defaultOptions: {
+          queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
+        },
       }),
   );
   return (

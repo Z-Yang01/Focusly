@@ -36,7 +36,7 @@ import { todoStats } from "@/features/todo/todo";
 import { MarkdownEditor } from "@/features/editor/MarkdownEditor";
 import { ReminderPopover } from "@/features/reminders/ReminderPopover";
 import { ReminderBanner } from "@/features/reminders/ReminderBanner";
-import { useNoteAutoSave } from "./useNoteAutoSave";
+import { useNoteAutoSave, type NoteAutoSaveState } from "./useNoteAutoSave";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -142,6 +142,148 @@ function IconButton({ title, onClick, active, children }: IconButtonProps) {
         {title}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** 标题栏按钮组：置顶 / 所有桌面指示 / 标题输入 / 番茄指示 / 预览切换 / 更多菜单 / 关闭 */
+interface NoteHeaderProps {
+  detail: NoteDetail;
+  title: string;
+  onTitleChange: (v: string) => void;
+  onTitleBlur: () => void;
+  preview: boolean;
+  onTogglePreview: () => void;
+  pomoOnThisNote: boolean;
+  pomoMmss: string;
+  menuItems: ReactNode;
+  onTogglePin: () => void;
+  onClose: () => void;
+}
+
+function NoteHeader({
+  detail,
+  title,
+  onTitleChange,
+  onTitleBlur,
+  preview,
+  onTogglePreview,
+  pomoOnThisNote,
+  pomoMmss,
+  menuItems,
+  onTogglePin,
+  onClose,
+}: NoteHeaderProps) {
+  const desktopUnsupported = detail.desktopPinState === "unsupported";
+  return (
+    <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-0.5 border-b border-primary/10 bg-gradient-to-r from-primary/[0.04] to-transparent px-1.5">
+      <IconButton
+        title={detail.isPinned ? "取消置顶" : "置顶"}
+        onClick={onTogglePin}
+        active={detail.isPinned}
+      >
+        <Pin className="size-4" />
+      </IconButton>
+      {detail.showOnAllDesktops && (
+        <span
+          className="inline-flex size-7 items-center justify-center"
+          title={desktopUnsupported ? "在所有桌面显示（系统不支持）" : "在所有桌面显示"}
+        >
+          <Monitor className={cn("size-4 text-muted-foreground", desktopUnsupported && "opacity-50")} />
+        </span>
+      )}
+      <Input
+        value={title}
+        onChange={(e) => onTitleChange(e.target.value)}
+        onBlur={onTitleBlur}
+        placeholder="无标题"
+        className="h-8 flex-1 border-none bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+      />
+      {pomoOnThisNote && (
+        <span title={`番茄进行中 ${pomoMmss}`}>🍅</span>
+      )}
+      <IconButton
+        title={preview ? "切换到编辑" : "切换到预览"}
+        onClick={onTogglePreview}
+      >
+        {preview ? <Pencil className="size-4" /> : <Eye className="size-4" />}
+      </IconButton>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="更多操作"
+            title="更多操作"
+            className="size-7 text-muted-foreground hover:text-foreground"
+          >
+            <Ellipsis className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="text-sm">
+          {menuItems}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <IconButton title="关闭" onClick={onClose}>
+        <X className="size-4" />
+      </IconButton>
+    </div>
+  );
+}
+
+/** 底栏状态：待办统计 / 番茄条 / 迷你窗入口 / 提醒设置 / 自动保存状态 */
+interface NoteFooterProps {
+  noteId: string;
+  detail: NoteDetail;
+  stats: ReturnType<typeof todoStats>;
+  autosave: NoteAutoSaveState;
+  onRefreshMeta: () => void;
+}
+
+function NoteFooter({ noteId, detail, stats, autosave, onRefreshMeta }: NoteFooterProps) {
+  return (
+    <div className="flex h-8 shrink-0 items-center gap-2 border-t border-primary/10 bg-primary/[0.03] px-2 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1">
+        {stats.total > 0 && (
+          <>
+            <SquareCheck className="size-3.5" />
+            {stats.done}/{stats.total}
+          </>
+        )}
+      </span>
+      <PomodoroBar noteId={noteId} />
+      <button
+        type="button"
+        title="迷你番茄窗"
+        aria-label="打开迷你番茄窗"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => void ensureMiniPomodoro()}
+      >
+        🖥
+      </button>
+      <div className="flex flex-1 justify-center">
+        <ReminderPopover note={detail} onChanged={onRefreshMeta} />
+      </div>
+      <span className={cn(autosave.error && "text-destructive")}>
+        {autosave.saving
+          ? "保存中…"
+          : autosave.error
+            ? "保存失败"
+            : autosave.lastSavedAt
+              ? `已保存 ${savedAtText(autosave.lastSavedAt)}`
+              : ""}
+      </span>
+    </div>
+  );
+}
+
+/** 拖拽 overlay：图片拖入窗口时的视觉提示 */
+function NoteDragOverlay() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 m-2 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-background/70">
+      <ImagePlus className="size-6 text-primary" />
+      <span className="text-xs text-muted-foreground">释放以添加图片</span>
+    </div>
   );
 }
 
@@ -559,59 +701,19 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
         <ContextMenuTrigger asChild>
           <div className="flex h-screen flex-col overflow-hidden rounded-xl border border-border/60 bg-gradient-to-b from-card to-background text-sm shadow-lg shadow-primary/5">
             {/* 标题栏 */}
-            <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-0.5 border-b border-primary/10 bg-gradient-to-r from-primary/[0.04] to-transparent px-1.5">
-              <IconButton
-                title={detail.isPinned ? "取消置顶" : "置顶"}
-                onClick={() => void toggleFlag("pinned")}
-                active={detail.isPinned}
-              >
-                <Pin className="size-4" />
-              </IconButton>
-              {detail.showOnAllDesktops && (
-                <span
-                  className="inline-flex size-7 items-center justify-center"
-                  title={desktopUnsupported ? "在所有桌面显示（系统不支持）" : "在所有桌面显示"}
-                >
-                  <Monitor className={cn("size-4 text-muted-foreground", desktopUnsupported && "opacity-50")} />
-                </span>
-              )}
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => void saveNow()}
-                placeholder="无标题"
-                className="h-8 flex-1 border-none bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
-              />
-              {pomoOnThisNote && (
-                <span title={`番茄进行中 ${pomo.mmss}`}>🍅</span>
-              )}
-              <IconButton
-                title={preview ? "切换到编辑" : "切换到预览"}
-                onClick={togglePreview}
-              >
-                {preview ? <Pencil className="size-4" /> : <Eye className="size-4" />}
-              </IconButton>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="更多操作"
-                    title="更多操作"
-                    className="size-7 text-muted-foreground hover:text-foreground"
-                  >
-                    <Ellipsis className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="text-sm">
-                  {menuItems}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <IconButton title="关闭" onClick={() => void handleClose()}>
-                <X className="size-4" />
-              </IconButton>
-            </div>
+            <NoteHeader
+              detail={detail}
+              title={title}
+              onTitleChange={setTitle}
+              onTitleBlur={() => void saveNow()}
+              preview={preview}
+              onTogglePreview={togglePreview}
+              pomoOnThisNote={pomoOnThisNote}
+              pomoMmss={pomo.mmss}
+              menuItems={menuItems}
+              onTogglePin={() => void toggleFlag("pinned")}
+              onClose={() => void handleClose()}
+            />
 
             {/* 提醒横幅 */}
             {banner && (
@@ -660,47 +762,17 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                     setTaskMenu({ taskKey: e.taskKey, lineText: e.lineText, status: e.status }),
                 }}
               />
-              {dragOver && (
-                <div className="pointer-events-none absolute inset-0 z-20 m-2 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-background/70">
-                  <ImagePlus className="size-6 text-primary" />
-                  <span className="text-xs text-muted-foreground">释放以添加图片</span>
-                </div>
-              )}
+              {dragOver && <NoteDragOverlay />}
             </div>
 
             {/* 底部栏 */}
-            <div className="flex h-8 shrink-0 items-center gap-2 border-t border-primary/10 bg-primary/[0.03] px-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                {stats.total > 0 && (
-                  <>
-                    <SquareCheck className="size-3.5" />
-                    {stats.done}/{stats.total}
-                  </>
-                )}
-              </span>
-              <PomodoroBar noteId={noteId} />
-              <button
-                type="button"
-                title="迷你番茄窗"
-                aria-label="打开迷你番茄窗"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => void ensureMiniPomodoro()}
-              >
-                🖥
-              </button>
-              <div className="flex flex-1 justify-center">
-                <ReminderPopover note={detail} onChanged={refreshMeta} />
-              </div>
-              <span className={cn(autosave.error && "text-destructive")}>
-                {autosave.saving
-                  ? "保存中…"
-                  : autosave.error
-                    ? "保存失败"
-                    : autosave.lastSavedAt
-                      ? `已保存 ${savedAtText(autosave.lastSavedAt)}`
-                      : ""}
-              </span>
-            </div>
+            <NoteFooter
+              noteId={noteId}
+              detail={detail}
+              stats={stats}
+              autosave={autosave}
+              onRefreshMeta={refreshMeta}
+            />
           </div>
         </ContextMenuTrigger>
 

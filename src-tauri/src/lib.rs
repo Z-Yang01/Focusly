@@ -6,6 +6,7 @@ mod db;
 mod desktop_pin;
 mod dnd;
 mod error;
+mod events;
 mod export;
 mod filesystem;
 mod imagemgr;

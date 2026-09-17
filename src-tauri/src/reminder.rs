@@ -14,6 +14,13 @@ use crate::state::AppState;
 /// 过期兜底：错过超过一天的 pending 提醒直接取消，不轰炸用户。
 const STALE_CUTOFF_HOURS: i64 = 24;
 
+/// 睡眠步进上限（秒）。tokio 的 sleep_until 基于单调时钟，系统睡眠期间会停走，
+/// 一次睡到目标可能在唤醒后大幅迟到。拆成最多 60 秒的步进，每次唤醒用
+/// `Utc::now()`（墙钟）重查是否到期。
+/// 注意：60s 心跳仅用于睡眠唤醒补偿和托盘 tooltip 刷新，调度判定（是否触发、
+/// 触发哪些）仍以 UTC 绝对时间为准——到期后由 `fire_due` 重查数据库决定。
+const HEARTBEAT_SECS: u64 = 60;
+
 /// 全项目 remind_at 时间字符串的统一入口。
 pub fn fmt(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Secs, false)
@@ -86,17 +93,30 @@ async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<()>) {
                 }
             }
             Some(t) => {
-                let now = Utc::now();
-                if t <= now {
-                    fire_due(&app);
-                } else {
-                    let dur = (t - now)
-                        .to_std()
-                        .unwrap_or(std::time::Duration::from_secs(1));
-                    let deadline = tokio::time::Instant::now() + dur;
+                // 步进睡眠（每段最多 HEARTBEAT_SECS）+ 唤醒后 UTC 墙钟重查，
+                // 兼容系统睡眠/时钟跳变（详见 HEARTBEAT_SECS 注释）。
+                loop {
+                    let now = Utc::now();
+                    if t <= now {
+                        fire_due(&app);
+                        break;
+                    }
+                    // t - now > 0（上面刚判过）；num_seconds 向零取整可能为 0，夹到至少 1s
+                    let step = (t - now)
+                        .num_seconds()
+                        .clamp(1, HEARTBEAT_SECS as i64) as u64;
+                    let deadline =
+                        tokio::time::Instant::now() + std::time::Duration::from_secs(step);
                     tokio::select! {
-                        _ = tokio::time::sleep_until(deadline) => fire_due(&app),
-                        _ = rx.recv() => {} // 被唤醒：重新计算最近时间
+                        _ = tokio::time::sleep_until(deadline) => {
+                            // 是否真正到期由循环顶部的 UTC 重查判定；
+                            // 未到期的纯心跳唤醒顺带刷新托盘 tooltip
+                            //（番茄钟剩余时间随墙钟校准，见 pomodoro::refresh_tooltip_from_snapshot）。
+                            if Utc::now() < t {
+                                crate::pomodoro::refresh_tooltip_from_snapshot(&app);
+                            }
+                        }
+                        _ = rx.recv() => break, // 被唤醒：重新计算最近时间
                     }
                 }
             }
@@ -131,6 +151,13 @@ fn next_pending_time(app: &AppHandle) -> Option<DateTime<Utc>> {
 }
 
 /// 触发所有到点（remind_at <= now）的 pending 提醒。
+///
+/// 竞态不变量：
+/// - 本函数只被 `loop_task`（单消费者）串行调用，不存在并发 fire_due，不会双发通知；
+/// - 所有 DB 访问经 `AppState.db`（Mutex<Connection>）串行化，与命令层的
+///   删除/snooze 天然互斥：snooze 改 `remind_at` 后 fire 仍会置 `triggered`
+///   （一次性通知，snooze 目标被触发覆盖是预期语义）；fire 期间行被删除时
+///   `set_status` 影响 0 行、`db::notes::get` 报错走兜底标题，均不 panic。
 fn fire_due(app: &AppHandle) {
     let state = app.state::<AppState>();
     let now = Utc::now();
@@ -236,7 +263,7 @@ fn fire_due(app: &AppHandle) {
         }
 
         let _ = app.emit(
-            "reminder-fired",
+            crate::events::REMINDER_FIRED,
             json!({
                 "reminderId": r.id,
                 "noteId": r.note_id,
