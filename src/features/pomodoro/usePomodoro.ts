@@ -17,6 +17,7 @@ import {
 } from "./api";
 import { fmtMmss } from "./format";
 import type { StatePayload } from "./types";
+import { playPomodoroDone, playBreakDone } from "@/lib/sound";
 
 /** 由 endsAt / remainingSec 推算剩余秒数 */
 export function remainingOf(s: StatePayload): number {
@@ -79,7 +80,10 @@ async function ensureRuntime(): Promise<void> {
   // 2) 订阅事件：状态推送 + 完成时兜底重拉（保证多窗口同源）
   try {
     const offState = await onPomodoroState((s) => usePomodoroStore.getState().apply(s));
-    const offFinished = await onPomodoroFinished(() => {
+    const offFinished = await onPomodoroFinished((e) => {
+      // 提示音：focus 结束→chime；break 结束→soft
+      if (e.phase === "focus") playPomodoroDone();
+      else playBreakDone();
       void pomodoroState()
         .then((s) => {
           if (token === runtimeToken) usePomodoroStore.getState().apply(s);

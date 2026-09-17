@@ -1,6 +1,7 @@
 /** 应用设置对话框：外观 / 行为 / 快捷键 / 数据 */
 import { useEffect, useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { isSoundEnabled, setSoundEnabled } from "@/lib/sound";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -228,6 +229,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   };
 
+  const [soundOn, setSoundOn] = useState(isSoundEnabled());
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -412,6 +414,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               >
                 导出诊断包
               </Button>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Switch
+                checked={soundOn}
+                onCheckedChange={(v) => {
+                  setSoundOn(v);
+                  setSoundEnabled(v);
+                }}
+                aria-label="提示音开关"
+              />
+              <Label>提示音</Label>
+              <span className="text-xs text-muted-foreground">番茄/提醒到点播放提示音</span>
             </div>
           </TabsContent>
         </Tabs>

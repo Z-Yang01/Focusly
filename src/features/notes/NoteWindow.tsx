@@ -87,6 +87,7 @@ import type {
 } from "@/types";
 import { setPinMode } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { playDing } from "@/lib/sound";
 import { toast } from "@/stores/toast";
 import { usePomodoro } from "@/features/pomodoro/usePomodoro";
 import { PomodoroBar } from "@/features/pomodoro/PomodoroBar";
@@ -233,7 +234,8 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   // 提醒触发：显示横幅
   useEffect(() => {
     const off: Promise<UnlistenFn> = onReminderFired((e) => {
-      if (e.noteId === noteId) setBanner(e);
+      if (e.noteId === noteId) playDing();
+          setBanner(e);
     });
     return () => {
       void off.then((f) => f());
