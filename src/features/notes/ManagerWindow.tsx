@@ -10,8 +10,6 @@ import {
   Archive,
   BarChart3,
   CalendarClock,
-  Eye,
-  EyeOff,
   Images,
   Inbox,
   Lock,
@@ -34,17 +32,14 @@ import {
   getTags,
   openNoteWindow,
   quickCaptureToggle,
-  toggleAllNotes,
   createNote,
   updateNoteContent,
 } from "@/lib/api";
 import {
   onFocusSearch,
   onNotesChanged,
-  onNotesVisibility,
   onOpenSettings,
 } from "@/lib/tauri";
-import { useUiStore } from "@/stores/ui";
 import { SearchBar, type SearchBarHandle } from "@/features/search/SearchBar";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { NoteCard } from "./NoteCard";
@@ -68,8 +63,6 @@ type ViewKey = "all" | "todo" | "archived" | "today" | "trash" | "private";
 
 function ManagerContent() {
   const queryClient = useQueryClient();
-  const notesVisible = useUiStore((s) => s.notesVisible);
-  const setNotesVisible = useUiStore((s) => s.setNotesVisible);
 
   const [view, setView] = useState<ViewKey>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -103,7 +96,6 @@ function ManagerContent() {
         void queryClient.invalidateQueries({ queryKey: ["notes"] });
         void queryClient.invalidateQueries({ queryKey: ["tags"] });
       }),
-      onNotesVisibility((v) => setNotesVisible(v)),
       onFocusSearch(() => searchRef.current?.focus()),
       onOpenSettings(() => setSettingsOpen(true)),
     ];
@@ -114,7 +106,7 @@ function ManagerContent() {
       window.removeEventListener(FOCUSLY_NAVIGATE, onNavigate);
       window.removeEventListener(FOCUSLY_OPEN_SETTINGS, onOpenSettingsEvent);
     };
-  }, [queryClient, setNotesVisible]);
+  }, [queryClient]);
 
   const notes = useMemo(() => {
     const base =
@@ -150,15 +142,6 @@ function ManagerContent() {
     } catch (err) {
       console.error("打开速记箱失败", err);
       toast.error(`速记箱暂不可用：${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const handleToggleNotes = async () => {
-    try {
-      await toggleAllNotes();
-    } catch (err) {
-      console.error("切换便签可见性失败", err);
-      toast.error(`操作失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -257,24 +240,13 @@ function ManagerContent() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-sm">
-      {/* 顶栏 */}
+      {/* 顶栏：高频操作（速记/模板/每日/新建）在左，低频（统计/图片，size-7 缩小）与设置在分隔线右侧 */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
         <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-wide">
           <span className="inline-block size-2 rounded-full bg-pomodoro shadow-sm shadow-pomodoro/30" />
           Focusly
         </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-          title={notesVisible ? "隐藏全部便签" : "显示全部便签"}
-          aria-label={notesVisible ? "隐藏全部便签" : "显示全部便签"}
-          onClick={() => void handleToggleNotes()}
-        >
-          {notesVisible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-        </Button>
-        <SearchBar ref={searchRef} className="mx-auto min-w-0 max-w-md flex-1" />
+        <SearchBar ref={searchRef} className="min-w-0 max-w-md flex-1" />
         <Button
           type="button"
           variant="outline"
@@ -286,7 +258,6 @@ function ManagerContent() {
           <Zap className="size-3.5" />
           速记
         </Button>
-        <DailyNoteButton />
         <TemplatePicker onPick={(tpl) => void handleCreateFromTemplate(tpl)}>
           <Button
             type="button"
@@ -298,9 +269,33 @@ function ManagerContent() {
             模板
           </Button>
         </TemplatePicker>
+        <DailyNoteButton />
         <Button type="button" size="sm" className="h-8 shrink-0 text-xs" onClick={() => void handleCreate()}>
           <Plus className="size-3.5" />
-          新建便签
+          新建
+        </Button>
+        <div aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+          title="番茄统计"
+          aria-label="番茄统计"
+          onClick={() => setStatsOpen(true)}
+        >
+          <BarChart3 className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+          title="图片管理（重复/孤儿/缩略图）"
+          aria-label="图片管理"
+          onClick={() => setGalleryOpen(true)}
+        >
+          <Images className="size-3.5" />
         </Button>
         <Button
           type="button"
@@ -313,40 +308,18 @@ function ManagerContent() {
         >
           <Settings className="size-4" />
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-          title="图片管理（重复/孤儿/缩略图）"
-          aria-label="图片管理"
-          onClick={() => setGalleryOpen(true)}
-        >
-          <Images className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-          title="番茄统计"
-          aria-label="番茄统计"
-          onClick={() => setStatsOpen(true)}
-        >
-          <BarChart3 className="size-4" />
-        </Button>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {/* 侧栏 */}
-        <aside className="flex w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-gradient-to-b from-primary/[0.03] to-transparent p-2">
+        <aside className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-gradient-to-b from-primary/[0.03] to-transparent p-2">
           {views.map((v) => (
             <button
               key={v.key}
               type="button"
               aria-current={view === v.key ? "page" : undefined}
               className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent",
+                "flex items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-accent",
                 view === v.key && "bg-accent font-medium",
               )}
               onClick={() => setView(v.key)}
@@ -359,7 +332,7 @@ function ManagerContent() {
             </button>
           ))}
 
-          <div className="mt-3 flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
+          <div className="mt-2 flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
             <TagIcon className="size-3" />
             标签
           </div>
@@ -444,7 +417,7 @@ function ManagerContent() {
                   <EmptyState {...gridEmpty} className="h-full min-h-40" />
                 ) : (
                   <div
-                    className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]"
+                    className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]"
                     onKeyDown={handleGridKeyDown}
                   >
                     {notes.map((note) => (

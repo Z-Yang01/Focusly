@@ -39,13 +39,15 @@ interface SectionConfig {
   label: string;
   /** 圆点颜色：逾期红 / 今天蓝 / 未来7天灰 */
   dot: string;
+  /** 列表项左边框：逾期红 / 今天蓝 / 未来7天透明（仅保持对齐） */
+  border: string;
   empty: string;
 }
 
 const SECTIONS: SectionConfig[] = [
-  { key: "overdue", label: "逾期", dot: "bg-red-500", empty: "没有逾期任务" },
-  { key: "today", label: "今天", dot: "bg-blue-500", empty: "今天没有到期任务" },
-  { key: "next7days", label: "未来 7 天", dot: "bg-muted-foreground/40", empty: "未来 7 天没有到期任务" },
+  { key: "overdue", label: "逾期", dot: "bg-red-500", border: "border-destructive/50", empty: "无逾期任务" },
+  { key: "today", label: "今天", dot: "bg-blue-500", border: "border-blue-500/50", empty: "今日无到期任务" },
+  { key: "next7days", label: "未来 7 天", dot: "bg-muted-foreground/40", border: "border-transparent", empty: "7 天内无到期任务" },
 ];
 
 export interface TodayOverdueViewProps {
@@ -114,8 +116,8 @@ export function TodayOverdueView({ onOpenNote }: TodayOverdueViewProps) {
       {isEmpty && (
         <EmptyState
           icon={CalendarClock}
-          title="今天没有到期任务"
-          description="休息一下，或创建新任务"
+          title="暂无到期任务"
+          description="休息一下，或新建待办"
           className="py-8"
         />
       )}
@@ -142,7 +144,10 @@ export function TodayOverdueView({ onOpenNote }: TodayOverdueViewProps) {
                         <button
                           type="button"
                           onClick={() => onOpenNote(note.id)}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
+                            section.border,
+                          )}
                         >
                           <span className="min-w-0 flex-1 truncate">{note.title || "无标题"}</span>
                           <Badge

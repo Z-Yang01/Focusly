@@ -301,7 +301,7 @@ export function QuickCaptureWindow() {
             }}
             autoFocus
             placeholder="记点什么…（保存后进入「收件箱」标签）"
-            className="min-h-[80px] flex-1 resize-none rounded-none border-0 px-3 py-2 shadow-none focus-visible:ring-0"
+            className="min-h-[64px] flex-1 resize-none rounded-none border-0 px-3 py-2 shadow-none focus-visible:ring-0"
           />
         </>
       ) : (
@@ -390,7 +390,7 @@ export function QuickCaptureWindow() {
         ) : (
           <span />
         )}
-        <span>Ctrl+Enter 保存并关闭 · Esc 关闭 · Ctrl+Tab 切换</span>
+        <span className="text-[10px]">Ctrl+Enter 保存并关闭 · Esc 关闭 · Ctrl+Tab 切换</span>
       </div>
     </div>
   );

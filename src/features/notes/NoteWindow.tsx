@@ -195,17 +195,25 @@ function NoteHeader({
         value={title}
         onChange={(e) => onTitleChange(e.target.value)}
         onBlur={onTitleBlur}
+        onKeyDown={(e) => {
+          // 标题不换行：Enter 即确认（触发 blur → flush 保存）
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
         placeholder="无标题"
-        className="h-8 flex-1 border-none bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+        className="h-8 min-w-0 flex-1 truncate border-none bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
       />
       {pomoOnThisNote && (
         <span title={`番茄进行中 ${pomoMmss}`}>🍅</span>
       )}
       <IconButton
-        title={preview ? "切换到编辑" : "切换到预览"}
+        title={preview ? "预览中 · 切换到编辑" : "切换到预览"}
         onClick={onTogglePreview}
+        active={preview}
       >
-        {preview ? <Pencil className="size-4" /> : <Eye className="size-4" />}
+        {preview ? <Eye className="size-4" /> : <Pencil className="size-4" />}
       </IconButton>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -231,7 +239,7 @@ function NoteHeader({
   );
 }
 
-/** 底栏状态：待办统计 / 番茄条 / 迷你窗入口 / 提醒设置 / 自动保存状态 */
+/** 底栏状态：左侧 待办统计 + 番茄条 ——右侧 提醒设置 + 自动保存（迷你番茄窗入口移至标题栏"更多"菜单） */
 interface NoteFooterProps {
   noteId: string;
   detail: NoteDetail;
@@ -243,28 +251,16 @@ interface NoteFooterProps {
 function NoteFooter({ noteId, detail, stats, autosave, onRefreshMeta }: NoteFooterProps) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-t border-primary/10 bg-primary/[0.03] px-2 text-xs text-muted-foreground">
-      <span className="flex items-center gap-1">
-        {stats.total > 0 && (
-          <>
-            <SquareCheck className="size-3.5" />
-            {stats.done}/{stats.total}
-          </>
-        )}
-      </span>
+      {stats.total > 0 && (
+        <span className="flex shrink-0 items-center gap-1">
+          <SquareCheck className="size-3.5" />
+          {stats.done}/{stats.total}
+        </span>
+      )}
       <PomodoroBar noteId={noteId} />
-      <button
-        type="button"
-        title="迷你番茄窗"
-        aria-label="打开迷你番茄窗"
-        className="text-muted-foreground hover:text-foreground"
-        onClick={() => void ensureMiniPomodoro()}
-      >
-        🖥
-      </button>
-      <div className="flex flex-1 justify-center">
-        <ReminderPopover note={detail} onChanged={onRefreshMeta} />
-      </div>
-      <span className={cn(autosave.error && "text-destructive")}>
+      <div className="min-w-0 flex-1" />
+      <ReminderPopover note={detail} onChanged={onRefreshMeta} />
+      <span className={cn("shrink-0 tabular-nums", autosave.error && "text-destructive")}>
         {autosave.saving
           ? "保存中…"
           : autosave.error
@@ -686,6 +682,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       >
         在管理器中显示
       </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => void ensureMiniPomodoro()}>迷你番茄窗</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setVersionOpen(true)}>版本历史</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => void handleArchive()}>归档</DropdownMenuItem>
       <DropdownMenuSeparator />

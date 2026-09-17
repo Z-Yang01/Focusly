@@ -96,7 +96,7 @@ export function SearchResults({
 }: SearchResultsProps) {
   const chips = chipsOf(parsed);
   return (
-    <div className="max-h-96 overflow-y-auto p-1">
+    <div className="max-h-[400px] overflow-y-auto p-1">
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-1 px-2 pb-1 pt-1.5">
           {chips.map((chip) => (
@@ -129,51 +129,53 @@ export function SearchResults({
           className="px-3 py-6"
         />
       ) : (
-        filtered.map((hit, i) => (
-          <button
-            key={hit.id}
-            type="button"
-            className={cn(
-              "flex w-full items-start gap-2 rounded px-2 py-1.5 text-left hover:bg-accent",
-              i === active && "bg-accent",
-            )}
-            onMouseDown={(e) => e.preventDefault()}
-            onMouseEnter={() => onActiveChange(i)}
-            onClick={() => onOpen(hit)}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1">
-                {hit.isPinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-                <span className="truncate text-xs font-medium">{hit.title || "无标题"}</span>
-                {hit.isPrivate && <Lock className="size-3 shrink-0 text-muted-foreground" />}
-                {hit.status === "archived" && (
-                  <Archive className="size-3 shrink-0 text-muted-foreground" />
-                )}
+        <div className="divide-y divide-border/50">
+          {filtered.map((hit, i) => (
+            <button
+              key={hit.id}
+              type="button"
+              className={cn(
+                "flex w-full items-start gap-2 px-2 py-1.5 text-left hover:bg-accent",
+                i === active && "bg-accent",
+              )}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => onActiveChange(i)}
+              onClick={() => onOpen(hit)}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1">
+                  {hit.isPinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
+                  <span className="truncate text-xs font-medium">{hit.title || "无标题"}</span>
+                  {hit.isPrivate && <Lock className="size-3 shrink-0 text-muted-foreground" />}
+                  {hit.status === "archived" && (
+                    <Archive className="size-3 shrink-0 text-muted-foreground" />
+                  )}
+                </div>
+                <div
+                  className="truncate text-xs text-muted-foreground [&_mark]:bg-transparent [&_mark]:font-semibold [&_mark]:text-foreground"
+                  // snippet 来自后端，仅 <mark> 被保留，其余 <>& 已转义
+                  dangerouslySetInnerHTML={{ __html: toSafeMarkHtml(hit.snippet) }}
+                />
               </div>
-              <div
-                className="truncate text-xs text-muted-foreground [&_mark]:bg-transparent [&_mark]:font-semibold [&_mark]:text-foreground"
-                // snippet 来自后端，仅 <mark> 被保留，其余 <>& 已转义
-                dangerouslySetInnerHTML={{ __html: toSafeMarkHtml(hit.snippet) }}
-              />
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <span className="text-[10px] text-muted-foreground">{updatedAtText(hit)}</span>
-              <div className="flex items-center gap-1">
-                {hit.todoTotal > 0 && (
-                  <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                    <SquareCheck className="size-3" />
-                    {hit.todoDone}/{hit.todoTotal}
-                  </span>
-                )}
-                {hit.tags.slice(0, 2).map((tag) => (
-                  <Badge key={tag} variant="secondary" className="px-1 py-0 text-[10px]">
-                    {tag}
-                  </Badge>
-                ))}
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="text-[10px] text-muted-foreground">{updatedAtText(hit)}</span>
+                <div className="flex items-center gap-1">
+                  {hit.todoTotal > 0 && (
+                    <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                      <SquareCheck className="size-3" />
+                      {hit.todoDone}/{hit.todoTotal}
+                    </span>
+                  )}
+                  {hit.tags.slice(0, 2).map((tag) => (
+                    <Badge key={tag} variant="secondary" className="px-1 py-0 text-[10px]">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-            </div>
-          </button>
-        ))
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

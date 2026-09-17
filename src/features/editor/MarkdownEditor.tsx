@@ -1,5 +1,5 @@
 /** Markdown 编辑器：格式工具栏 + 快捷键 + 图片粘贴转发 + 预览切换 */
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   Bold,
   Code,
@@ -10,12 +10,19 @@ import {
   List,
   ListTodo,
   Minus,
+  MoreHorizontal,
   Quote,
   Strikethrough,
   Table,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -59,6 +66,18 @@ interface Mutation {
 
 type TextFn = (text: string, start: number, end: number) => Mutation;
 
+interface Tool {
+  id: string;
+  title: string;
+  icon: LucideIcon;
+  run: () => void;
+}
+
+/** 常驻显示的 6 个高频工具：B / I / 删除线 / H2 / 列表 / 待办 */
+const PRIMARY_TOOL_IDS = ["bold", "italic", "strike", "heading", "list", "todo"];
+/** 窄窗口（<300px）只保留 3 个：B / I / 待办，其余全部收进 More 菜单 */
+const NARROW_TOOL_IDS = ["bold", "italic", "todo"];
+
 export function MarkdownEditor({
   value,
   onChange,
@@ -70,7 +89,22 @@ export function MarkdownEditor({
   taskPassthrough,
 }: MarkdownEditorProps) {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  /** 编辑区宽度 <300px 时收窄工具栏（ResizeObserver 实测容器，而非窗口） */
+  const [narrow, setNarrow] = useState(false);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setNarrow(entry.contentRect.width < 300);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const applyMutation = (mut: Mutation) => {
     onChange(mut.text);
@@ -122,20 +156,24 @@ export function MarkdownEditor({
     });
   };
 
-  const tools: { title: string; icon: LucideIcon; run: () => void }[] = [
-    { title: "加粗 (Ctrl+B)", icon: Bold, run: () => wrap("**") },
-    { title: "斜体 (Ctrl+I)", icon: Italic, run: () => wrap("*") },
-    { title: "删除线", icon: Strikethrough, run: () => wrap("~~") },
-    { title: "行内代码", icon: Code, run: () => wrap("`") },
-    { title: "二级标题", icon: Heading2, run: () => insert(SNIPPETS.heading) },
-    { title: "无序列表", icon: List, run: () => togglePrefix("- ") },
-    { title: "待办", icon: ListTodo, run: () => togglePrefix("- [ ] ") },
-    { title: "引用", icon: Quote, run: () => togglePrefix("> ") },
-    { title: "代码块", icon: FileCode, run: () => insert(SNIPPETS.codeBlock) },
-    { title: "链接 (Ctrl+K)", icon: Link2, run: insertLink },
-    { title: "表格", icon: Table, run: () => insert(SNIPPETS.table) },
-    { title: "分割线", icon: Minus, run: () => insert(SNIPPETS.divider) },
+  const tools: Tool[] = [
+    { id: "bold", title: "加粗 (Ctrl+B)", icon: Bold, run: () => wrap("**") },
+    { id: "italic", title: "斜体 (Ctrl+I)", icon: Italic, run: () => wrap("*") },
+    { id: "strike", title: "删除线", icon: Strikethrough, run: () => wrap("~~") },
+    { id: "code", title: "行内代码", icon: Code, run: () => wrap("`") },
+    { id: "heading", title: "二级标题", icon: Heading2, run: () => insert(SNIPPETS.heading) },
+    { id: "list", title: "无序列表", icon: List, run: () => togglePrefix("- ") },
+    { id: "todo", title: "待办", icon: ListTodo, run: () => togglePrefix("- [ ] ") },
+    { id: "quote", title: "引用", icon: Quote, run: () => togglePrefix("> ") },
+    { id: "codeBlock", title: "代码块", icon: FileCode, run: () => insert(SNIPPETS.codeBlock) },
+    { id: "link", title: "链接 (Ctrl+K)", icon: Link2, run: insertLink },
+    { id: "table", title: "表格", icon: Table, run: () => insert(SNIPPETS.table) },
+    { id: "divider", title: "分割线", icon: Minus, run: () => insert(SNIPPETS.divider) },
   ];
+
+  const shownIds = narrow ? NARROW_TOOL_IDS : PRIMARY_TOOL_IDS;
+  const shownTools = tools.filter((t) => shownIds.includes(t.id));
+  const moreTools = tools.filter((t) => !shownIds.includes(t.id));
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (!(e.ctrlKey || e.metaKey)) return;
@@ -173,6 +211,7 @@ export function MarkdownEditor({
   return (
     <TooltipProvider delayDuration={300}>
       <div
+        ref={rootRef}
         className={cn(
           "flex h-full min-h-0 flex-col rounded-md transition-shadow",
           dragActive && "ring-2 ring-primary ring-inset",
@@ -190,8 +229,8 @@ export function MarkdownEditor({
       >
         {!preview && (
           <div className="flex flex-wrap items-center gap-0.5 border-b px-1.5 py-1">
-            {tools.map((tool) => (
-              <Tooltip key={tool.title}>
+            {shownTools.map((tool) => (
+              <Tooltip key={tool.id}>
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
@@ -211,13 +250,42 @@ export function MarkdownEditor({
                 </TooltipContent>
               </Tooltip>
             ))}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="更多格式"
+                      className="size-7 text-muted-foreground hover:text-foreground"
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  更多格式
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" className="text-sm">
+                {moreTools.map((tool) => (
+                  <DropdownMenuItem key={tool.id} onSelect={() => tool.run()}>
+                    <tool.icon className="size-4 text-muted-foreground" />
+                    {tool.title}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
 
         {preview ? (
-          /* 预览容器：Escape 切回编辑模式（仅预览态生效；焦点在容器内时触发） */
+          /* 预览容器：Escape 切回编辑模式（仅预览态生效；焦点在容器内时触发）；px-1 增加沉浸式左右留白 */
           <div
-            className="flex min-h-0 flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col px-1"
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 e.preventDefault();
