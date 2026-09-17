@@ -33,18 +33,25 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
             }
         }
         "new_note" => {
-            if let Err(e) = crate::notes::create_and_open(app) {
-                log::error!("快捷键新建便签失败: {e}");
-            }
+            // 开窗必须避开主线程（同步死锁，见 notes_cmd 注释）
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = crate::notes::create_and_open(&app) {
+                    log::error!("快捷键新建便签失败: {e}");
+                }
+            });
         }
         "focus_search" => {
             window::show_manager(app);
             let _ = app.emit(crate::events::FOCUS_SEARCH, ());
         }
         "quick_capture" => {
-            if let Err(e) = crate::quickcapture::toggle(app) {
-                log::error!("呼出速记箱失败: {e}");
-            }
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = crate::quickcapture::toggle(&app) {
+                    log::error!("呼出速记箱失败: {e}");
+                }
+            });
         }
         "pomodoro_toggle" => {
             if let Err(e) = crate::pomodoro::toggle_via_cmd(app) {

@@ -56,9 +56,13 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
             "new_note" => {
-                if let Err(e) = crate::notes::create_and_open(app) {
-                    log::error!("托盘新建便签失败: {e}");
-                }
+                // 开窗必须避开主线程（同步死锁，见 notes_cmd 注释），丢到异步运行时执行
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::notes::create_and_open(&app) {
+                        log::error!("托盘新建便签失败: {e}");
+                    }
+                });
             }
             "open_manager" => window::show_manager(app),
             "open_settings" => {

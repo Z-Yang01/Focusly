@@ -369,11 +369,12 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
     };
   }, [refreshMeta]);
 
-  // 提醒触发：显示横幅
+  // 提醒触发：显示横幅（仅属于本便签的提醒才播放提示音并弹横幅）
   useEffect(() => {
     const off: Promise<UnlistenFn> = onReminderFired((e) => {
-      if (e.noteId === noteId) playDing();
-          setBanner(e);
+      if (e.noteId !== noteId) return;
+      playDing();
+      setBanner(e);
     });
     return () => {
       void off.then((f) => f());

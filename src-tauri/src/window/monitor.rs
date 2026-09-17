@@ -117,7 +117,7 @@ pub fn rect_visible_on_any_monitor(_x: i32, _y: i32, _w: i32, _h: i32) -> bool {
 pub fn is_foreground_fullscreen() -> bool {
     use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWINDOWATTRIBUTE};
     use windows::Win32::UI::Shell::SHQueryUserNotificationState;
-    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
     unsafe {
         // 快速通道：系统通知状态（原始值：2=QUNS_BUSY, 3=QUNS_RUNNING_D3D_FULL_SCREEN, 4=QUNS_PRESENTATION_MODE）
@@ -129,6 +129,13 @@ pub fn is_foreground_fullscreen() -> bool {
         }
         let hwnd = GetForegroundWindow();
         if hwnd.is_invalid() {
+            return false;
+        }
+        // 排除本进程窗口：无边框最大化的管理器/便签矩形恰好铺满显示器，
+        // 误判会导致"用户一切到管理器，全屏隐藏策略就触发"。
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == std::process::id() {
             return false;
         }
         // 排除被 cloak 的窗口（其他虚拟桌面上的 UWP 等）；DWMWA_CLOAKED = 14
