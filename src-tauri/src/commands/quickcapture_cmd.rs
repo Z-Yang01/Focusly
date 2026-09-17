@@ -3,7 +3,7 @@
 use crate::error::AppResult;
 use tauri::AppHandle;
 
-#[tauri::command]
+#[tauri::command(async)] // 内部会创建速记箱窗口，必须避开主线程（见 notes_cmd 同步死锁注释）
 pub fn quickcapture_toggle(app: AppHandle) -> AppResult<()> {
     crate::quickcapture::toggle(&app)
 }

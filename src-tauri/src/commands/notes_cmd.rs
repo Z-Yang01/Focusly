@@ -14,13 +14,16 @@ pub fn create_note(app: AppHandle) -> AppResult<Note> {
 }
 
 /// 新建并打开（托盘/快捷键/管理器共用）。
-#[tauri::command]
+/// 开窗命令必须 async：同步命令在主线程执行，而 WebviewWindowBuilder::build()
+/// 要等主线程消息泵分发 WebView2 创建回调——在主线程上调用会自死锁，
+/// 并让后续所有命令排队饿死（前端表现为"点任何按钮都没反应"）。
+#[tauri::command(async)]
 pub fn new_note(app: AppHandle) -> AppResult<Note> {
     notes::create_and_open(&app)
 }
 
 /// 打开（或聚焦）便签窗口。
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_note_window(app: AppHandle, note_id: String) -> AppResult<()> {
     notes::open_existing(&app, &note_id)
 }
@@ -191,7 +194,7 @@ pub fn set_pin_mode(app: AppHandle, note_id: String, mode: String) -> AppResult<
 
 // ---------- 每日笔记（批3） ----------
 
-#[tauri::command]
+#[tauri::command(async)] // 同上：内部会开窗，必须在主线程之外执行
 pub fn daily_get_or_create(app: AppHandle) -> AppResult<Note> {
     crate::daily::get_or_create_daily(&app)
 }

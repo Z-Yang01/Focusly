@@ -276,7 +276,9 @@ pub fn apply_fullscreen_policy(app: &AppHandle, fullscreen: bool) {
                 let _ = win.set_always_on_top(true);
             }
             FullscreenBehavior::Normal => {
-                let _ = win.set_always_on_top(false);
+                // 不能无条件取消置顶：is_always_on_top 是用户显式设置的钉住状态，
+                // 全屏策略切换时必须保留，否则每次前台切换都会把置顶便签打回普通层。
+                let _ = win.set_always_on_top(note.is_always_on_top);
                 if !fullscreen && hidden.contains(&label) {
                     let _ = win.show();
                     hidden.remove(&label);
