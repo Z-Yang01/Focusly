@@ -1,3 +1,4 @@
+pub mod daily_task_cmd;
 pub mod imagemgr_cmd;
 pub mod images_cmd;
 pub mod layout_cmd;

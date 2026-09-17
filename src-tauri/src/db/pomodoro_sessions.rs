@@ -53,6 +53,11 @@ pub fn insert_running(
     )
 }
 
+/// task_key 约定："daily:<uuid>" 前缀 = 今日任务绑定。
+pub fn daily_task_id_of(task_key: &str) -> Option<&str> {
+    task_key.strip_prefix("daily:").filter(|s| !s.is_empty())
+}
+
 /// 可控 started_at 的插入（测试与启动恢复复算用）。
 pub fn insert_running_at(
     conn: &Connection,

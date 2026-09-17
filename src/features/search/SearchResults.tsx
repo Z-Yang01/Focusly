@@ -1,6 +1,16 @@
 /** 搜索结果列表：结构化条件前端过滤 + 键盘导航辅助（moveActive）+ 高亮 snippet 渲染。
  *  snippet 来自后端 FTS5，仅 <mark> 被保留，其余 <>& 由 toSafeMarkHtml 转义。 */
-import { Archive, Info, Loader2, Lock, Pin, Search, SquareCheck } from "lucide-react";
+import {
+  Archive,
+  Info,
+  ListTodo,
+  Loader2,
+  Lock,
+  Pin,
+  Search,
+  SquareCheck,
+} from "lucide-react";
+import type { DailyTask } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatLocal, parseRfc3339 } from "@/lib/format";
@@ -71,6 +81,8 @@ function chipsOf(parsed: SearchQuery): { key: string; text: string }[] {
 export interface SearchResultsProps {
   /** 已经过 applyStructuredFilters 过滤的结果 */
   filtered: SearchHit[];
+  /** is:task 等任务 token 命中的今日任务（可选分区） */
+  tasks?: DailyTask[];
   parsed: SearchQuery;
   /** 需后端支持、暂未生效的结构化条件（如 has:/due:） */
   pending: string[];
@@ -86,6 +98,7 @@ export interface SearchResultsProps {
 
 export function SearchResults({
   filtered,
+  tasks,
   parsed,
   pending,
   active,
@@ -121,7 +134,7 @@ export function SearchResults({
           <Loader2 className="size-3.5 animate-spin" />
           搜索中…
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && !(tasks && tasks.length > 0) ? (
         <EmptyState
           icon={Search}
           title="未找到匹配结果"
@@ -130,6 +143,40 @@ export function SearchResults({
         />
       ) : (
         <div className="divide-y divide-border/50">
+          {tasks && tasks.length > 0 && (
+            <div className="px-2 py-1.5">
+              <div className="mb-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                <ListTodo className="size-3" /> 今日任务（点击打开今日计划）
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {tasks.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:bg-accent"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent("focusly:navigate", { detail: { view: "plan" } }),
+                      )
+                    }
+                  >
+                    <span className={cn("min-w-0 flex-1 truncate", t.status !== "todo" && "line-through opacity-60")}>
+                      {t.isPrivate ? "🔒 私密任务" : t.title}
+                    </span>
+                    {t.startTime && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{t.startTime}</span>
+                    )}
+                    {t.estimatePomodoros > 0 && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        🍅 {t.completedPomodoros}/{t.estimatePomodoros}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {filtered.map((hit, i) => (
             <button
               key={hit.id}

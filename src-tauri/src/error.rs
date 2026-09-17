@@ -14,6 +14,8 @@ pub enum AppError {
     Image(String),
     #[error("无效输入: {0}")]
     Invalid(String),
+    #[error("资源不存在: {0}")]
+    NotFound(String),
     #[error("快捷键错误: {0}")]
     Shortcut(String),
     #[error("系统能力不可用: {0}")]
@@ -30,6 +32,7 @@ impl AppError {
             AppError::Window(_) => "window",
             AppError::Image(_) => "image",
             AppError::Invalid(_) => "invalid",
+            AppError::NotFound(_) => "not_found",
             AppError::Shortcut(_) => "shortcut",
             AppError::Platform(_) => "platform",
             AppError::Tauri(_) => "tauri",

@@ -182,6 +182,33 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     r#"
     CREATE INDEX idx_notes_alive_order ON notes(is_pinned DESC, updated_at DESC) WHERE deleted_at IS NULL;
     "#,
+    // v8: 今日任务时间轴（独立于便签的每日任务）+ 番茄会话绑定。
+    // id 沿用全库 TEXT uuid 主键约定（与其余表一致，避免 rowid 回填管道）。
+    // source_task_id：重复模板 → 当日实例的溯源（实例自身 repeat_rule='none'）。
+    // start_notified：到点通知去重（0=未通知；勿扰期间保持 0，时段结束后补发）。
+    r#"
+    CREATE TABLE daily_tasks (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        start_time TEXT,
+        end_time TEXT,
+        title TEXT NOT NULL,
+        note TEXT,
+        estimate_pomodoros INTEGER NOT NULL DEFAULT 0,
+        completed_pomodoros INTEGER NOT NULL DEFAULT 0,
+        priority TEXT NOT NULL DEFAULT 'medium',
+        status TEXT NOT NULL DEFAULT 'todo',
+        tags TEXT,
+        repeat_rule TEXT NOT NULL DEFAULT 'none',
+        is_private INTEGER NOT NULL DEFAULT 0,
+        start_notified INTEGER NOT NULL DEFAULT 0,
+        source_task_id TEXT REFERENCES daily_tasks(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX idx_daily_tasks_date ON daily_tasks(date, start_time);
+    ALTER TABLE pomodoro_sessions ADD COLUMN daily_task_id TEXT REFERENCES daily_tasks(id) ON DELETE SET NULL;
+    "#,
 ];
 
 use rusqlite::Connection;
