@@ -23,6 +23,7 @@ pub fn daily_task_create(
     repeat_rule: Option<String>,
     tags: Option<String>,
     is_private: Option<bool>,
+    focus_min: Option<i64>,
 ) -> AppResult<DailyTask> {
     state.db.with(|c| {
         daily_tasks::create(
@@ -37,6 +38,7 @@ pub fn daily_task_create(
             repeat_rule.as_deref().unwrap_or("none"),
             tags.as_deref(),
             is_private.unwrap_or(false),
+            focus_min,
         )
     })
 }
@@ -56,6 +58,7 @@ pub fn daily_task_update(
     repeat_rule: Option<String>,
     tags: Option<String>,
     is_private: Option<bool>,
+    focus_min: Option<i64>,
 ) -> AppResult<DailyTask> {
     state.db.with(|c| {
         daily_tasks::update(
@@ -71,6 +74,7 @@ pub fn daily_task_update(
             repeat_rule.as_deref().unwrap_or("none"),
             tags.as_deref(),
             is_private.unwrap_or(false),
+            focus_min,
         )
     })
 }

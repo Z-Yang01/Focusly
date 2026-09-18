@@ -19,6 +19,8 @@ export interface TaskDialogValue {
   endTime: string;
   note: string;
   estimatePomodoros: number;
+  /** 空串 = 跟随全局默认 */
+  focusMin: string;
   priority: string;
   repeatRule: string;
   tags: string;
@@ -32,6 +34,7 @@ export function emptyValue(): TaskDialogValue {
     endTime: "",
     note: "",
     estimatePomodoros: 0,
+    focusMin: "",
     priority: "medium",
     repeatRule: "none",
     tags: "",
@@ -46,6 +49,7 @@ export function fromTask(t: DailyTask): TaskDialogValue {
     endTime: t.endTime ?? "",
     note: t.note ?? "",
     estimatePomodoros: t.estimatePomodoros,
+    focusMin: t.focusMin != null ? String(t.focusMin) : "",
     priority: t.priority,
     repeatRule: t.repeatRule,
     tags: t.tags ?? "",
@@ -154,6 +158,18 @@ export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSu
             <Label htmlFor="dt-tags" className="text-xs text-muted-foreground">标签（逗号分隔）</Label>
             <Input id="dt-tags" value={value.tags}
               onChange={(e) => set({ tags: e.target.value })} className="h-8 text-xs" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="dt-focus" className="text-xs text-muted-foreground">
+              专注时长（分钟，留空 = 默认 25）
+            </Label>
+            <Input id="dt-focus" type="number" min={1} max={180} placeholder="25"
+              value={value.focusMin}
+              onChange={(e) => {
+                const v = e.target.value;
+                set({ focusMin: v === "" ? "" : String(Math.max(1, Math.min(180, Number(v) || 25))) });
+              }}
+              className="h-8 text-xs" />
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="dt-private" className="text-xs text-muted-foreground">私密任务（通知脱敏）</Label>

@@ -882,6 +882,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                     repeatRule: "none",
                     tags: null,
                     isPrivate: Boolean(detail?.isPrivate),
+                    focusMin: null,
                   })
                     .then(() => toast.success("已加入今日计划"))
                     .catch((err: unknown) => {
@@ -900,6 +901,25 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                     taskKey: taskMenu.taskKey,
                     lineText: taskMenu.lineText,
                     estimate: n,
+                  }),
+              })),
+              // 本任务专注时长：null = 恢复全局默认（设置里的番茄分钟数）
+              ...[
+                { label: "⏱ 专注 15 分钟", v: 15 },
+                { label: "⏱ 专注 25 分钟（默认）", v: 25 },
+                { label: "⏱ 专注 30 分钟", v: 30 },
+                { label: "⏱ 专注 45 分钟", v: 45 },
+                { label: "⏱ 专注 60 分钟", v: 60 },
+                { label: "⏱ 恢复默认时长", v: null },
+              ].map((o) => ({
+                label: o.label,
+                act: () =>
+                  taskMenu &&
+                  void taskMetaUpdate({
+                    noteId,
+                    taskKey: taskMenu.taskKey,
+                    lineText: taskMenu.lineText,
+                    focusMin: o.v,
                   }),
               })),
               ...[

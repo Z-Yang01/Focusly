@@ -209,6 +209,11 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     CREATE INDEX idx_daily_tasks_date ON daily_tasks(date, start_time);
     ALTER TABLE pomodoro_sessions ADD COLUMN daily_task_id TEXT REFERENCES daily_tasks(id) ON DELETE SET NULL;
     "#,
+    // v9: 每任务专注时长覆盖（分钟；NULL = 使用全局设置 pomo_focus_min，默认 25）
+    r#"
+    ALTER TABLE task_meta ADD COLUMN focus_min INTEGER;
+    ALTER TABLE daily_tasks ADD COLUMN focus_min INTEGER;
+    "#,
 ];
 
 use rusqlite::Connection;

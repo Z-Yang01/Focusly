@@ -140,6 +140,7 @@ pub fn task_meta_update(
     estimate: Option<i64>,
     priority: Option<String>,
     due_at: Option<String>,
+    focus_min: Option<i64>,
     clear_skip: Option<bool>,
 ) -> AppResult<TaskMeta> {
     state.db.with(|c| {
@@ -153,6 +154,7 @@ pub fn task_meta_update(
                 estimate,
                 priority,
                 due_at,
+                focus_min,
                 clear_skip: clear_skip.unwrap_or(false),
             },
         )

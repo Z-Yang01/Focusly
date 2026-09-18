@@ -326,6 +326,8 @@ export interface TaskMeta {
   dueAt: string | null;
   /** 跳过日期 YYYY-MM-DD；跨日自动复活为 todo */
   skipDate: string | null;
+  /** 本任务专注时长覆盖（分钟；null = 全局默认 25） */
+  focusMin: number | null;
   /** RFC3339 UTC */
   updatedAt: string;
 }
@@ -377,6 +379,8 @@ export interface DailyTask {
   isPrivate: boolean;
   startNotified: boolean;
   sourceTaskId: string | null;
+  /** 本任务专注时长覆盖（分钟；null = 全局默认 25） */
+  focusMin: number | null;
   createdAt: string;
   updatedAt: string;
 }

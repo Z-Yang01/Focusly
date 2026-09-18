@@ -299,6 +299,8 @@ pub struct TaskMeta {
     pub priority: Option<String>,
     pub due_at: Option<String>,
     pub skip_date: Option<String>,
+    /// 本任务专注时长覆盖（分钟；None = 全局设置）
+    pub focus_min: Option<i64>,
     pub updated_at: String,
 }
 
@@ -330,6 +332,8 @@ pub struct DailyTask {
     pub start_notified: bool,
     /// 重复模板实例的来源模板 id
     pub source_task_id: Option<String>,
+    /// 本任务专注时长覆盖（分钟；None = 全局设置）
+    pub focus_min: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
 }
