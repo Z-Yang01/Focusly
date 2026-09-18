@@ -5,6 +5,7 @@
 //! - `status = 'cancelled'`：错过超过 24h 被 fire_due 自动取消的行
 //!   （`triggered_at IS NULL` 排除先触发后取消的正常流转）；
 //! - 近 7 天：`remind_at >= now - 7d`，避免翻旧账。
+//!
 //! 两端都用 SQLite `datetime()` 规整成 UTC 秒级字符串再比较，
 //! 对 RFC3339 格式差异（`+00:00` / `Z`、精度）鲁棒。
 

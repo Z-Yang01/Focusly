@@ -1,5 +1,5 @@
-pub mod daily_tasks;
 pub mod clipboard;
+pub mod daily_tasks;
 pub mod images;
 pub mod layouts;
 pub mod migrations;
@@ -65,7 +65,7 @@ impl Db {
     pub fn in_memory() -> AppResult<Self> {
         let conn = Connection::open_in_memory()?;
         let db = Db(Mutex::new(conn));
-        db.with(|c| migrations::run(c))?;
+        db.with(migrations::run)?;
         Ok(db)
     }
 }

@@ -277,6 +277,7 @@ fn extract_task_lines(content: &str) -> Vec<(String, bool)> {
 /// - 取消勾选 `[ ]` 且 meta 原为 done → 回退 'todo'
 /// - meta 为 skipped → 不受勾选影响（跳过是独立维度）
 /// - 无 meta 的未勾选行不建行（避免空记录膨胀）
+///
 /// 返回更新的行数。
 pub fn sync_task_meta_from_content(
     conn: &Connection,

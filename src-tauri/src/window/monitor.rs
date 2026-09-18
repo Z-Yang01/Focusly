@@ -107,13 +107,13 @@ pub fn rect_visible_on_any_monitor(x: i32, y: i32, width: i32, height: i32) -> b
 /// 网格排列等平铺场景必须用工作区而非整块显示器，否则便签会盖住任务栏。
 pub fn primary_work_area_rect() -> Option<RECT> {
     use windows::Win32::Foundation::POINT;
-    use windows::Win32::Graphics::Gdi::{
-        MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
-    };
+    use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
     unsafe {
         let hmonitor = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
-        let mut info = MONITORINFO::default();
-        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
         if GetMonitorInfoW(hmonitor, &mut info).as_bool() {
             Some(info.rcWork)
         } else {
@@ -186,8 +186,10 @@ pub fn is_foreground_fullscreen() -> bool {
             return false;
         }
         let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        let mut info = MONITORINFO::default();
-        info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
         if GetMonitorInfoW(monitor, &mut info).as_bool() {
             let m = info.rcMonitor;
             if rect.left <= m.left

@@ -59,6 +59,7 @@ pub fn daily_task_id_of(task_key: &str) -> Option<&str> {
 }
 
 /// 可控 started_at 的插入（测试与启动恢复复算用）。
+#[allow(clippy::too_many_arguments)]
 pub fn insert_running_at(
     conn: &Connection,
     id: &str,

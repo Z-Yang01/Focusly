@@ -130,7 +130,9 @@ pub fn task_meta_list(state: State<'_, AppState>, note_id: String) -> AppResult<
 
 /// 插入/部分更新任务元数据。None 字段保留原值；
 /// status="skipped" 自动写 skip_date=本地今天；clearSkip=true 复位 todo 并清除 skip_date。
+// 参数即前端 IPC 契约，保持平铺不收敛为 struct。
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn task_meta_update(
     state: State<'_, AppState>,
     note_id: String,

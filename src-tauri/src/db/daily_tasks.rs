@@ -4,7 +4,6 @@
 //! 按 (source_task_id, date) 幂等去重。
 
 use rusqlite::{params, Connection, Row};
-use serde_json::json;
 
 use crate::db::models::{DailyTask, DailyTaskStats};
 use crate::error::{AppError, AppResult};
@@ -254,9 +253,8 @@ pub fn repeat_matches(anchor_date: &str, target_date: &str, rule: &str) -> bool 
 /// 为目标日期物化到期重复模板（幂等）。返回新建实例数。
 pub fn materialize_recurring(conn: &Connection, date: &str) -> AppResult<usize> {
     let templates: Vec<DailyTask> = {
-        let sql = format!(
-            "SELECT {COLS} FROM daily_tasks WHERE repeat_rule != 'none' AND date <= ?1"
-        );
+        let sql =
+            format!("SELECT {COLS} FROM daily_tasks WHERE repeat_rule != 'none' AND date <= ?1");
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(params![date], row_to_task)?;
         let mut out = Vec::new();
@@ -285,8 +283,8 @@ pub fn materialize_recurring(conn: &Connection, date: &str) -> AppResult<usize> 
         conn.execute(
             "INSERT INTO daily_tasks (id, date, start_time, end_time, title, note, \
              estimate_pomodoros, completed_pomodoros, priority, status, tags, repeat_rule, \
-             is_private, start_notified, source_task_id, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, 'todo', ?9, 'none', ?10, 0, ?11, ?12, ?12)",
+             is_private, start_notified, source_task_id, focus_min, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, 'todo', ?9, 'none', ?10, 0, ?11, ?12, ?13, ?13)",
             params![
                 id,
                 date,
@@ -299,6 +297,7 @@ pub fn materialize_recurring(conn: &Connection, date: &str) -> AppResult<usize> 
                 t.tags,
                 t.is_private as i64,
                 t.id,
+                t.focus_min,
                 now
             ],
         )?;
@@ -310,7 +309,11 @@ pub fn materialize_recurring(conn: &Connection, date: &str) -> AppResult<usize> 
 // ---------- 到点通知 ----------
 
 /// 到点未通知的任务（date=今日，start_time <= hhmm，status=todo，start_notified=0）。
-pub fn due_for_notification(conn: &Connection, date: &str, hhmm: &str) -> AppResult<Vec<DailyTask>> {
+pub fn due_for_notification(
+    conn: &Connection,
+    date: &str,
+    hhmm: &str,
+) -> AppResult<Vec<DailyTask>> {
     let sql = format!(
         "SELECT {COLS} FROM daily_tasks \
          WHERE date = ?1 AND status = 'todo' AND start_notified = 0 \
@@ -372,7 +375,7 @@ pub fn search(
     status: Option<&str>,
     date: Option<&str>,
 ) -> AppResult<Vec<DailyTask>> {
-    let like = format!("%{}%", query.replace('%', "").replace('_', ""));
+    let like = format!("%{}%", query.replace(['%', '_'], ""));
     let sql = format!(
         "SELECT {COLS} FROM daily_tasks \
          WHERE (title LIKE ?1 OR IFNULL(note,'') LIKE ?1 OR IFNULL(tags,'') LIKE ?1) \
@@ -408,24 +411,16 @@ fn validate_hm_opt(v: Option<&str>, field: &str) -> AppResult<()> {
     if !ok {
         return Err(AppError::Invalid(format!("{field} 需为 HH:MM: {v}")));
     }
-    let h: u8 = h.parse().map_err(|_| AppError::Invalid(format!("{field} 小时越界: {v}")))?;
-    let m: u8 = m.parse().map_err(|_| AppError::Invalid(format!("{field} 分钟越界: {v}")))?;
+    let h: u8 = h
+        .parse()
+        .map_err(|_| AppError::Invalid(format!("{field} 小时越界: {v}")))?;
+    let m: u8 = m
+        .parse()
+        .map_err(|_| AppError::Invalid(format!("{field} 分钟越界: {v}")))?;
     if h > 23 || m > 59 {
         return Err(AppError::Invalid(format!("{field} 越界: {v}")));
     }
     Ok(())
-}
-
-/// 导出用 JSON（私密任务由导出层过滤/脱敏，本函数不做策略）。
-pub fn to_export_json(t: &DailyTask) -> serde_json::Value {
-    json!({
-        "date": t.date, "startTime": t.start_time, "endTime": t.end_time,
-        "title": if t.is_private { "🔒 私密任务".to_string() } else { t.title.clone() },
-        "note": if t.is_private { None } else { t.note.clone() },
-        "estimatePomodoros": t.estimate_pomodoros, "completedPomodoros": t.completed_pomodoros,
-        "priority": t.priority, "status": t.status, "repeatRule": t.repeat_rule,
-        "isPrivate": t.is_private,
-    })
 }
 
 #[cfg(test)]
@@ -442,8 +437,21 @@ mod tests {
     #[test]
     fn create_and_get_round_trip() {
         let conn = setup();
-        let t = create(&conn, "2026-09-18", Some("09:00"), Some("10:00"), "写周报",
-            Some("按模板"), 2, "high", REPEAT_NONE, Some("工作"), false, None).unwrap();
+        let t = create(
+            &conn,
+            "2026-09-18",
+            Some("09:00"),
+            Some("10:00"),
+            "写周报",
+            Some("按模板"),
+            2,
+            "high",
+            REPEAT_NONE,
+            Some("工作"),
+            false,
+            None,
+        )
+        .unwrap();
         assert_eq!(t.title, "写周报");
         assert_eq!(t.estimate_pomodoros, 2);
         assert_eq!(t.priority, "high");
@@ -455,19 +463,132 @@ mod tests {
     #[test]
     fn create_rejects_invalid_input() {
         let conn = setup();
-        assert!(create(&conn, "2026-09-18", None, None, "  ", None, 0, "medium", REPEAT_NONE, None, false, None).is_err());
-        assert!(create(&conn, "2026-09-18", None, None, "t", None, 0, "urgent", REPEAT_NONE, None, false, None).is_err());
-        assert!(create(&conn, "2026-09-18", Some("9:00"), None, "t", None, 0, "medium", REPEAT_NONE, None, false, None).is_err());
-        assert!(create(&conn, "2026-09-18", Some("25:00"), None, "t", None, 0, "medium", REPEAT_NONE, None, false, None).is_err());
-        assert!(create(&conn, "09-18", None, None, "t", None, 0, "medium", REPEAT_NONE, None, false, None).is_err());
-        assert!(create(&conn, "2026-09-18", None, None, "t", None, 0, "medium", "monthly", None, false, None).is_err());
+        assert!(create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "  ",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None
+        )
+        .is_err());
+        assert!(create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "t",
+            None,
+            0,
+            "urgent",
+            REPEAT_NONE,
+            None,
+            false,
+            None
+        )
+        .is_err());
+        assert!(create(
+            &conn,
+            "2026-09-18",
+            Some("9:00"),
+            None,
+            "t",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None
+        )
+        .is_err());
+        assert!(create(
+            &conn,
+            "2026-09-18",
+            Some("25:00"),
+            None,
+            "t",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None
+        )
+        .is_err());
+        assert!(create(
+            &conn,
+            "09-18",
+            None,
+            None,
+            "t",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None
+        )
+        .is_err());
+        assert!(create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "t",
+            None,
+            0,
+            "medium",
+            "monthly",
+            None,
+            false,
+            None
+        )
+        .is_err());
     }
 
     #[test]
     fn update_set_status_and_delete() {
         let conn = setup();
-        let t = create(&conn, "2026-09-18", None, None, "任务", None, 1, "low", REPEAT_NONE, None, false, None).unwrap();
-        let u = update(&conn, &t.id, "2026-09-18", Some("10:00"), Some("11:00"), "改名", None, 3, "medium", REPEAT_NONE, None, false, None).unwrap();
+        let t = create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "任务",
+            None,
+            1,
+            "low",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        let u = update(
+            &conn,
+            &t.id,
+            "2026-09-18",
+            Some("10:00"),
+            Some("11:00"),
+            "改名",
+            None,
+            3,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         assert_eq!(u.title, "改名");
         assert_eq!(u.estimate_pomodoros, 3);
         assert_eq!(u.start_time.as_deref(), Some("10:00"));
@@ -482,10 +603,66 @@ mod tests {
     #[test]
     fn list_orders_by_start_time_nulls_last() {
         let conn = setup();
-        create(&conn, "2026-09-18", Some("13:00"), None, "午后", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
-        create(&conn, "2026-09-18", None, None, "无时间", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
-        create(&conn, "2026-09-18", Some("09:00"), None, "清晨", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
-        create(&conn, "2026-09-19", Some("08:00"), None, "明天", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            Some("13:00"),
+            None,
+            "午后",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "无时间",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            Some("09:00"),
+            None,
+            "清晨",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-19",
+            Some("08:00"),
+            None,
+            "明天",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         let list = list_by_date(&conn, "2026-09-18").unwrap();
         let titles: Vec<&str> = list.iter().map(|t| t.title.as_str()).collect();
         assert_eq!(titles, vec!["清晨", "午后", "无时间"]);
@@ -509,8 +686,36 @@ mod tests {
     #[test]
     fn materialize_recurring_is_idempotent_and_skips_templates_in_day_view() {
         let conn = setup();
-        create(&conn, "2026-09-17", Some("09:00"), None, "每日站会", None, 1, "medium", REPEAT_DAILY, None, false, None).unwrap();
-        create(&conn, "2026-09-11", Some("14:00"), None, "周会", None, 2, "high", REPEAT_WEEKLY, None, false, None).unwrap();
+        create(
+            &conn,
+            "2026-09-17",
+            Some("09:00"),
+            None,
+            "每日站会",
+            None,
+            1,
+            "medium",
+            REPEAT_DAILY,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-11",
+            Some("14:00"),
+            None,
+            "周会",
+            None,
+            2,
+            "high",
+            REPEAT_WEEKLY,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         let n1 = materialize_recurring(&conn, "2026-09-18").unwrap();
         assert_eq!(n1, 2, "daily 每天 + weekly 周五 9-18 生成");
         // 幂等
@@ -518,7 +723,9 @@ mod tests {
         // 实例出现在日视图，模板不出现在锚点日之前的视图
         let list = list_by_date(&conn, "2026-09-18").unwrap();
         assert_eq!(list.len(), 2);
-        assert!(list.iter().all(|t| t.source_task_id.is_some() && t.repeat_rule == REPEAT_NONE));
+        assert!(list
+            .iter()
+            .all(|t| t.source_task_id.is_some() && t.repeat_rule == REPEAT_NONE));
         // 用户删实例后同日不再自动重建（已删除 = 不存在,但幂等键也查不到 → 会重建。
         // 语义取舍：删除模板才不再生成；删除实例后重物化会重建，可接受并在此固化）
         let first = &list[0];
@@ -529,7 +736,21 @@ mod tests {
     #[test]
     fn weekly_template_anchor_friday_generates_only_fridays() {
         let conn = setup();
-        create(&conn, "2026-09-18", Some("10:00"), None, "周五例会", None, 0, "medium", REPEAT_WEEKLY, None, false, None).unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            Some("10:00"),
+            None,
+            "周五例会",
+            None,
+            0,
+            "medium",
+            REPEAT_WEEKLY,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         // 2026-09-19 是周六
         assert_eq!(materialize_recurring(&conn, "2026-09-19").unwrap(), 0);
         // 2026-09-25 是周五
@@ -539,20 +760,64 @@ mod tests {
     #[test]
     fn notification_scan_and_mark() {
         let conn = setup();
-        create(&conn, "2026-09-18", Some("10:30"), None, "写代码", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
-        create(&conn, "2026-09-18", Some("15:00"), None, "开会", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            Some("10:30"),
+            None,
+            "写代码",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            Some("15:00"),
+            None,
+            "开会",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         // 10:30 时刻只到"写代码"
         let due = due_for_notification(&conn, "2026-09-18", "10:30").unwrap();
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].title, "写代码");
         mark_notified(&conn, &[due[0].id.clone()]).unwrap();
-        assert!(due_for_notification(&conn, "2026-09-18", "10:30").unwrap().is_empty());
+        assert!(due_for_notification(&conn, "2026-09-18", "10:30")
+            .unwrap()
+            .is_empty());
         // 15:00 时刻两条都过线，但已通知的不再出现
         let due2 = due_for_notification(&conn, "2026-09-18", "15:00").unwrap();
         assert_eq!(due2.len(), 1);
         assert_eq!(due2[0].title, "开会");
         // 已完成的不通知
-        let t3 = create(&conn, "2026-09-18", Some("08:00"), None, "早读", None, 0, "low", REPEAT_NONE, None, false, None).unwrap();
+        let t3 = create(
+            &conn,
+            "2026-09-18",
+            Some("08:00"),
+            None,
+            "早读",
+            None,
+            0,
+            "low",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         set_status(&conn, &t3.id, "done").unwrap();
         let due3 = due_for_notification(&conn, "2026-09-18", "23:59").unwrap();
         assert!(due3.iter().all(|t| t.title != "早读"));
@@ -561,9 +826,51 @@ mod tests {
     #[test]
     fn stats_counts_done_skipped_and_minutes() {
         let conn = setup();
-        let a = create(&conn, "2026-09-18", Some("09:00"), Some("10:00"), "A", None, 2, "medium", REPEAT_NONE, None, false, None).unwrap();
-        create(&conn, "2026-09-18", Some("10:00"), Some("11:30"), "B", None, 1, "medium", REPEAT_NONE, None, false, None).unwrap();
-        create(&conn, "2026-09-18", None, None, "C", None, 0, "low", REPEAT_NONE, None, false, None).unwrap();
+        let a = create(
+            &conn,
+            "2026-09-18",
+            Some("09:00"),
+            Some("10:00"),
+            "A",
+            None,
+            2,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            Some("10:00"),
+            Some("11:30"),
+            "B",
+            None,
+            1,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "C",
+            None,
+            0,
+            "low",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         set_status(&conn, &a.id, "done").unwrap();
         incr_completed(&conn, &a.id).unwrap();
         let s = stats(&conn, "2026-09-18").unwrap();
@@ -577,7 +884,21 @@ mod tests {
     #[test]
     fn set_time_and_incr_completed() {
         let conn = setup();
-        let t = create(&conn, "2026-09-18", Some("09:00"), Some("10:00"), "A", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
+        let t = create(
+            &conn,
+            "2026-09-18",
+            Some("09:00"),
+            Some("10:00"),
+            "A",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         let u = set_time(&conn, &t.id, Some("11:00"), Some("12:30")).unwrap();
         assert_eq!(u.start_time.as_deref(), Some("11:00"));
         assert!(set_time(&conn, &t.id, Some("9:00"), None).is_err());
@@ -589,15 +910,72 @@ mod tests {
     fn focus_min_roundtrip_and_recurring_propagation() {
         let conn = setup();
         // 自定义专注时长落库
-        let t = create(&conn, "2026-09-18", None, None, "长任务", None, 0, "medium", REPEAT_NONE, None, false, Some(45)).unwrap();
+        let t = create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "长任务",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            Some(45),
+        )
+        .unwrap();
         assert_eq!(t.focus_min, Some(45));
         // 更新改时长 / 清除回默认
-        let u = update(&conn, &t.id, "2026-09-18", None, None, "长任务", None, 0, "medium", REPEAT_NONE, None, false, Some(15)).unwrap();
+        let u = update(
+            &conn,
+            &t.id,
+            "2026-09-18",
+            None,
+            None,
+            "长任务",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            Some(15),
+        )
+        .unwrap();
         assert_eq!(u.focus_min, Some(15));
-        let c = create(&conn, "2026-09-18", None, None, "普通", None, 0, "medium", REPEAT_NONE, None, false, None).unwrap();
+        let c = create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "普通",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         assert_eq!(c.focus_min, None);
         // 重复模板的 focus_min 传播到实例
-        create(&conn, "2026-09-17", Some("09:00"), None, "每日长专注", None, 0, "medium", REPEAT_DAILY, None, false, Some(50)).unwrap();
+        create(
+            &conn,
+            "2026-09-17",
+            Some("09:00"),
+            None,
+            "每日长专注",
+            None,
+            0,
+            "medium",
+            REPEAT_DAILY,
+            None,
+            false,
+            Some(50),
+        )
+        .unwrap();
         materialize_recurring(&conn, "2026-09-18").unwrap();
         let list = list_by_date(&conn, "2026-09-18").unwrap();
         let inst = list.iter().find(|x| x.title == "每日长专注").unwrap();
@@ -607,12 +985,43 @@ mod tests {
     #[test]
     fn search_filters() {
         let conn = setup();
-        create(&conn, "2026-09-18", None, None, "写周报", None, 0, "medium", REPEAT_NONE, Some("工作"), false, None).unwrap();
-        create(&conn, "2026-09-19", None, None, "买菜", None, 0, "low", REPEAT_NONE, None, false, None).unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            None,
+            None,
+            "写周报",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            Some("工作"),
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-19",
+            None,
+            None,
+            "买菜",
+            None,
+            0,
+            "low",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
         let all = search(&conn, "", None, None).unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!(search(&conn, "周报", None, None).unwrap().len(), 1);
         assert_eq!(search(&conn, "", Some("todo"), None).unwrap().len(), 2);
-        assert_eq!(search(&conn, "", None, Some("2026-09-18")).unwrap().len(), 1);
+        assert_eq!(
+            search(&conn, "", None, Some("2026-09-18")).unwrap().len(),
+            1
+        );
     }
 }
