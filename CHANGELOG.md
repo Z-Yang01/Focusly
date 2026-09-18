@@ -53,6 +53,36 @@
 - 通知点击暂不直达便签窗口
 - vitest 4.x `toBe` 不支持第二参数 message
 
+### B1 批次与门禁欠账（2026-09-17 ~ 09-18）
+
+#### Added
+- 今日任务时间轴（迁移 v8）：独立于便签的每日计划视图——时间轴任务块、当前时间指示、拖拽调时（15 分钟吸附）、日期切换、今日进度
+- 今日任务到点通知：独立 30s ticker，勿扰时段内挂起、时段结束后补发，私密任务通知脱敏
+- 重复规则按日物化：每天/每周/工作日模板幂等生成当日实例（source_task_id 溯源）
+- 任务↔便签互通：便签待办右键「加入今日计划」；今日任务一键转便签
+- 搜索任务分区：is:task / is:today / due:today / status:todo|done|skipped token
+- 番茄绑定今日任务：task_key="daily:<id>"，完成回写 completed_pomodoros
+- 番茄控制条：管理器顶栏常驻 + 托盘番茄菜单（修复番茄钟"无处关闭"）
+- 每任务专注时长覆盖（迁移 v9）：task_meta/daily_tasks.focus_min，NULL 跟随全局 25 分钟
+- 便签图钉三态 pin_mode（迁移 v6）：normal / topmost / desktop
+- 列表覆盖索引 idx_notes_alive_order（迁移 v7）：all 视图走出全表扫描
+- 快速待办创建：管理器待办视图顶部输入栏，Enter 一键创建便签+待办
+- 提示音系统：Web Audio 合成（番茄完成/提醒叮咚）+ 设置开关
+- 多主题系统：浅/深/暖阳/森林/海洋/跟随系统 + 色卡预览选择器
+- 数据目录跟随安装目录：安装/便携（data/ 或 portable.marker）自动检测，开发版回退 %APPDATA%
+
+#### Fixed
+- 开窗命令主线程死锁：WebviewWindowBuilder 同步 build() 自死锁饿死全部 IPC——提醒/勿扰等设置类操作"无法设置"的根因
+- Tauri ACL 权限：allow-destroy（便签无法关闭）/ allow-set-position（迷你窗定位）/ allow-read-text（剪贴板捕获）
+- 网格平铺越界：改用工作区矩形 + 越界 clamp，不再遮挡任务栏、旧布局预设不再落屏外
+- 高 DPI 新建便签过小：默认尺寸按主显示器 scale_factor 缩放（320×360 逻辑 px）
+- 重复模板 focus_min 未传播到物化实例（v9 回归，单测抓出）
+
+#### Changed（内部质量）
+- 生产级收敛：关键路径事务化、生产 unwrap 收敛、FTS5 注入防护、Reminder 时钟抽象、events.rs 统一事件常量
+- 前端收敛：修复 StrictMode 事件监听泄漏、React Query staleTime 调优、NoteWindow 子组件拆分
+- R3 UX：NoteWindow 工具栏智能收纳/预览沉浸/底栏精简、管理器密度提升、QuickCapture 紧凑化
+
 ## [0.1.0] - 2026-09-16
 
 ### 初始功能
