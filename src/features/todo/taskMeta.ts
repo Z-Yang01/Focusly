@@ -11,6 +11,8 @@ export interface MetaLike {
   skipDate: string | null;
   priority?: string | null;
   dueAt?: string | null;
+  /** 拖动展示顺序（1..n；null/undefined = 未排序）。只影响展示顺序，不回写正文 */
+  sortOrder?: number | null;
 }
 
 export interface TodoLike {

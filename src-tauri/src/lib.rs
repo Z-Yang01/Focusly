@@ -221,6 +221,7 @@ pub fn run() {
             commands::pomodoro_cmd::task_meta_get,
             commands::pomodoro_cmd::task_meta_list,
             commands::pomodoro_cmd::task_meta_update,
+            commands::pomodoro_cmd::task_meta_reorder,
         ])
         .build(tauri::generate_context!())
         .expect("error while building focusly");

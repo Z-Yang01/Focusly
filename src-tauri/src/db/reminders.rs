@@ -161,6 +161,45 @@ pub fn next_occurrence(
                 }
             }
         }
+        // 月/年重复按锚点"日号"推进：目标月无该日 clamp 到当月最后一天
+        // （如 1-31 → 2-28，闰年锚 2-29 → 平年 2-28）。
+        // 不能用 add_months 连续推进——clamp 后再推进会丢失原日号（31→28→28 漂移），
+        // 必须始终从锚点年月 + k×步长 重算。
+        RepeatType::Monthly => next_by_months(remind_at, 1, now),
+        RepeatType::Yearly => next_by_months(remind_at, 12, now),
+    }
+}
+
+/// 按锚点年月 + k×step_months 重算下一次触发（锚点日号对目标月 clamp 到月末），
+/// 返回第一个严格大于 now 的候选。时刻（时/分/秒）保持锚点值。
+fn next_by_months(
+    remind_at: chrono::DateTime<chrono::Utc>,
+    step_months: u32,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    use super::daily_tasks::days_in_month;
+    use chrono::{Datelike, TimeZone, Timelike};
+    // 锚点尚未到期时返回锚点本身（与 daily/weekly 的循环语义一致）
+    if remind_at > now {
+        return Some(remind_at);
+    }
+    let mut year = remind_at.year();
+    let mut month = remind_at.month();
+    loop {
+        let total = year * 12 + (month as i32 - 1) + step_months as i32;
+        year = total.div_euclid(12);
+        month = total.rem_euclid(12) as u32 + 1;
+        let day = remind_at.day().min(days_in_month(year, month));
+        let t = remind_at.time();
+        let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)?.and_hms_opt(
+            t.hour(),
+            t.minute(),
+            t.second(),
+        )?;
+        let cand = TimeZone::from_utc_datetime(&chrono::Utc, &naive);
+        if cand > now {
+            return Some(cand);
+        }
     }
 }
 
@@ -218,5 +257,31 @@ mod tests {
             wd,
             chrono::Utc.with_ymd_and_hms(2026, 9, 16, 9, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn repeat_next_occurrence_monthly_yearly_clamp() {
+        // 锚 1-31 09:00，now=3-01：1-31+1月 clamp 为 2-28（<=now 再推进），下一个触发 3-31
+        let at = chrono::Utc.with_ymd_and_hms(2026, 1, 31, 9, 0, 0).unwrap();
+        let now = chrono::Utc.with_ymd_and_hms(2026, 3, 1, 0, 0, 0).unwrap();
+        let m = next_occurrence(RepeatType::Monthly, at, now).unwrap();
+        assert_eq!(
+            m,
+            chrono::Utc.with_ymd_and_hms(2026, 3, 31, 9, 0, 0).unwrap()
+        );
+
+        // 闰年锚 2-29，now=2027-01-01：年度 clamp 推进到 2027-02-28
+        let at2 = chrono::Utc.with_ymd_and_hms(2024, 2, 29, 8, 0, 0).unwrap();
+        let now2 = chrono::Utc.with_ymd_and_hms(2027, 1, 1, 0, 0, 0).unwrap();
+        let y = next_occurrence(RepeatType::Yearly, at2, now2).unwrap();
+        assert_eq!(
+            y,
+            chrono::Utc.with_ymd_and_hms(2027, 2, 28, 8, 0, 0).unwrap()
+        );
+
+        // 锚点在未来时返回锚点本身（与 daily/weekly 行为一致）
+        let at3 = chrono::Utc.with_ymd_and_hms(2026, 12, 25, 8, 0, 0).unwrap();
+        let now3 = chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        assert_eq!(next_occurrence(RepeatType::Monthly, at3, now3), Some(at3));
     }
 }

@@ -12,7 +12,16 @@ pub const REPEAT_NONE: &str = "none";
 pub const REPEAT_DAILY: &str = "daily";
 pub const REPEAT_WEEKLY: &str = "weekly";
 pub const REPEAT_WEEKDAY: &str = "weekday";
-pub const VALID_REPEATS: &[&str] = &[REPEAT_NONE, REPEAT_DAILY, REPEAT_WEEKLY, REPEAT_WEEKDAY];
+pub const REPEAT_MONTHLY: &str = "monthly";
+pub const REPEAT_YEARLY: &str = "yearly";
+pub const VALID_REPEATS: &[&str] = &[
+    REPEAT_NONE,
+    REPEAT_DAILY,
+    REPEAT_WEEKLY,
+    REPEAT_WEEKDAY,
+    REPEAT_MONTHLY,
+    REPEAT_YEARLY,
+];
 pub const VALID_PRIORITIES: &[&str] = &["high", "medium", "low"];
 pub const VALID_STATUSES: &[&str] = &["todo", "done", "skipped"];
 
@@ -246,8 +255,27 @@ pub fn repeat_matches(anchor_date: &str, target_date: &str, rule: &str) -> bool 
         REPEAT_DAILY => true,
         REPEAT_WEEKLY => a.weekday() == t.weekday(),
         REPEAT_WEEKDAY => !matches!(t.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun),
+        // 月/年重复按锚点"日号"匹配，目标月无该日（如 1-31 → 2 月）时 clamp 到当月最后一天
+        REPEAT_MONTHLY => t.day() == a.day().min(days_in_month(t.year(), t.month())),
+        REPEAT_YEARLY => {
+            t.month() == a.month() && t.day() == a.day().min(days_in_month(t.year(), t.month()))
+        }
         _ => false,
     }
+}
+
+/// 当月天数（year/month 的月末日期号）。供 reminders 月/年重复复用。
+pub(crate) fn days_in_month(year: i32, month: u32) -> u32 {
+    use chrono::Datelike;
+    let (ny, nm) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    chrono::NaiveDate::from_ymd_opt(ny, nm, 1)
+        .and_then(|d| d.pred_opt())
+        .map(|d| d.day())
+        .unwrap_or(31)
 }
 
 /// 为目标日期物化到期重复模板（幂等）。返回新建实例数。
@@ -547,7 +575,8 @@ mod tests {
             None,
             0,
             "medium",
-            "monthly",
+            // monthly/yearly 已是合法规则；用真正未定义的字面量验证拒绝路径
+            "monthlys",
             None,
             false,
             None
@@ -681,6 +710,25 @@ mod tests {
         assert!(!repeat_matches("2026-09-18", "2026-09-19", REPEAT_WEEKDAY)); // 周六
         assert!(!repeat_matches("2026-09-18", "2026-09-20", REPEAT_WEEKDAY)); // 周日
         assert!(!repeat_matches("bad", "2026-09-18", REPEAT_DAILY));
+    }
+
+    #[test]
+    fn repeat_matches_monthly_yearly_clamp() {
+        // 每月 31 日：2 月 clamp 到 28（2026 平年）
+        assert!(repeat_matches("2026-01-31", "2026-02-28", REPEAT_MONTHLY));
+        assert!(!repeat_matches("2026-01-31", "2026-02-27", REPEAT_MONTHLY));
+        // 平常月份按日号精确匹配
+        assert!(repeat_matches("2026-01-31", "2026-03-31", REPEAT_MONTHLY));
+        assert!(!repeat_matches("2026-01-31", "2026-03-30", REPEAT_MONTHLY));
+        assert!(repeat_matches("2026-01-15", "2026-06-15", REPEAT_MONTHLY));
+        assert!(!repeat_matches("2026-01-15", "2026-06-16", REPEAT_MONTHLY));
+        // 每年 2-29：平年 clamp 到 2-28，闰年 2-29
+        assert!(repeat_matches("2024-02-29", "2027-02-28", REPEAT_YEARLY));
+        assert!(repeat_matches("2024-02-29", "2028-02-29", REPEAT_YEARLY));
+        assert!(!repeat_matches("2024-02-29", "2027-03-01", REPEAT_YEARLY));
+        // 锚点之前 / 非法日期不匹配
+        assert!(!repeat_matches("2026-05-10", "2026-05-09", REPEAT_MONTHLY));
+        assert!(!repeat_matches("bad", "2026-02-28", REPEAT_MONTHLY));
     }
 
     #[test]

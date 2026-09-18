@@ -1,7 +1,7 @@
 /** Focusly 类型定义 — 与 Rust 侧 serde camelCase 输出严格对应 */
 
 export type NoteStatus = "active" | "archived";
-export type RepeatType = "once" | "daily" | "weekly" | "weekdays";
+export type RepeatType = "once" | "daily" | "weekly" | "weekdays" | "monthly" | "yearly";
 export type ReminderStatus = "pending" | "triggered" | "dismissed" | "done" | "cancelled";
 export type FullscreenBehavior =
   | "normal"
@@ -328,6 +328,8 @@ export interface TaskMeta {
   skipDate: string | null;
   /** 本任务专注时长覆盖（分钟；null = 全局默认 25） */
   focusMin: number | null;
+  /** 拖动展示顺序（1..n；null = 未排序，按内容顺序兜底）。只影响展示，不回写正文 */
+  sortOrder: number | null;
   /** RFC3339 UTC */
   updatedAt: string;
 }
@@ -357,7 +359,8 @@ export const POMODORO_EVENTS = {
 } as const;
 
 /** 今日任务（daily_tasks 表，与 Rust db/models.rs DailyTask serde camelCase 输出对应）。
- *  status: todo | done | skipped；repeatRule: none | daily | weekly | weekday；
+ *  status: todo | done | skipped；repeatRule: none | daily | weekly | weekday | monthly | yearly
+ *  （月/年按锚点日号匹配，当月无该日 clamp 到月末）；
  *  repeatRule != none 的行是模板，不会出现在日视图（list 先物化实例）。 */
 export interface DailyTask {
   id: string;

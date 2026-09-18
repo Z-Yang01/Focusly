@@ -174,6 +174,10 @@ export interface TaskMetaUpdateArgs {
 export const taskMetaUpdate = (args: TaskMetaUpdateArgs) =>
   invoke<TaskMeta>("task_meta_update", { ...args });
 
+/** 待办拖动排序：keys 顺序即展示顺序（只写 task_meta.sort_order，不动正文） */
+export const taskMetaReorder = (noteId: string, keys: string[]) =>
+  invoke<number>("task_meta_reorder", { noteId, keys });
+
 /** 迷你番茄窗关闭占位。契约审计修复：Rust 端从未注册 pomodoro_mini_hide 命令，
  *  原 invoke 每次都会 reject（调用方 .catch 静默吞掉），迷你窗实际自行随状态关闭。
  *  features/pomodoro/api.ts 转发层依赖此导出名，故保留为显式 no-op，不再调用未注册命令。 */

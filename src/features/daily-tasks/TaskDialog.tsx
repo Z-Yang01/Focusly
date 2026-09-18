@@ -77,6 +77,8 @@ const REPEATS = [
   { value: "daily", label: "每天" },
   { value: "weekly", label: "每周" },
   { value: "weekday", label: "工作日" },
+  { value: "monthly", label: "每月" },
+  { value: "yearly", label: "每年" },
 ];
 
 export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSubmit }: TaskDialogProps) {
