@@ -56,6 +56,7 @@ import { ImageManagerDialog } from "@/features/gallery/ImageManagerDialog";
 import { StatsDialog } from "@/features/pomodoro/StatsDialog";
 import { DndSettingsCard } from "@/features/dnd/DndSettingsCard";
 import { TimelineView } from "@/features/daily-tasks/TimelineView";
+import { PomodoroBar } from "@/features/pomodoro/PomodoroBar";
 import { cn } from "@/lib/utils";
 import { QuickTodoInput } from "@/features/todo/QuickTodoInput";
 import { toast } from "@/stores/toast";
@@ -277,6 +278,11 @@ function ManagerContent() {
           <Plus className="size-3.5" />
           新建
         </Button>
+        <div aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+        {/* 常驻番茄控制：任意窗口状态都可开始/暂停/停止（修复"番茄没地方关"） */}
+        <div className="flex shrink-0 items-center rounded-md border px-1 py-0.5">
+          <PomodoroBar noteId="" />
+        </div>
         <div aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
         <Button
           type="button"
