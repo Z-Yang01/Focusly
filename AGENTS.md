@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-**Focusly** 是一个 Windows 11 优先的个人桌面便签 / 待办 / 提醒工具。
+**Focusly** 是一个 Windows 11 优先的个人桌面便签 / 待办 / 提醒 / 番茄钟工具。
 
 核心原则：**快。轻。不会丢。不会忘。**
 
@@ -25,10 +25,21 @@ Focusly/
 │   │   ├── notes/              # ManagerWindow（管理器）、NoteWindow（便签窗口）、NoteCard
 │   │   ├── editor/             # MarkdownEditor/MarkdownView —— 全项目唯一 Markdown 渲染模块
 │   │   ├── todo/               # 待办解析/勾选回写（纯函数 + 测试）
+│   │   ├── daily-tasks/        # 今日任务时间轴（TimelineView/TaskDialog/布局纯函数）
+│   │   ├── pomodoro/           # 番茄钟（usePomodoro/顶栏控制条/迷你窗/统计对话框）
 │   │   ├── reminders/          # 提醒设置 Popover、提醒触发 Banner
 │   │   ├── shortcuts/          # 快捷键录制组件
 │   │   ├── settings/           # 设置对话框（外观/行为/快捷键/数据）
-│   │   └── search/             # 全局搜索栏
+│   │   ├── search/             # 全局搜索栏（SearchBar/Results/语法提示/最近搜索）
+│   │   ├── archive/            # 回收站视图 + 版本历史面板（LCS 逐行 diff）
+│   │   ├── views/              # 到期视图（今日/逾期/未来7天）
+│   │   ├── privacy/            # 私密空间视图
+│   │   ├── quick-capture/      # 快速捕获速记箱
+│   │   ├── command-palette/    # Ctrl+K 命令面板
+│   │   ├── gallery/            # 图片管理对话框（去重/孤儿清理/缩略图）
+│   │   ├── dnd/                # 勿扰时段设置卡片
+│   │   ├── templates/          # 模板选择 + 每日笔记入口
+│   │   └── layout/             # 窗口布局预设工具栏
 │   ├── components/ui/          # shadcn/ui 风格基础组件（Radix 封装）
 │   ├── lib/
 │   │   ├── api.ts              # ★ 唯一 invoke 封装层（所有 Tauri 命令调用）
@@ -37,6 +48,7 @@ Focusly/
 │   │   ├── shortcut.ts         # 快捷键归一化/校验（纯函数）
 │   │   └── utils.ts            # cn()
 │   ├── stores/ui.ts            # zustand UI 状态
+│   ├── design-tokens.ts        # 设计令牌（spacing/radius/duration/easing/zIndex/breakpoint）
 │   └── types/index.ts          # ★ 类型契约（与 Rust serde camelCase 严格对应）
 ├── src-tauri/
 │   └── src/
@@ -44,8 +56,11 @@ Focusly/
 │       ├── state.rs            # AppState（db/paths/scheduler/快捷键映射/全屏隐藏集）
 │       ├── error.rs            # AppError 统一错误（序列化为 {kind,message}）
 │       ├── db/                 # SQLite 层：连接 + migrations + DAO（SQL 只在这里）
-│       │   ├── migrations.rs   #   PRAGMA user_version 迁移（v1 基础7表 / v2 回收站·版本·私密·FTS5 / v3 布局预设）
+│       │   ├── migrations.rs   #   PRAGMA user_version 迁移（v1 基础7表 / v2 回收站·版本·私密·FTS5 / v3 布局预设 / v4 快捕快捷键 / v5 番茄钟 / v6 图钉三态 / v7 覆盖索引 / v8 今日任务 / v9 每任务专注时长）
 │       │   ├── notes.rs / reminders.rs / images.rs / tags.rs / settings.rs / shortcuts.rs
+│       │   ├── daily_tasks.rs  #   今日任务 DAO（CRUD/按日列表/重复物化/统计/搜索）
+│       │   ├── pomodoro_sessions.rs / task_meta.rs  #   番茄会话 DAO / 便签任务元数据 DAO
+│       │   ├── models.rs       #   共享模型（LayoutPreset 等）与状态字面量契约
 │       │   ├── versions.rs     #   便签版本历史（每签上限50，恢复前自动快照）
 │       │   ├── search.rs       #   FTS5 trigram 索引同步 + 全文搜索（<3字符降级LIKE，防注入）
 │       │   ├── todos_view.rs   #   今日/逾期/未来7天视图聚合
@@ -53,7 +68,11 @@ Focusly/
 │       │   ├── saved_searches.rs / layouts.rs / missed.rs
 │       ├── commands/           # #[tauri::command] 薄层（无业务逻辑）
 │       ├── notes.rs            # 便签业务编排（DB + 窗口 + 事件）
-│       ├── export.rs           # JSON 导出/导入（ExportData 结构 + 事务 upsert）
+│       ├── daily_task.rs       # 今日任务服务（30s 到点通知 ticker、任务转便签编排）
+│       ├── pomodoro.rs         # 番茄钟状态机（mpsc + sleep_until 事件驱动，与 reminder.rs 同模式）
+│       ├── desktop_pin.rs      # 桌面层钉住（Progman/WorkerW 嵌入，pin_mode=desktop）
+│       ├── events.rs           # Rust→JS 事件名常量（对应 types/index.ts#EVENTS/#POMODORO_EVENTS）
+│       ├── export.rs           # JSON 导出/导入（ExportData 结构 + 事务 upsert，默认排除私密便签）
 │       ├── window/             # 多窗口、几何持久化（去抖）、显示器越界校正
 │       │   ├── monitor.rs      #   Win32 枚举显示器、全屏前台检测
 │       │   └── foreground.rs   #   SetWinEventHook 事件驱动全屏跟随
@@ -64,7 +83,6 @@ Focusly/
 │       ├── daily.rs            # 每日笔记 get_or_create
 │       ├── timeparse.rs        # 中文自然语言时间解析（明天下午3点/每周一10点/工作日9点…）
 │       ├── dnd.rs              # 通知勿扰时段（跨午夜）+ 错过提醒汇总
-│       ├── export.rs           # JSON 导出/导入（默认排除私密便签）
 │       ├── reminder.rs         # tokio sleep_until 事件驱动提醒调度器（无轮询）
 │       ├── shortcut.rs         # 全局快捷键注册/冲突/重载
 │       ├── tray.rs             # 系统托盘
@@ -87,7 +105,7 @@ Focusly/
 ## 关键契约
 
 - **命令**：见 `src/lib/api.ts`（函数名 = 语义，Rust 端 snake_case，参数自动驼峰转换）。
-- **事件**（Rust → JS）：`notes-changed` / `settings-changed` / `reminder-fired` / `shortcut-error` / `notes-visibility` / `focus-search` / `open-settings`，常量在 `src/types/index.ts#EVENTS`。
+- **事件**（Rust → JS）：`notes-changed` / `settings-changed` / `reminder-fired` / `shortcut-error` / `notes-visibility` / `focus-search` / `open-settings`，常量在 `src/types/index.ts#EVENTS`；番茄事件组在 `#POMODORO_EVENTS`。Rust 侧事件名常量统一在 `events.rs`，两端一一对应。
 - **窗口 label**：`manager` | `note-<uuid>`。新窗口一律 `visible:false` 创建，前端就绪后调 `note_window_ready` 再显示（防白闪）。
 - **时间**：`remind_at` 全程 RFC3339 UTC（`to_rfc3339_opts(Secs, false)`），Rust 侧统一经 `reminder::fmt/parse`。
 - **待办真相源**：正文里的 `- [ ] / - [x]`，可被搜索/统计/导入导出，不存 HTML。

@@ -10,6 +10,8 @@ Focusly 是一个完全本地化的个人桌面便签软件：想到什么马上
 - 🖼 **图片**：拖拽 / 粘贴截图 / 文件选择三种入口，存本地目录，SQLite 只存元数据
 - 🔗 **链接**：自动识别，系统浏览器打开，白名单 http/https
 - 🔔 **定时提醒**：Rust 后台调度（事件驱动，无轮询），便签全部隐藏也照样弹 Windows 通知；仅一次/每天/每周/工作日；触发后可 完成 / 稍后(5m/30m/1h/明天) / 关闭
+- ⏱ **番茄钟**：专注/短休/长休状态机（tokio 事件驱动），便签底栏/迷你悬浮窗/管理器顶栏控制条/托盘同步；绑定便签任务或今日任务，统计番茄数/专注时长/中断次数；每任务专注时长可单独覆盖（默认 25 分钟）
+- 📅 **今日任务时间轴**：独立于便签的每日计划——时间轴任务块、拖拽调时（15 分钟吸附）、到点通知（勿扰内挂起、时段后补发）、重复规则按日物化（每天/每周/工作日）、任务↔便签互通、搜索 token（`is:task` / `due:today` 等）
 - 🖥 **跨虚拟桌面**：`IVirtualDesktopPinnedApps` COM 与任务栏"在所有桌面显示"同源机制，不可用时明确提示"系统不支持"（不伪造成功）
 - 📺 **全屏跟随**：`SetWinEventHook` 事件驱动检测前台全屏，每张便签独立策略：普通 / 始终置顶 / 全屏显示 / 全屏自动隐藏
 - ⌨️ **全局快捷键**：显示/隐藏全部 `Ctrl+Shift+Space`、新建便签 `Ctrl+Shift+N`、聚焦搜索 `Ctrl+Shift+F`；可在设置中自定义、冲突检测、恢复默认
@@ -18,7 +20,7 @@ Focusly 是一个完全本地化的个人桌面便签软件：想到什么马上
 - 🗂 **管理器主窗口**：全部便签 / 待办 / 已归档三视图 + 卡片网格 + 归档/恢复/永久删除
 - 🧰 **系统托盘**：显示全部 / 隐藏全部 / 新建便签 / 打开管理器 / 设置 / 退出；关闭主窗口默认最小化到托盘（可改为退出）
 - 💾 **数据安全**：SQLite WAL + 编辑 500ms 防抖自动保存 + 关窗/失焦强制落盘 + 启动自动备份轮转（保留 5 份）+ JSON 导出/导入
-- 🌗 **深浅色主题**：浅色 / 深色 / 跟随系统，全窗口同步
+- 🌗 **多主题**：浅色 / 深色 / 暖阳 / 森林 / 海洋 / 跟随系统，色卡预览选择器，全窗口同步
 - 🚀 **开机自启**、启动后最小化到托盘、启动自动显示便签，均可配置
 
 ## 技术栈
@@ -54,12 +56,14 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 
 ## 数据目录
 
+安装/便携模式数据跟随 exe 目录（`<exe目录>/data/`，由安装器创建的 `data/` 或 `portable.marker` 触发，开发目录自动排除）；否则回退 `%APPDATA%/com.focusly.app/`：
+
 ```text
-%APPDATA%/com.focusly.app/
+<数据目录>/
 ├── database.sqlite     # 全部数据（WAL 模式，synchronous=NORMAL）
 ├── images/<note_id>/   # 便签图片文件（SQLite 只存元数据）
-├── backups/            # 启动自动备份（database-<时间戳>.sqlite，保留 5 份）
-├── logs/focusly.log    # 运行日志
+├── backups/            # 启动自动备份（Online Backup API 原子快照，保留 5 份）
+├── logs/focusly.log    # 运行日志（5MB 轮转）
 └── errors/             # 结构化错误日志 YYYY-MM-DD-<category>.md（问题/原因/影响/解决方式）
 ```
 
@@ -101,52 +105,54 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 - **图片管理**：SHA-256 重复图片检测 / 孤儿文件清理 / 缩略图生成
 - **勿扰时段**：`dnd_start`/`dnd_end` 设置（跨午夜支持、fail-open），勿扰期间提醒推迟到时段结束；启动时汇总错过的提醒
 
+**收敛与功能批（0.1.0 之后，2026-09-16 ~ 09-18）**：
+
+- **P0 修复**：开窗命令主线程死锁（全部设置类操作失效的根因）；Tauri ACL 权限（allow-destroy / allow-set-position / allow-read-text）；网格平铺改用工作区 + 越界 clamp；新建便签默认尺寸按 DPI 缩放
+- **B1 今日任务时间轴 + 番茄绑定**（迁移 v8）：TimelineView、拖拽调时、到点通知、重复物化、任务↔便签互通、统计与搜索集成（契约 87→96 命令）
+- **番茄收尾**：管理器顶栏常驻番茄控制条 + 托盘番茄菜单；每任务专注时长覆盖（迁移 v9）
+- **平台/数据**：数据目录跟随安装目录（便携/安装自动检测）；备份改 Online Backup API 原子快照 + 恢复演练
+- **UX/主题**：R3 全量优化（工具栏智能收纳/预览沉浸/管理器密度）、六主题 + 色卡、提示音系统、快速待办创建栏、统一 toast + ErrorBoundary + 设计令牌
+
 ### 4. 尚未实现（P2 及以后）
 
 - 待办拖动排序、多级待办折叠
-- 每日统计与复盘视图
+- 复盘视图（周/月维度聚合；每日统计已落地：统计对话框任务区块 + 时间轴今日进度）
 - 提醒的月/年重复规则、通知点击直达便签窗口
 - ZIP / Markdown 批量导出
 - 图片 OCR / 附件类文件管理
 
 ### 5. 数据库 Schema
 
-见 `src-tauri/src/db/migrations.rs`（PRAGMA user_version 迁移，当前 v3）：
+见 `src-tauri/src/db/migrations.rs`（PRAGMA user_version 迁移，当前 v9）：
 
 - v1（7 张表）：`notes`, `note_images`, `reminders`, `tags` + `note_tags`, `shortcuts`, `settings`
 - v2：`notes` 补列 `deleted_at` / `is_private` / `locked` / `readonly_flag` / `scale`；新增 `note_versions`（版本快照）、`clipboard_history`（剪贴板历史）、`saved_searches`（保存的搜索）、`notes_fts`（FTS5 trigram 虚表，触发器外由业务层同步）
 - v3：新增 `layout_presets`（窗口布局预设）
+- v4：快速捕获全局快捷键默认绑定（`quick_capture` = Ctrl+Shift+Q）
+- v5：番茄钟——`pomodoro_sessions`（会话）+ `task_meta`（便签任务元数据）+ 7 个 `pomo_*` 默认设置 + `pomodoro_toggle` 快捷键（Ctrl+Shift+P）
+- v6：便签图钉三态 `pin_mode`（normal / topmost / desktop）
+- v7：列表主路径覆盖索引 `idx_notes_alive_order`（all 视图走出全表扫描，回收站行不进索引）
+- v8：今日任务时间轴——`daily_tasks` 表 + `pomodoro_sessions.daily_task_id` 外键
+- v9：每任务专注时长覆盖——`task_meta.focus_min` / `daily_tasks.focus_min`（NULL = 跟随全局 `pomo_focus_min`）
 
 ### 6. Rust / React 架构
 
 见 [AGENTS.md](./AGENTS.md)「职责划分」与「架构决策记录」。
 
-### 7. 测试结果（2026-09-15 夜间收官，Agent H 契约审计后）
+### 7. 测试结果（2026-09-18 门禁实测）
 
 | 项 | 结果 |
 |---|---|
 | `npx tsc --noEmit` | ✅ 0 错误 |
-| `npx vitest run` | ✅ 8 个文件 123 个用例全部通过（query-parser 26 / diff 13 / shortcut 11 / todo 15 / due 14 / editorActions 15 / dnd 10 / templates 19） |
-| 契约审计（Agent H） | ✅ 71 个 Rust 命令与前端调用逐一对照：修复 3 处（`purge_note` 不存在→复用 `delete_note`；`SETTING_KEYS` 白名单缺 `dnd_start`/`dnd_end`；删除入口接入 `trash_note` 使回收站可用），详见 `.focusly-agent/KNOWN_ISSUES.md` |
-| Rust 语法自查 | ✅ 除 `vdesktop.rs`（windows-rs `#[interface]` 属性宏语法，rustfmt 已知工具局限，非代码错误）外全部文件可正常解析 |
-| Rust 单测（db CRUD / 迁移 / 版本 / 剪贴板 / 保存搜索 / 到期视图 / 布局 / 图片管理 / 勿扰 / 时间解析等，共 125 个 `#[test]`） | 已编写，随 MSVC 工具链就绪执行 `cargo test` |
-| 桌面端编译/运行 | ⏳ 等待 VS Build Tools 安装完成后验证（精确步骤见下） |
-| 手动 E2E 多链路 | ⏳ 待桌面端可运行后执行 |
+| `npm test`（vitest） | ✅ 14 文件 248 用例全部通过 |
+| `cargo test`（src-tauri/） | ✅ 198 用例全部通过 |
+| `cargo clippy --all-targets` | ✅ 0 告警（`cargo fmt --check` 同步 clean） |
+| `npm run lint`（eslint） | ✅ 通过（--max-warnings 200） |
+| `npm run contract-audit` | ✅ 96 个 Rust 命令与前端封装逐一对照，无漂移 |
+| 桌面端 E2E | ✅ CDP 驱动真实 UI 验收（迁移 v8 / 时间轴 / 番茄 / 搜索分区 / 高 DPI 便签），记录见 PROGRESS.md |
+| 备份恢复演练 | ✅ 5 份轮转 + 文件头校验 + 临时目录独立打开 |
 
-**Rust 编译验证步骤（MSVC 安装完成后执行）**：
-
-```powershell
-# 1) 安装/补齐 MSVC C++ 工作负载（用户正在安装）
-& "$env:TEMP\vs_BuildTools.exe" modify --installPath "E:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait --norestart --nocache
-
-# 2) PATH 预置 MSVC Hostx64/x64 bin（版本号以实际安装为准），再验证
-$msvc = Get-ChildItem "E:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC" | Select-Object -First 1
-$env:PATH = "E:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\$($msvc.Name)\bin\Hostx64\x64;$env:PATH"
-
-cd src-tauri
-cargo build
-cargo test
-```
+> 2026-09-15 静态契约审计期的历史结果与 MSVC 工具链安装步骤已随门禁全绿失效，见 git 历史。
 
 ### 8. Windows 构建方法
 
@@ -156,12 +162,10 @@ npm run tauri build   # 产物：src-tauri/target/release/bundle/nsis/Focusly_0.
 
 ### 9. 已知问题 / 平台限制（完整清单见 `.focusly-agent/KNOWN_ISSUES.md`）
 
-- **Rust 编译验证未执行**：本机 MSVC C++ 工具链缺失，`cargo build` / `cargo test` 尚未运行；Rust 侧质量依据为静态契约审计（命令/参数/serde 类型/事件逐一对照）+ rustfmt 解析自查。安装完成后按上文步骤验证。
-- **FTS5 trigram 建表与同步未实测**：trigram 分词要求 SQLite ≥ 3.34 且仅对 ≥3 字符有效（2 字符中文词命中有限）；索引同步逻辑有单元测试但未在真实桌面环境跑过。
+- **FTS5 trigram 字符数限制**：trigram 分词要求 SQLite ≥ 3.34 且仅对 ≥3 字符有效（2 字符中文词命中有限，自动降级 LIKE）；索引同步有单元测试，全文搜索路径已随 E2E 在真实 UI 验收。
 - **私密 = 隔离非加密**：私密便签仅做视图/搜索/通知/导出层面的隔离，数据库文件中内容为明文，请勿依赖其对抗本机物理接触。
 - **通知点击**暂不直达便签窗口（toast 激活需要额外的 COM activator），通知为提示型，用户从托盘/管理器打开便签。
 - **通知脱敏范围**：私密便签的系统通知标题与摘要已脱敏，但 `reminder-fired` 事件仍下发的 noteId 可被前端关联（本地应用内可接受）。
-- **rust-lld 备选链接器未验证**：MSVC link.exe 不可用时的 rust-lld 方案未经测试。
 - **独占全屏**（DirectX exclusive，多为全屏游戏）下任何窗口都无法覆盖，`fullscreen_show` 仅对无边框全屏（浏览器 F11、无边框视频）有效——Windows 平台机制限制。
 - **虚拟桌面 Pin** 依赖未公开 COM 接口（Windows 10 1809+ / Windows 11 已验证的接口定义）；Windows 大版本更新可能使其失效，此时便签状态显示"系统不支持"，功能自动降级为"仅当前桌面"，不影响其他功能。
 - **粘贴图片**仅支持位图（截图/复制的图片）；从资源管理器复制的文件请用拖拽或"插入图片"。
