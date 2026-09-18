@@ -14,6 +14,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let hide_all = MenuItem::with_id(app, "hide_all", "隐藏全部便签", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let new_note = MenuItem::with_id(app, "new_note", "新建便签", true, None::<&str>)?;
+    let pomo_toggle = MenuItem::with_id(app, "pomo_toggle", "番茄钟 开始/暂停", true, None::<&str>)?;
+    let pomo_stop = MenuItem::with_id(app, "pomo_stop", "番茄钟 停止", true, None::<&str>)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let open_manager = MenuItem::with_id(app, "open_manager", "打开管理器", true, None::<&str>)?;
     let open_settings = MenuItem::with_id(app, "open_settings", "设置", true, None::<&str>)?;
@@ -27,6 +29,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &hide_all,
             &sep1,
             &new_note,
+            &pomo_toggle,
+            &pomo_stop,
             &sep2,
             &open_manager,
             &open_settings,
@@ -63,6 +67,17 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                         log::error!("托盘新建便签失败: {e}");
                     }
                 });
+            }
+            // 番茄控制经 mpsc 发送到调度器，非阻塞，主线程安全
+            "pomo_toggle" => {
+                if let Err(e) = crate::pomodoro::toggle_via_cmd(app) {
+                    log::error!("托盘番茄开关失败: {e}");
+                }
+            }
+            "pomo_stop" => {
+                if let Err(e) = crate::pomodoro::send_cmd(app, crate::pomodoro::PomodoroCmd::Stop { reason: "tray".into() }) {
+                    log::error!("托盘番茄停止失败: {e}");
+                }
             }
             "open_manager" => window::show_manager(app),
             "open_settings" => {
