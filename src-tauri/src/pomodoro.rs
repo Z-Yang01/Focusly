@@ -702,6 +702,40 @@ fn toggle_cmd(app: &AppHandle, st: &mut Machine) {
     }
 }
 
+/// 阶段计划时长：Focus 且绑定任务时用任务的 focus_min 覆盖（1..=180 分钟夹紧），
+/// 未覆盖/休息阶段用全局设置。这样"每个待办可自定义专注时长，默认跟随全局 25 分钟"。
+fn planned_for(
+    app: &AppHandle,
+    phase: Phase,
+    note_id: &str,
+    task_key: &str,
+    settings: &PomoSettings,
+) -> i64 {
+    if phase != Phase::Focus || task_key.is_empty() {
+        return settings.phase_duration(phase);
+    }
+    let state = app.state::<AppState>();
+    let override_min = if let Some(did) = pomodoro_sessions::daily_task_id_of(task_key) {
+        state
+            .db
+            .with(|c| crate::db::daily_tasks::get(c, did))
+            .ok()
+            .and_then(|t| t.focus_min)
+    } else if !note_id.is_empty() {
+        state
+            .db
+            .with(|c| crate::db::task_meta::get(c, note_id, task_key))
+            .ok()
+            .flatten()
+            .and_then(|m| m.focus_min)
+    } else {
+        None
+    };
+    override_min
+        .map(|m| m.clamp(1, 180).max(1) * 60)
+        .unwrap_or_else(|| settings.phase_duration(phase))
+}
+
 /// 开始一个阶段：写 running 会话、更新状态机、广播、托盘。
 fn begin_phase(
     app: &AppHandle,
@@ -713,7 +747,7 @@ fn begin_phase(
     completed_in_cycle: u32,
     settings: &PomoSettings,
 ) {
-    let planned = settings.phase_duration(phase);
+    let planned = planned_for(app, phase, &note_id, &task_key, settings);
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now();
     let ends_at = now + chrono::Duration::seconds(planned);
@@ -1107,6 +1141,7 @@ pub fn complete_task(
                 priority: None,
                 due_at: None,
                 clear_skip: false,
+                focus_min: None,
             },
         )
     })?;

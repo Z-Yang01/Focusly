@@ -165,6 +165,8 @@ export interface TaskMetaUpdateArgs {
   priority?: string | null; // high | medium | low
   /** RFC3339 UTC */
   dueAt?: string | null;
+  /** 本任务专注时长覆盖（分钟；null = 恢复全局默认） */
+  focusMin?: number | null;
   /** 清除跳过标记（恢复为 todo） */
   clearSkip?: boolean;
 }
@@ -243,6 +245,8 @@ export interface DailyTaskInput {
   repeatRule: string;
   tags: string | null;
   isPrivate: boolean;
+  /** 本任务专注时长（分钟；null = 全局默认 25） */
+  focusMin: number | null;
 }
 export const dailyTaskCreate = (input: DailyTaskInput) =>
   invoke<DailyTask>("daily_task_create", { ...input });

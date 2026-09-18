@@ -172,6 +172,7 @@ export function TimelineView({ className }: Props) {
       repeatRule: dialogValue.repeatRule,
       tags: dialogValue.tags.trim() || null,
       isPrivate: dialogValue.isPrivate,
+      focusMin: dialogValue.focusMin === "" ? null : Number(dialogValue.focusMin),
     };
     await act(async () => {
       if (editing) {
@@ -315,6 +316,7 @@ export function TimelineView({ className }: Props) {
                       </div>
                       <div className="text-[10px] text-muted-foreground">
                         {t.startTime ?? ""}{t.endTime ? `–${t.endTime}` : ""}
+                        {t.focusMin != null && <span className="ml-1">⏱{t.focusMin}分</span>}
                         {t.estimatePomodoros > 0 && (
                           <span className="ml-1">🍅 {t.completedPomodoros}/{t.estimatePomodoros}</span>
                         )}

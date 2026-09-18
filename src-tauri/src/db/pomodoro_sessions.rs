@@ -469,6 +469,7 @@ mod tests {
             note_id: "n1".into(),
             task_key: "k1".into(),
             line_text: "- [ ] a".into(),
+            focus_min: None,
             status: Some("done".into()),
             estimate: None,
             priority: None,

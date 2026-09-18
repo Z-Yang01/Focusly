@@ -110,7 +110,7 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
         let mut task_meta: Vec<TaskMeta> = Vec::new();
         {
             let mut stmt = c.prepare(
-                "SELECT tm.note_id, tm.task_key, tm.line_text, tm.status, tm.estimate_pomodoros,                  tm.completed_pomodoros, tm.priority, tm.due_at, tm.skip_date, tm.updated_at                  FROM task_meta tm                  LEFT JOIN notes n ON n.id = tm.note_id                  WHERE ?1 OR COALESCE(n.is_private, 0) = 0",
+                "SELECT tm.note_id, tm.task_key, tm.line_text, tm.status, tm.estimate_pomodoros,                  tm.completed_pomodoros, tm.priority, tm.due_at, tm.skip_date, tm.focus_min, tm.updated_at                  FROM task_meta tm                  LEFT JOIN notes n ON n.id = tm.note_id                  WHERE ?1 OR COALESCE(n.is_private, 0) = 0",
             )?;
             let rows = stmt.query_map(params![include_private], |r| {
                 Ok(TaskMeta {
@@ -124,6 +124,7 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
                     due_at: r.get(7)?,
                     skip_date: r.get(8)?,
                     updated_at: r.get(9)?,
+                    focus_min: r.get("focus_min")?,
                 })
             })?;
             for row in rows {

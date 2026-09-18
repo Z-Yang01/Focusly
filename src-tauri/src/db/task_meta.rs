@@ -12,7 +12,7 @@ use rusqlite::{params, Connection, Row};
 use super::models::TaskMeta;
 use crate::error::AppResult;
 
-const COLS: &str = "note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, updated_at";
+const COLS: &str = "note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, focus_min, updated_at";
 
 fn row_to_meta(r: &Row) -> rusqlite::Result<TaskMeta> {
     Ok(TaskMeta {
@@ -25,6 +25,7 @@ fn row_to_meta(r: &Row) -> rusqlite::Result<TaskMeta> {
         priority: r.get("priority")?,
         due_at: r.get("due_at")?,
         skip_date: r.get("skip_date")?,
+        focus_min: r.get::<_, Option<i64>>("focus_min")?,
         updated_at: r.get("updated_at")?,
     })
 }
@@ -50,6 +51,8 @@ pub struct TaskMetaUpsert {
     pub estimate: Option<i64>,
     pub priority: Option<String>,
     pub due_at: Option<String>,
+    /// 本任务专注时长覆盖（分钟；None = 保留原值/默认）
+    pub focus_min: Option<i64>,
     /// true = 状态重置为 todo 并清除 skip_date（手动"取消跳过"）
     pub clear_skip: bool,
 }
@@ -115,13 +118,16 @@ pub fn upsert(conn: &Connection, u: &TaskMetaUpsert) -> AppResult<TaskMeta> {
         .as_ref()
         .map(|m| m.completed_pomodoros)
         .unwrap_or(0);
+    let focus_min = u
+        .focus_min
+        .or_else(|| existing.as_ref().and_then(|m| m.focus_min));
 
     conn.execute(
         "INSERT INTO task_meta \
-             (note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) \
+             (note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, focus_min, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) \
          ON CONFLICT(note_id, task_key) DO UPDATE SET \
-             line_text = ?3, status = ?4, estimate_pomodoros = ?5, priority = ?7, due_at = ?8, skip_date = ?9, updated_at = ?10",
+             line_text = ?3, status = ?4, estimate_pomodoros = ?5, priority = ?7, due_at = ?8, skip_date = ?9, focus_min = ?10, updated_at = ?11",
         params![
             u.note_id,
             u.task_key,
@@ -132,6 +138,7 @@ pub fn upsert(conn: &Connection, u: &TaskMetaUpsert) -> AppResult<TaskMeta> {
             priority,
             due_at,
             skip_date,
+            focus_min,
             updated_at
         ],
     )?;
@@ -365,6 +372,7 @@ mod tests {
             &conn,
             &TaskMetaUpsert {
                 note_id: note.id.clone(),
+                focus_min: None,
                 task_key: crate::db::task_meta::fnv1a32("被跳过的任务") + "-0",
                 line_text: "被跳过的任务".into(),
                 status: Some("skipped".into()),
@@ -389,6 +397,7 @@ mod tests {
     fn ups(note_id: &str, task_key: &str, line_text: &str) -> TaskMetaUpsert {
         TaskMetaUpsert {
             note_id: note_id.into(),
+            focus_min: None,
             task_key: task_key.into(),
             line_text: line_text.into(),
             status: None,
@@ -501,6 +510,7 @@ mod tests {
             priority: None,
             due_at: None,
             skip_date: Some("2026-09-14".into()),
+            focus_min: None,
             updated_at: String::new(),
         };
         assert_eq!(effective_status(&m, "2026-09-15"), "todo", "跨日自动复活");
