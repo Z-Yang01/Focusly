@@ -36,10 +36,18 @@ import { cn } from "@/lib/utils";
 
 /** 番茄/任务元数据透传（缺省 = 完全旧行为） */
 export interface TaskMetaPassthrough {
-  taskMetaList?: { taskKey: string; lineText: string; status: string; skipDate: string | null }[];
+  taskMetaList?: {
+    taskKey: string;
+    lineText: string;
+    status: string;
+    skipDate: string | null;
+    sortOrder?: number | null;
+  }[];
   today?: string;
   runningTaskKey?: string;
   onTaskMenu?: (e: { taskKey: string; lineText: string; status: "todo" | "done" | "skipped" | "running" }) => void;
+  /** 待办拖拽排序落位（持久化写 task_meta.sort_order） */
+  onTaskDrop?: (e: { dragKey: string; targetKey: string; before: boolean }) => void;
 }
 
 export interface MarkdownEditorProps {
@@ -300,6 +308,7 @@ export function MarkdownEditor({
               today={taskPassthrough?.today}
               runningTaskKey={taskPassthrough?.runningTaskKey}
               onTaskMenu={taskPassthrough?.onTaskMenu}
+              onTaskDrop={taskPassthrough?.onTaskDrop}
               className="min-h-0 flex-1 overflow-y-auto p-3"
             />
           </div>

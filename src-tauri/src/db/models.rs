@@ -74,6 +74,8 @@ pub enum RepeatType {
     Daily,
     Weekly,
     Weekdays,
+    Monthly,
+    Yearly,
 }
 
 impl RepeatType {
@@ -83,6 +85,8 @@ impl RepeatType {
             RepeatType::Daily => "daily",
             RepeatType::Weekly => "weekly",
             RepeatType::Weekdays => "weekdays",
+            RepeatType::Monthly => "monthly",
+            RepeatType::Yearly => "yearly",
         }
     }
 
@@ -91,6 +95,8 @@ impl RepeatType {
             "daily" => RepeatType::Daily,
             "weekly" => RepeatType::Weekly,
             "weekdays" => RepeatType::Weekdays,
+            "monthly" => RepeatType::Monthly,
+            "yearly" => RepeatType::Yearly,
             _ => RepeatType::Once,
         }
     }
@@ -301,6 +307,9 @@ pub struct TaskMeta {
     pub skip_date: Option<String>,
     /// 本任务专注时长覆盖（分钟；None = 全局设置）
     pub focus_min: Option<i64>,
+    /// 拖动展示顺序（1..n；None = 未排序，按内容顺序兜底）。只影响展示，不回写正文。
+    #[serde(default)]
+    pub sort_order: Option<i64>,
     pub updated_at: String,
 }
 

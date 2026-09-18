@@ -26,6 +26,8 @@ const REPEAT_LABEL: Record<RepeatType, string> = {
   daily: "每天",
   weekly: "每周",
   weekdays: "工作日",
+  monthly: "每月",
+  yearly: "每年",
 };
 
 function nextHour(): Date {

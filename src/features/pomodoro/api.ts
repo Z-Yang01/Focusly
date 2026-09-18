@@ -14,6 +14,7 @@ export {
   pomodoroStatsToday,
   pomodoroStop,
   taskMetaGet,
+  taskMetaReorder,
   taskMetaUpdate,
   type TaskMetaUpdateArgs,
 } from "@/lib/api";

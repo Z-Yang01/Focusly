@@ -162,3 +162,15 @@ pub fn task_meta_update(
         )
     })
 }
+
+/// 待办拖动排序：keys 顺序即展示顺序（1..n）。只写 task_meta.sort_order，不动正文。
+#[tauri::command]
+pub fn task_meta_reorder(
+    state: State<'_, AppState>,
+    note_id: String,
+    keys: Vec<String>,
+) -> AppResult<usize> {
+    state
+        .db
+        .with(|c| crate::db::task_meta::reorder(c, &note_id, &keys))
+}

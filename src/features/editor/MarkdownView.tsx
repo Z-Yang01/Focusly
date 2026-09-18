@@ -1,6 +1,8 @@
 /** Markdown 渲染：GFM 支持、任务清单可勾选、链接外开、本地图片 asset 协议渲染。
  *  可选任务增强（taskMetaList/today/runningTaskKey/onTaskMenu）：经 mergeTaskMeta
  *  合并出 todo / done / skipped / running 四态渲染 + 任务行右键回调；
+ *  可选待办拖拽排序（onTaskDrop）：展示层按 task_meta.sort_order 重排（todoOrder 纯函数，
+ *  不修改存储正文），勾选回写经 key→原始行映射仍命中原正文行。
  *  props 缺省时行为与旧版完全一致。 */
 import {
   Children,
@@ -8,17 +10,19 @@ import {
   useMemo,
   useState,
   type ComponentPropsWithoutRef,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ImageOff } from "lucide-react";
+import { GripVertical, ImageOff } from "lucide-react";
 import { openExternal } from "@/lib/api";
 import { convertFileSrc } from "@/lib/tauri";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { assignTaskKeys } from "@/features/todo/taskKey";
 import { parseTodos } from "@/features/todo/todo";
+import { applyTaskOrder } from "@/features/todo/todoOrder";
 import {
   mergeTaskMeta,
   type EffectiveStatus,
@@ -40,6 +44,8 @@ export interface MarkdownViewProps {
   runningTaskKey?: string;
   /** 任务行右键 / 清除跳过时回调（任务菜单本体由 NoteWindow 总控实现） */
   onTaskMenu?: (e: { taskKey: string; lineText: string; status: EffectiveStatus }) => void;
+  /** 待办拖拽排序落位回调（持久化由 NoteWindow 总控写 task_meta.sort_order） */
+  onTaskDrop?: (e: { dragKey: string; targetKey: string; before: boolean }) => void;
 }
 
 type AnchorProps = ComponentPropsWithoutRef<"a"> & ExtraProps;
@@ -96,18 +102,43 @@ export function MarkdownView({
   today,
   runningTaskKey,
   onTaskMenu,
+  onTaskDrop,
 }: MarkdownViewProps) {
   /** 是否启用任务增强（缺省时完全走旧渲染路径） */
   const enhanced = taskMetaList !== undefined || runningTaskKey !== undefined;
 
-  /** 0-based 行号 → 合并后的任务展示态 */
+  /** 拖拽排序的展示层重排（未启用 onTaskDrop 时为 undefined → 渲染原内容） */
+  const storedKeys = useMemo(
+    () =>
+      (taskMetaList ?? [])
+        .filter((m) => m.sortOrder != null)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map((m) => m.taskKey),
+    [taskMetaList],
+  );
+  const orderInfo = useMemo(
+    () => (onTaskDrop ? applyTaskOrder(content, storedKeys) : undefined),
+    [content, storedKeys, onTaskDrop],
+  );
+  const displayContent = orderInfo?.content ?? content;
+
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ key: string; before: boolean } | null>(null);
+
+  /** 0-based 行号 → 合并后的任务展示态（基于展示用正文） */
   const taskByLine = useMemo(() => {
     const empty = new Map<number, TaskDisplayState>();
     if (!enhanced) return empty;
-    const todos = assignTaskKeys(parseTodos(content));
+    const todos = assignTaskKeys(parseTodos(displayContent));
     const merged = mergeTaskMeta(todos, taskMetaList ?? [], today ?? localTodayStr(), runningTaskKey);
     return new Map(merged.tasks.map((t) => [t.line, t]));
-  }, [enhanced, content, taskMetaList, today, runningTaskKey]);
+  }, [enhanced, displayContent, taskMetaList, today, runningTaskKey]);
+
+  /** 展示行号 → 原始正文行号（勾选回写用；无重排时恒等） */
+  const originalLineOf = (line0: number, taskKey?: string): number => {
+    if (!orderInfo || taskKey === undefined) return line0;
+    return orderInfo.originalLineByKey.get(taskKey) ?? line0;
+  };
 
   const components: Components = {
     a: (props: AnchorProps) => {
@@ -196,14 +227,14 @@ export function MarkdownView({
           )}
           onClick={() => {
             if (line0 === undefined || !task) return;
-            onToggleTodo?.(line0, false); // 保持 markdown 源为未勾选
+            onToggleTodo?.(originalLineOf(line0, task.taskKey), false); // 保持 markdown 源为未勾选
             onTaskMenu?.({ taskKey: task.taskKey, lineText: task.text, status: "todo" });
           }}
           onKeyDown={(e) => {
             if (e.key !== "Enter" && e.key !== " ") return;
             e.preventDefault();
             if (line0 === undefined || !task) return;
-            onToggleTodo?.(line0, false); // 保持 markdown 源为未勾选
+            onToggleTodo?.(originalLineOf(line0, task.taskKey), false); // 保持 markdown 源为未勾选
             onTaskMenu?.({ taskKey: task.taskKey, lineText: task.text, status: "todo" });
           }}
         >
@@ -219,13 +250,13 @@ export function MarkdownView({
           className={cn("mt-0.5 inline-flex shrink-0", !disabled && "cursor-pointer")}
           onClick={() => {
             if (disabled || line0 === undefined) return;
-            onToggleTodo?.(line0, status !== "done");
+            onToggleTodo?.(originalLineOf(line0, task?.taskKey), status !== "done");
           }}
           onKeyDown={(e) => {
             if (disabled || line0 === undefined) return;
             if (e.key !== "Enter" && e.key !== " ") return;
             e.preventDefault();
-            onToggleTodo?.(line0, status !== "done");
+            onToggleTodo?.(originalLineOf(line0, task?.taskKey), status !== "done");
           }}
         >
           <Checkbox checked={status === "done"} disabled={disabled} className="pointer-events-none" />
@@ -240,8 +271,67 @@ export function MarkdownView({
           }
         : undefined;
 
+      // 拖拽排序：仅"单行简单项"可拖；拖拽手柄发起，li 承接 dragover/drop
+      const canDrag =
+        !!onTaskDrop && !!task && orderInfo?.reorderableKeys.has(task.taskKey) === true;
+      const hint = dropHint && task && dropHint.key === task.taskKey ? dropHint : null;
+
+      const handleDragOver = (e: ReactDragEvent<HTMLLIElement>) => {
+        if (!dragKey || !task || dragKey === task.taskKey) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const rect = e.currentTarget.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        setDropHint((prev) =>
+          prev?.key === task.taskKey && prev.before === before ? prev : { key: task.taskKey, before },
+        );
+      };
+
+      const handleDrop = (e: ReactDragEvent<HTMLLIElement>) => {
+        e.preventDefault();
+        if (dragKey && task && dragKey !== task.taskKey) {
+          onTaskDrop?.({
+            dragKey,
+            targetKey: task.taskKey,
+            before: dropHint?.key === task.taskKey ? dropHint.before : true,
+          });
+        }
+        setDragKey(null);
+        setDropHint(null);
+      };
+
       return (
-        <li className={cn("flex items-start gap-2", cls)} {...rest} onContextMenu={handleContextMenu}>
+        <li
+          className={cn(
+            "group/task flex items-start gap-2",
+            cls,
+            hint && (hint.before ? "border-t-2 border-t-primary" : "border-b-2 border-b-primary"),
+          )}
+          {...rest}
+          onContextMenu={handleContextMenu}
+          onDragOver={canDrag || (dragKey && !!task) ? handleDragOver : undefined}
+          onDrop={dragKey && !!task ? handleDrop : undefined}
+          onDragLeave={dragKey ? () => setDropHint(null) : undefined}
+        >
+          {canDrag && task && (
+            <span
+              draggable
+              title="拖动排序"
+              aria-label={`拖动排序：${task.text}`}
+              className="mt-0.5 inline-flex shrink-0 cursor-grab text-muted-foreground/40 opacity-0 transition-opacity group-hover/task:opacity-100 active:cursor-grabbing hover:text-muted-foreground"
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", task.taskKey);
+                setDragKey(task.taskKey);
+              }}
+              onDragEnd={() => {
+                setDragKey(null);
+                setDropHint(null);
+              }}
+            >
+              <GripVertical className="size-3.5" />
+            </span>
+          )}
           {control}
           <div className={cn("min-w-0 flex-1", isSkipped && "text-muted-foreground line-through")}>
             {inner}
@@ -254,7 +344,7 @@ export function MarkdownView({
   return (
     <div className={cn("md-body text-sm leading-relaxed break-words", className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
+        {displayContent}
       </ReactMarkdown>
     </div>
   );

@@ -110,7 +110,12 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
         let mut task_meta: Vec<TaskMeta> = Vec::new();
         {
             let mut stmt = c.prepare(
-                "SELECT tm.note_id, tm.task_key, tm.line_text, tm.status, tm.estimate_pomodoros,                  tm.completed_pomodoros, tm.priority, tm.due_at, tm.skip_date, tm.focus_min, tm.updated_at                  FROM task_meta tm                  LEFT JOIN notes n ON n.id = tm.note_id                  WHERE ?1 OR COALESCE(n.is_private, 0) = 0",
+                "SELECT tm.note_id, tm.task_key, tm.line_text, tm.status, tm.estimate_pomodoros, \
+                 tm.completed_pomodoros, tm.priority, tm.due_at, tm.skip_date, tm.updated_at, \
+                 tm.focus_min, tm.sort_order \
+                 FROM task_meta tm \
+                 LEFT JOIN notes n ON n.id = tm.note_id \
+                 WHERE ?1 OR COALESCE(n.is_private, 0) = 0",
             )?;
             let rows = stmt.query_map(params![include_private], |r| {
                 Ok(TaskMeta {
@@ -124,7 +129,8 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
                     due_at: r.get(7)?,
                     skip_date: r.get(8)?,
                     updated_at: r.get(9)?,
-                    focus_min: r.get("focus_min")?,
+                    focus_min: r.get(10)?,
+                    sort_order: r.get(11)?,
                 })
             })?;
             for row in rows {
@@ -294,7 +300,7 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
                 continue;
             }
             tx.execute(
-                "INSERT OR REPLACE INTO task_meta (note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT OR REPLACE INTO task_meta (note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, updated_at, focus_min, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     tm.note_id,
                     tm.task_key,
@@ -306,6 +312,8 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
                     tm.due_at,
                     tm.skip_date,
                     tm.updated_at,
+                    tm.focus_min,
+                    tm.sort_order,
                 ],
             )?;
         }

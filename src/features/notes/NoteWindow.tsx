@@ -94,7 +94,8 @@ import { usePomodoro } from "@/features/pomodoro/usePomodoro";
 import { PomodoroBar } from "@/features/pomodoro/PomodoroBar";
 import { ensureMiniPomodoro } from "@/features/pomodoro/miniWindow";
 import { localDateKey } from "@/features/pomodoro/format";
-import { taskMetaGet, taskMetaUpdate, pomodoroStart, pomodoroCompleteTask } from "@/features/pomodoro/api";
+import { taskMetaGet, taskMetaReorder, taskMetaUpdate, pomodoroStart, pomodoroCompleteTask } from "@/features/pomodoro/api";
+import { applyTaskOrder, moveKey } from "@/features/todo/todoOrder";
 import type { TaskMeta } from "@/features/pomodoro/types";
 import { VersionHistoryPanel } from "@/features/archive/VersionHistoryPanel";
 
@@ -321,6 +322,22 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   useEffect(() => {
     void refreshTaskMeta();
   }, [refreshTaskMeta]);
+
+  /** 待办拖拽排序落位：按展示序写 task_meta.sort_order（不动正文），完成后刷新 meta */
+  const handleTaskDrop = useCallback(
+    (e: { dragKey: string; targetKey: string; before: boolean }) => {
+      const storedKeys = taskMetaList
+        .filter((m) => m.sortOrder != null)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map((m) => m.taskKey);
+      const current = applyTaskOrder(content, storedKeys).displayKeyOrder;
+      const next = moveKey(current, e.dragKey, e.targetKey, e.before);
+      void taskMetaReorder(noteId, next)
+        .then(refreshTaskMeta)
+        .catch((err) => console.error("保存待办排序失败", err));
+    },
+    [content, taskMetaList, noteId, refreshTaskMeta],
+  );
   const [dragOver, setDragOver] = useState(false);
 
   const readyCalledRef = useRef(false);
@@ -759,6 +776,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                   runningTaskKey: runningOnThisNote ?? undefined,
                   onTaskMenu: (e) =>
                     setTaskMenu({ taskKey: e.taskKey, lineText: e.lineText, status: e.status }),
+                  onTaskDrop: handleTaskDrop,
                 }}
               />
               {dragOver && <NoteDragOverlay />}

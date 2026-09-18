@@ -70,8 +70,14 @@
 - 提示音系统：Web Audio 合成（番茄完成/提醒叮咚）+ 设置开关
 - 多主题系统：浅/深/暖阳/森林/海洋/跟随系统 + 色卡预览选择器
 - 数据目录跟随安装目录：安装/便携（data/ 或 portable.marker）自动检测，开发版回退 %APPDATA%
+- 待办拖动排序（迁移 v10）：便签预览态拖拽待办，展示序写 `task_meta.sort_order`，正文真相源不变；
+  带续行/嵌套的复杂任务项自动禁用拖拽；排序经页面重载持久化（CDP 实测）
+- 月/年重复规则：今日任务 repeat_rule 与提醒 repeat_type 同步扩展 monthly/yearly，
+  月末/闰年按锚点日号 clamp 到当月最后一天（1-31 → 2-28；引擎从锚点年月重算，避免连续 clamp 漂移）
+- P2 批次后命令契约 96 → 97（新增 task_meta_reorder）
 
 #### Fixed
+- 导入 JSON 时 task_meta 丢失 focus_min（导出含该字段但导入未回写，往返丢数据）
 - 开窗命令主线程死锁：WebviewWindowBuilder 同步 build() 自死锁饿死全部 IPC——提醒/勿扰等设置类操作"无法设置"的根因
 - Tauri ACL 权限：allow-destroy（便签无法关闭）/ allow-set-position（迷你窗定位）/ allow-read-text（剪贴板捕获）
 - 网格平铺越界：改用工作区矩形 + 越界 clamp，不再遮挡任务栏、旧布局预设不再落屏外

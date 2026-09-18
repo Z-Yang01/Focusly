@@ -6,12 +6,12 @@ Focusly 是一个完全本地化的个人桌面便签软件：想到什么马上
 
 - 📝 **多便签桌面常驻**：每张便签是一个真实的原生窗口（无边框/圆角/可自由拖动缩放），独立置顶、独立全屏策略
 - ⚡ **Markdown + 富文本编辑**：标题/粗斜体/删除线/列表/引用/代码块/链接/表格/分割线，`[编辑][预览]` 切换
-- ☑️ **待办**：`- [ ] / - [x]` 即待办，预览态直接点击勾选，支持统计与搜索，未完成折叠待扩展
+- ☑️ **待办**：`- [ ] / - [x]` 即待办，预览态直接点击勾选，支持拖动排序（只改展示序存 task_meta，正文真相源不变）、统计与搜索
 - 🖼 **图片**：拖拽 / 粘贴截图 / 文件选择三种入口，存本地目录，SQLite 只存元数据
 - 🔗 **链接**：自动识别，系统浏览器打开，白名单 http/https
-- 🔔 **定时提醒**：Rust 后台调度（事件驱动，无轮询），便签全部隐藏也照样弹 Windows 通知；仅一次/每天/每周/工作日；触发后可 完成 / 稍后(5m/30m/1h/明天) / 关闭
+- 🔔 **定时提醒**：Rust 后台调度（事件驱动，无轮询），便签全部隐藏也照样弹 Windows 通知；仅一次/每天/每周/工作日/每月/每年；触发后可 完成 / 稍后(5m/30m/1h/明天) / 关闭
 - ⏱ **番茄钟**：专注/短休/长休状态机（tokio 事件驱动），便签底栏/迷你悬浮窗/管理器顶栏控制条/托盘同步；绑定便签任务或今日任务，统计番茄数/专注时长/中断次数；每任务专注时长可单独覆盖（默认 25 分钟）
-- 📅 **今日任务时间轴**：独立于便签的每日计划——时间轴任务块、拖拽调时（15 分钟吸附）、到点通知（勿扰内挂起、时段后补发）、重复规则按日物化（每天/每周/工作日）、任务↔便签互通、搜索 token（`is:task` / `due:today` 等）
+- 📅 **今日任务时间轴**：独立于便签的每日计划——时间轴任务块、拖拽调时（15 分钟吸附）、到点通知（勿扰内挂起、时段后补发）、重复规则按日物化（每天/每周/工作日/每月/每年，月/年按锚点日号 clamp 到月末）、任务↔便签互通、搜索 token（`is:task` / `due:today` 等）
 - 🖥 **跨虚拟桌面**：`IVirtualDesktopPinnedApps` COM 与任务栏"在所有桌面显示"同源机制，不可用时明确提示"系统不支持"（不伪造成功）
 - 📺 **全屏跟随**：`SetWinEventHook` 事件驱动检测前台全屏，每张便签独立策略：普通 / 始终置顶 / 全屏显示 / 全屏自动隐藏
 - ⌨️ **全局快捷键**：显示/隐藏全部 `Ctrl+Shift+Space`、新建便签 `Ctrl+Shift+N`、聚焦搜索 `Ctrl+Shift+F`；可在设置中自定义、冲突检测、恢复默认
@@ -115,7 +115,7 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 
 ### 4. 尚未实现（P2 及以后）
 
-- 待办拖动排序、多级待办折叠
+- 多级待办折叠
 - 复盘视图（周/月维度聚合；每日统计已落地：统计对话框任务区块 + 时间轴今日进度）
 - 提醒的月/年重复规则、通知点击直达便签窗口
 - ZIP / Markdown 批量导出
@@ -123,7 +123,7 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 
 ### 5. 数据库 Schema
 
-见 `src-tauri/src/db/migrations.rs`（PRAGMA user_version 迁移，当前 v9）：
+见 `src-tauri/src/db/migrations.rs`（PRAGMA user_version 迁移，当前 v10）：
 
 - v1（7 张表）：`notes`, `note_images`, `reminders`, `tags` + `note_tags`, `shortcuts`, `settings`
 - v2：`notes` 补列 `deleted_at` / `is_private` / `locked` / `readonly_flag` / `scale`；新增 `note_versions`（版本快照）、`clipboard_history`（剪贴板历史）、`saved_searches`（保存的搜索）、`notes_fts`（FTS5 trigram 虚表，触发器外由业务层同步）
@@ -134,6 +134,7 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 - v7：列表主路径覆盖索引 `idx_notes_alive_order`（all 视图走出全表扫描，回收站行不进索引）
 - v8：今日任务时间轴——`daily_tasks` 表 + `pomodoro_sessions.daily_task_id` 外键
 - v9：每任务专注时长覆盖——`task_meta.focus_min` / `daily_tasks.focus_min`（NULL = 跟随全局 `pomo_focus_min`）
+- v10：待办拖动排序——`task_meta.sort_order`（1..n；NULL = 未排序按内容顺序兜底；只决定展示顺序，不回写正文）
 
 ### 6. Rust / React 架构
 

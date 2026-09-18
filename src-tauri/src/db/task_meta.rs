@@ -12,7 +12,7 @@ use rusqlite::{params, Connection, Row};
 use super::models::TaskMeta;
 use crate::error::AppResult;
 
-const COLS: &str = "note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, focus_min, updated_at";
+const COLS: &str = "note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, focus_min, sort_order, updated_at";
 
 fn row_to_meta(r: &Row) -> rusqlite::Result<TaskMeta> {
     Ok(TaskMeta {
@@ -26,6 +26,7 @@ fn row_to_meta(r: &Row) -> rusqlite::Result<TaskMeta> {
         due_at: r.get("due_at")?,
         skip_date: r.get("skip_date")?,
         focus_min: r.get::<_, Option<i64>>("focus_min")?,
+        sort_order: r.get::<_, Option<i64>>("sort_order")?,
         updated_at: r.get("updated_at")?,
     })
 }
@@ -121,13 +122,15 @@ pub fn upsert(conn: &Connection, u: &TaskMetaUpsert) -> AppResult<TaskMeta> {
     let focus_min = u
         .focus_min
         .or_else(|| existing.as_ref().and_then(|m| m.focus_min));
+    // sort_order 不在 upsert 载荷里：新行 NULL（内容顺序兜底），已有行保留原值
+    let sort_order = existing.as_ref().and_then(|m| m.sort_order);
 
     conn.execute(
         "INSERT INTO task_meta \
-             (note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, focus_min, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) \
+             (note_id, task_key, line_text, status, estimate_pomodoros, completed_pomodoros, priority, due_at, skip_date, focus_min, sort_order, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12) \
          ON CONFLICT(note_id, task_key) DO UPDATE SET \
-             line_text = ?3, status = ?4, estimate_pomodoros = ?5, priority = ?7, due_at = ?8, skip_date = ?9, focus_min = ?10, updated_at = ?11",
+             line_text = ?3, status = ?4, estimate_pomodoros = ?5, priority = ?7, due_at = ?8, skip_date = ?9, focus_min = ?10, updated_at = ?12",
         params![
             u.note_id,
             u.task_key,
@@ -139,6 +142,7 @@ pub fn upsert(conn: &Connection, u: &TaskMetaUpsert) -> AppResult<TaskMeta> {
             due_at,
             skip_date,
             focus_min,
+            sort_order,
             updated_at
         ],
     )?;
@@ -161,15 +165,30 @@ pub fn get(conn: &Connection, note_id: &str, task_key: &str) -> AppResult<Option
     }
 }
 
-/// 某便签下全部任务元数据（updated_at DESC）。
+/// 某便签下全部任务元数据（已排序行在前按 sort_order 升序，未排序行在后按 updated_at 降序）。
 pub fn list_for_note(conn: &Connection, note_id: &str) -> AppResult<Vec<TaskMeta>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT {COLS} FROM task_meta WHERE note_id = ?1 ORDER BY updated_at DESC"
+        "SELECT {COLS} FROM task_meta WHERE note_id = ?1 \
+         ORDER BY (sort_order IS NULL) ASC, sort_order ASC, updated_at DESC"
     ))?;
     let rows = stmt
         .query_map(params![note_id], row_to_meta)?
         .collect::<rusqlite::Result<_>>()?;
     Ok(rows)
+}
+
+/// 待办拖动排序落库：keys 顺序即展示顺序（1..n）。
+/// 只写 sort_order，不动正文（待办真相源 = 正文复选框）；
+/// 未包含的行（新增任务）保持 NULL，展示时排在已排序序列之后按内容顺序兜底。
+pub fn reorder(conn: &Connection, note_id: &str, keys: &[String]) -> AppResult<usize> {
+    let mut n = 0;
+    for (i, key) in keys.iter().enumerate() {
+        n += conn.execute(
+            "UPDATE task_meta SET sort_order = ?3 WHERE note_id = ?1 AND task_key = ?2",
+            params![note_id, key, (i + 1) as i64],
+        )?;
+    }
+    Ok(n)
 }
 
 /// 番茄钟焦点完成：completed_pomodoros + 1（行不存在时静默忽略）。
@@ -410,6 +429,41 @@ mod tests {
     }
 
     #[test]
+    fn reorder_persists_and_upsert_preserves_it() {
+        let conn = setup();
+        for k in ["k1", "k2", "k3"] {
+            upsert(&conn, &ups("n1", k, &format!("- [ ] {k}"))).unwrap();
+        }
+        // 未排序时全部 NULL
+        assert!(list_for_note(&conn, "n1")
+            .unwrap()
+            .iter()
+            .all(|m| m.sort_order.is_none()));
+        // 拖成 k3, k1, k2
+        reorder(&conn, "n1", &["k3".into(), "k1".into(), "k2".into()]).unwrap();
+        let list = list_for_note(&conn, "n1").unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].task_key, "k3");
+        assert_eq!(list[0].sort_order, Some(1));
+        assert_eq!(list[1].task_key, "k1");
+        assert_eq!(list[2].task_key, "k2");
+        // 后续勾选等 upsert 不清掉 sort_order
+        upsert(&conn, &ups("n1", "k3", "- [x] k3")).unwrap();
+        let k3 = get(&conn, "n1", "k3").unwrap().unwrap();
+        assert_eq!(k3.sort_order, Some(1), "upsert 保留 sort_order");
+        assert_eq!(k3.line_text, "- [x] k3");
+        // 新增任务（k4）sort_order = NULL，排在已排序之后
+        upsert(&conn, &ups("n1", "k4", "- [ ] k4")).unwrap();
+        let list2 = list_for_note(&conn, "n1").unwrap();
+        assert_eq!(list2.last().unwrap().task_key, "k4");
+        assert!(list2.last().unwrap().sort_order.is_none());
+        // reorder 未包含的行不受影响
+        reorder(&conn, "n1", &["k2".into()]).unwrap();
+        assert_eq!(get(&conn, "n1", "k2").unwrap().unwrap().sort_order, Some(1));
+        assert_eq!(get(&conn, "n1", "k3").unwrap().unwrap().sort_order, Some(1));
+    }
+
+    #[test]
     fn upsert_inserts_with_defaults_and_is_idempotent() {
         let conn = setup();
         let m1 = upsert(&conn, &ups("n1", "k1", "- [ ] 买牛奶")).unwrap();
@@ -512,6 +566,7 @@ mod tests {
             due_at: None,
             skip_date: Some("2026-09-14".into()),
             focus_min: None,
+            sort_order: None,
             updated_at: String::new(),
         };
         assert_eq!(effective_status(&m, "2026-09-15"), "todo", "跨日自动复活");

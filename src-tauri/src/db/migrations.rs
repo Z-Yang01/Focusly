@@ -214,6 +214,11 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ALTER TABLE task_meta ADD COLUMN focus_min INTEGER;
     ALTER TABLE daily_tasks ADD COLUMN focus_min INTEGER;
     "#,
+    // v10: 待办拖动排序——task_meta.sort_order（1..n；NULL = 未排序，展示按内容顺序兜底）。
+    // 待办真相源仍是正文复选框，本列只决定展示顺序，不回写正文。
+    r#"
+    ALTER TABLE task_meta ADD COLUMN sort_order INTEGER;
+    "#,
 ];
 
 use rusqlite::Connection;
@@ -552,5 +557,47 @@ mod tests {
             .query_row("SELECT title FROM notes WHERE id = 'n1'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(title, "旧便签");
+    }
+
+    /// 模拟 v9 旧库：跑前九条迁移并手工把 user_version 置为 9。
+    fn setup_v9(conn: &Connection) {
+        for sql in MIGRATIONS.iter().take(9) {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 9).unwrap();
+    }
+
+    #[test]
+    fn v9_to_v10_adds_task_meta_sort_order() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_v9(&conn);
+        // v9 时代已有的 task_meta 行
+        conn.execute(
+            "INSERT INTO task_meta (note_id, task_key, line_text, updated_at) \
+             VALUES ('n1', 'k1', '任务', '2026-01-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+
+        run(&conn).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64);
+
+        // 旧行 sort_order 为 NULL，且新列可写（拖动排序可用）
+        let so: Option<i64> = conn
+            .query_row(
+                "SELECT sort_order FROM task_meta WHERE task_key = 'k1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(so.is_none());
+        conn.execute(
+            "UPDATE task_meta SET sort_order = 1 WHERE task_key = 'k1'",
+            [],
+        )
+        .unwrap();
     }
 }
