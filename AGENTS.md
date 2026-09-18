@@ -148,6 +148,6 @@ npm run icon         # 重新生成应用图标
 
 ## 已知平台限制
 
-- 独占全屏（D3D exclusive）下任何应用无法覆盖，fullscreen_show 仅对无边框全屏（浏览器 F11、无边框视频）有效。
-- 虚拟桌面 Pin 依赖未公开 COM 接口（Windows 10 1809+ / Windows 11 验证可用）；大版本更新可能失效，此时状态为 `unsupported`，功能自动降级为"仅当前桌面"。
-- Windows 通知点击聚焦便签依赖 toast 激活 COM 回调，MVP 阶段通知为提示型（用户从托盘/管理器打开便签）。
+- 独占全屏（D3D exclusive）下任何应用无法覆盖，fullscreen_show 仅对无边框全屏（浏览器 F11、无边框视频）有效；规避：目标应用切换「无边框窗口 / 窗口化全屏」显示模式。
+- 虚拟桌面 Pin 依赖未公开 COM 接口（`vdesktop.rs` 手工 vtable，Windows 10 1809+ / Windows 11 验证可用）；大版本更新可能失效。降级链路：COM 不可用 → `VdError::Unsupported` → `desktop_pin_state="unsupported"` 落库 + 警告日志（`apply_desktop_pin`，window/mod.rs）→ UI 标注「系统不支持」，降级为"仅当前桌面"，不崩溃、不伪造成功；操作失败记 `failed`，窗口重建/重启时按落库状态重试。
+- Windows 通知点击聚焦便签：官方通知插件 Windows 端无点击/激活事件（上游 plugins-workspace #2150）；自实现依赖 AUMID/开始菜单快捷方式注册（便携场景不可靠）且需重接 4 处通知调用，暂不做。通知为提示型，应用内提醒 Banner（完成/稍后/关闭）与托盘/管理器/Ctrl+K 为替代路径。
