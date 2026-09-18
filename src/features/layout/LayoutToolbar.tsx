@@ -2,7 +2,7 @@
  *  网格排列（cols 下拉 2/3/4/自适应）、保存当前布局为预设、预设列表（点击应用、×删除）。
  *  预设即快照，不另存"上次布局"。后端 layout_* 命令未注册时降级为提示。 */
 import { useCallback, useEffect, useState } from "react";
-import { LayoutGrid, Save, X } from "lucide-react";
+import { X, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -87,12 +87,11 @@ export function LayoutToolbar() {
 
   return (
     <div className="flex flex-col gap-1.5 rounded-md border p-2 text-xs">
-      {/* 第一行：网格排列 + 保存预设 */}
+      {/* 第一行：网格排列（select 弹性收缩，窄侧栏不溢出） */}
       <div className="flex items-center gap-1.5">
-        <LayoutGrid className="size-3.5 shrink-0 text-muted-foreground" />
         <select
           aria-label="网格列数"
-          className="h-8 rounded-md border border-input bg-transparent px-1.5 text-xs"
+          className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-1.5 text-xs"
           value={cols}
           onChange={(e) => setCols(Number(e.target.value))}
         >
@@ -113,11 +112,14 @@ export function LayoutToolbar() {
         >
           网格排列
         </Button>
+      </div>
 
+      {/* 第二行：保存预设 */}
+      <div className="flex items-center gap-1.5">
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="布局名称…"
+          placeholder="预设名"
           className="h-8 min-w-0 flex-1 text-xs"
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleSave();

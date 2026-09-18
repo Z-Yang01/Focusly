@@ -138,8 +138,8 @@ export function DndSettingsCard({ className }: DndSettingsCardProps) {
         勿扰期间到点提醒将推迟到时段结束后通知，不会丢失。
       </p>
 
-      <div className="mt-2 flex items-end gap-2">
-        <div className="min-w-0 flex-1 space-y-1">
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="dnd-start" className="text-xs text-muted-foreground">
             开始
           </Label>
@@ -152,10 +152,10 @@ export function DndSettingsCard({ className }: DndSettingsCardProps) {
               setStart(e.target.value);
               setDirty(true);
             }}
-            className="h-8 text-xs"
+            className="h-8 px-2 text-xs"
           />
         </div>
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="dnd-end" className="text-xs text-muted-foreground">
             结束
           </Label>
@@ -168,19 +168,19 @@ export function DndSettingsCard({ className }: DndSettingsCardProps) {
               setEnd(e.target.value);
               setDirty(true);
             }}
-            className="h-8 text-xs"
+            className="h-8 px-2 text-xs"
           />
         </div>
-        <Button
-          type="button"
-          size="sm"
-          className="h-8 text-xs"
-          disabled={busy || !enabled || !dirty}
-          onClick={() => void handleSave()}
-        >
-          保存
-        </Button>
       </div>
+      <Button
+        type="button"
+        size="sm"
+        className="mt-2 h-8 w-full text-xs"
+        disabled={busy || !enabled || !dirty}
+        onClick={() => void handleSave()}
+      >
+        保存
+      </Button>
 
       {enabled && isCrossMidnight(start, end) && (
         <p className="mt-1 text-xs text-muted-foreground">
