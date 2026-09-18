@@ -431,8 +431,7 @@ mod tests {
         assert_eq!(n.title, "标题");
         assert_eq!(n.status, "active");
 
-        let g = update_geometry(&conn, &n.id, 100, 200, 300, 400, Some("MON1")).unwrap();
-        let _ = g;
+        update_geometry(&conn, &n.id, 100, 200, 300, 400, Some("MON1")).unwrap();
         let n2 = get(&conn, &n.id).unwrap();
         assert_eq!(n2.x, Some(100));
         assert_eq!(n2.monitor_id.as_deref(), Some("MON1"));

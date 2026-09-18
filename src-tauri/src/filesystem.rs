@@ -20,23 +20,22 @@ pub struct AppPaths {
 /// 2. 便携模式：exe 旁有 `portable.marker` → 数据写在 `<exe目录>/data/`
 /// 3. 开发模式（target/debug 或 target/release）→ 回退 %APPDATA%
 /// 4. 兜底：%APPDATA%
+/// 4. 兜底：%APPDATA%
+///
 /// 这样安装到哪、数据就在哪，卸载重装数据不丢。
 pub fn resolve_data_root(app: &tauri::AppHandle) -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            // 条件 1 或 2：exe 旁有 data/ 目录或 portable.marker → 本地数据模式
-            let data_dir = dir.join("data");
-            let has_data_dir = data_dir.is_dir();
-            let has_marker = dir.join("portable.marker").is_file();
             // 开发环境排除：target/debug 或 target/release 下的 exe 不算已安装
             let is_dev = dir
                 .to_str()
                 .map(|d| d.contains("target") && (d.contains("debug") || d.contains("release")))
                 .unwrap_or(false);
 
-            if (has_data_dir || has_marker) && !is_dev {
-                log::info!("本地数据模式，数据目录: {}", data_dir.display());
-                return data_dir;
+            // 条件 1 或 2：exe 旁有 data/ 目录或 portable.marker → 本地数据模式
+            if is_local_data_mode(dir) && !is_dev {
+                log::info!("本地数据模式，数据目录: {}", dir.join("data").display());
+                return dir.join("data");
             }
         }
     }
@@ -179,7 +178,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let paths = AppPaths::init(tmp.path().to_path_buf()).unwrap();
         let db = Db::open(&paths.db).unwrap();
-        db.with(|c| migrations::run(c)).unwrap();
+        db.with(migrations::run).unwrap();
 
         // 建 7 份备份验证轮转（时间戳秒级分辨率，间隔 >1s 保证文件名唯一）
         for i in 0..7 {
@@ -214,7 +213,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let paths = AppPaths::init(tmp.path().to_path_buf()).unwrap();
         let db = Db::open(&paths.db).unwrap();
-        db.with(|c| migrations::run(c)).unwrap();
+        db.with(migrations::run).unwrap();
         db.with(|c| crate::db::notes::create(c, "演练便签", "重要数据"))
             .unwrap();
 

@@ -8,6 +8,7 @@
 //! - layout_apply_preset(id)       -> `apply_preset(app, id)`（返回应用槽位数）
 //! - layout_delete_preset(id)      -> `delete_preset(app, id)`
 //! - layout_arrange_grid(cols?)    -> `arrange_grid(app, cols)`（cols 为空按 sqrt 自适应）
+//!
 //! 接线还需在 window/mod.rs 声明 `pub mod layout;`。
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};

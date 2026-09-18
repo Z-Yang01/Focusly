@@ -14,6 +14,7 @@
 //! 1. lib.rs 添加 `mod daily;`；
 //! 2. 命令层薄封装并注册进 invoke_handler：
 //!    `#[tauri::command] fn daily_get_or_create(app: tauri::AppHandle) -> Result<Note, AppError> { daily::get_or_create_daily(&app) }`。
+//!
 //! 前端入口：src/features/templates/DailyNoteButton.tsx（成功静默，后端开窗）。
 
 use chrono::{DateTime, Utc};

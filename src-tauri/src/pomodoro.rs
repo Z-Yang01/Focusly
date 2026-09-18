@@ -737,6 +737,7 @@ fn planned_for(
 }
 
 /// 开始一个阶段：写 running 会话、更新状态机、广播、托盘。
+#[allow(clippy::too_many_arguments)]
 fn begin_phase(
     app: &AppHandle,
     st: &mut Machine,
@@ -817,7 +818,10 @@ fn phase_end(app: &AppHandle, st: &mut Machine) {
         // 今日任务绑定（task_key = "daily:<id>"）：只回写任务完成番茄数
         match pomodoro_sessions::daily_task_id_of(&r.task_key) {
             Some(daily_id) => {
-                if let Err(e) = state.db.with(|c| crate::db::daily_tasks::incr_completed(c, daily_id)) {
+                if let Err(e) = state
+                    .db
+                    .with(|c| crate::db::daily_tasks::incr_completed(c, daily_id))
+                {
                     log::warn!("今日任务 completed_pomodoros 累加失败: {e}");
                 }
             }

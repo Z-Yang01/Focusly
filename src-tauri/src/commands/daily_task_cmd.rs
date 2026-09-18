@@ -3,9 +3,9 @@
 
 use tauri::{AppHandle, State};
 
+use crate::daily_task;
 use crate::db::daily_tasks;
 use crate::db::models::{DailyTask, DailyTaskStats, Note};
-use crate::daily_task;
 use crate::error::AppResult;
 use crate::state::AppState;
 
@@ -105,7 +105,9 @@ pub fn daily_task_set_time(
     start_time: Option<String>,
     end_time: Option<String>,
 ) -> AppResult<DailyTask> {
-    state.db.with(|c| daily_tasks::set_time(c, &id, start_time.as_deref(), end_time.as_deref()))
+    state
+        .db
+        .with(|c| daily_tasks::set_time(c, &id, start_time.as_deref(), end_time.as_deref()))
 }
 
 #[tauri::command]
@@ -132,7 +134,7 @@ pub fn daily_task_search(
     status: Option<String>,
     date: Option<String>,
 ) -> AppResult<Vec<DailyTask>> {
-    state.db.with(|c| {
-        daily_tasks::search(c, &query, status.as_deref(), date.as_deref())
-    })
+    state
+        .db
+        .with(|c| daily_tasks::search(c, &query, status.as_deref(), date.as_deref()))
 }

@@ -22,8 +22,7 @@ pub fn spawn_notifier(app: AppHandle) {
         return;
     }
     tauri::async_runtime::spawn(async move {
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(NOTIFY_TICK_SECS));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(NOTIFY_TICK_SECS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
@@ -41,19 +40,20 @@ pub fn scan_and_notify(app: &AppHandle) -> AppResult<()> {
     let today = local_today();
     let hhmm = Local::now().format("%H:%M").to_string();
 
-    let due: Vec<crate::db::models::DailyTask> = state
-        .db
-        .with(|c| -> AppResult<Vec<crate::db::models::DailyTask>> {
-            daily_tasks::materialize_recurring(c, &today)?;
-            daily_tasks::due_for_notification(c, &today, &hhmm)
-        })?;
+    let due: Vec<crate::db::models::DailyTask> =
+        state
+            .db
+            .with(|c| -> AppResult<Vec<crate::db::models::DailyTask>> {
+                daily_tasks::materialize_recurring(c, &today)?;
+                daily_tasks::due_for_notification(c, &today, &hhmm)
+            })?;
     if due.is_empty() {
         return Ok(());
     }
 
     let settings = state
         .db
-        .with(|c| crate::db::settings::get_all(c))
+        .with(crate::db::settings::get_all)
         .unwrap_or_default();
     let now_local = Local::now().time();
     if !crate::dnd::should_notify(&settings, now_local) {
@@ -64,13 +64,13 @@ pub fn scan_and_notify(app: &AppHandle) -> AppResult<()> {
     let mut notified: Vec<String> = Vec::new();
     for t in due {
         let (title, body) = if t.is_private {
-            ("⏰ 今日任务".to_string(), "🔒 私密任务内容已隐藏".to_string())
+            (
+                "⏰ 今日任务".to_string(),
+                "🔒 私密任务内容已隐藏".to_string(),
+            )
         } else {
             match &t.start_time {
-                Some(s) => (
-                    "⏰ 今日任务".to_string(),
-                    format!("{s} · {}到了", t.title),
-                ),
+                Some(s) => ("⏰ 今日任务".to_string(), format!("{s} · {}到了", t.title)),
                 None => ("⏰ 今日任务".to_string(), t.title.clone()),
             }
         };
@@ -86,7 +86,9 @@ pub fn scan_and_notify(app: &AppHandle) -> AppResult<()> {
         notified.push(t.id);
     }
     if !notified.is_empty() {
-        state.db.with(|c| daily_tasks::mark_notified(c, &notified))?;
+        state
+            .db
+            .with(|c| daily_tasks::mark_notified(c, &notified))?;
     }
     Ok(())
 }
@@ -132,9 +134,9 @@ pub fn to_note(app: &AppHandle, task_id: &str) -> AppResult<crate::db::models::N
     })?;
     let (x, y) = crate::window::cascade_position(app, 0);
     let (w, h) = crate::window::default_note_size_physical(app);
-    state.db.with(|c| {
-        crate::db::notes::update_geometry(c, &note.id, x, y, w, h, None)
-    })?;
+    state
+        .db
+        .with(|c| crate::db::notes::update_geometry(c, &note.id, x, y, w, h, None))?;
     log::info!("今日任务已转为便签 {} → {}", task_id, note.id);
     Ok(note)
 }

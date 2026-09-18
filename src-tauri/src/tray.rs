@@ -14,7 +14,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let hide_all = MenuItem::with_id(app, "hide_all", "隐藏全部便签", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let new_note = MenuItem::with_id(app, "new_note", "新建便签", true, None::<&str>)?;
-    let pomo_toggle = MenuItem::with_id(app, "pomo_toggle", "番茄钟 开始/暂停", true, None::<&str>)?;
+    let pomo_toggle =
+        MenuItem::with_id(app, "pomo_toggle", "番茄钟 开始/暂停", true, None::<&str>)?;
     let pomo_stop = MenuItem::with_id(app, "pomo_stop", "番茄钟 停止", true, None::<&str>)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let open_manager = MenuItem::with_id(app, "open_manager", "打开管理器", true, None::<&str>)?;
@@ -75,7 +76,12 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
             "pomo_stop" => {
-                if let Err(e) = crate::pomodoro::send_cmd(app, crate::pomodoro::PomodoroCmd::Stop { reason: "tray".into() }) {
+                if let Err(e) = crate::pomodoro::send_cmd(
+                    app,
+                    crate::pomodoro::PomodoroCmd::Stop {
+                        reason: "tray".into(),
+                    },
+                ) {
                     log::error!("托盘番茄停止失败: {e}");
                 }
             }

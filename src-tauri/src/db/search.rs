@@ -37,6 +37,7 @@ pub fn fts_remove(conn: &Connection, note_id: &str) -> AppResult<()> {
 /// - 长度 >= 3 字符：FTS5 trigram（支持任意子串），按 rank 排序，snippet 高亮 body；
 /// - 长度 < 3 字符：trigram 无法分词，降级为 title/content LIKE 查询，按 updated_at DESC，
 ///   snippet 手工截取 keyword 前后约 40 字符并包 <mark>。
+///
 /// 两者都排除回收站（deleted_at IS NOT NULL）与私密便签（include_private=false 时）。
 pub fn search(
     conn: &Connection,

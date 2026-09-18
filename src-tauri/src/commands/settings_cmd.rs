@@ -75,7 +75,10 @@ pub fn set_setting(
         }
     }
 
-    let _ = app.emit(crate::events::SETTINGS_CHANGED, json!({"key": key, "value": value}));
+    let _ = app.emit(
+        crate::events::SETTINGS_CHANGED,
+        json!({"key": key, "value": value}),
+    );
     Ok(())
 }
 

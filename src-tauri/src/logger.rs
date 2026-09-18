@@ -3,7 +3,7 @@
 
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 /// 单文件超过 5MB 触发轮转
@@ -72,7 +72,7 @@ impl log::Log for FileLogger {
 }
 
 /// 初始化全局日志。失败时静默降级（无日志但不影响功能）。
-pub fn init(logs_dir: &PathBuf) {
+pub fn init(logs_dir: &Path) {
     let path = logs_dir.join("focusly.log");
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
