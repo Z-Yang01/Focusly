@@ -164,10 +164,10 @@ npm run tauri build   # 产物：src-tauri/target/release/bundle/nsis/Focusly_0.
 
 - **FTS5 trigram 字符数限制**：trigram 分词要求 SQLite ≥ 3.34 且仅对 ≥3 字符有效（2 字符中文词命中有限，自动降级 LIKE）；索引同步有单元测试，全文搜索路径已随 E2E 在真实 UI 验收。
 - **私密 = 隔离非加密**：私密便签仅做视图/搜索/通知/导出层面的隔离，数据库文件中内容为明文，请勿依赖其对抗本机物理接触。
-- **通知点击**暂不直达便签窗口（toast 激活需要额外的 COM activator），通知为提示型，用户从托盘/管理器打开便签。
+- **通知点击**暂不直达便签窗口，通知为提示型——评估结论（2026-09-18）：官方 tauri-plugin-notification 在 Windows 端不暴露 toast 点击/激活事件（上游 plugins-workspace #2150 未实现）；自实现需绕过插件直用 WinRT toast `on_activated`，依赖开始菜单快捷方式/AUMID 注册（便携/免安装场景不可靠），且需重接提醒/今日任务/番茄共 4 处通知调用，成本收益不匹配，暂不做。替代路径：提醒触发后应用内 Banner 可直接 完成/稍后/关闭；托盘「显示全部」/ 管理器 / `Ctrl+K` 均可直达便签。
 - **通知脱敏范围**：私密便签的系统通知标题与摘要已脱敏，但 `reminder-fired` 事件仍下发的 noteId 可被前端关联（本地应用内可接受）。
-- **独占全屏**（DirectX exclusive，多为全屏游戏）下任何窗口都无法覆盖，`fullscreen_show` 仅对无边框全屏（浏览器 F11、无边框视频）有效——Windows 平台机制限制。
-- **虚拟桌面 Pin** 依赖未公开 COM 接口（Windows 10 1809+ / Windows 11 已验证的接口定义）；Windows 大版本更新可能使其失效，此时便签状态显示"系统不支持"，功能自动降级为"仅当前桌面"，不影响其他功能。
+- **独占全屏**（DirectX exclusive，多为全屏游戏）下任何窗口都无法覆盖，`fullscreen_show` 仅对无边框全屏（浏览器 F11、无边框视频）有效——Windows 平台机制限制。规避：将目标应用切换为「无边框窗口 / 窗口化全屏」显示模式，便签即可覆盖。
+- **虚拟桌面 Pin** 依赖未公开 COM 接口（`IVirtualDesktopPinnedApps`，Windows 10 1809+ / Windows 11 已验证；手工 vtable 实现见 `vdesktop.rs`）。Windows 大版本更新可能使其失效，降级链路已核实：`CoCreateInstance`/`QueryService`/状态查询任一失败 → `VdError::Unsupported` → `desktop_pin_state="unsupported"` 落库 + 警告日志（`window/mod.rs` `apply_desktop_pin`），便签 UI 显示「系统不支持」，功能降级为"仅当前桌面"——不崩溃、不伪造成功、不影响其他功能；若固定操作本身失败则记 `failed`，下次窗口重建/重启时按落库状态重试。
 - **粘贴图片**仅支持位图（截图/复制的图片）；从资源管理器复制的文件请用拖拽或"插入图片"。
 - 导入 JSON 时图片文件不迁移（记录引用原路径），跨机器导入缺失图片会显示"图片缺失"占位。
 
