@@ -66,7 +66,7 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
         {
             // 同步过滤被排除便签的提醒行（避免通过提醒得知私密便签的存在）
             let mut stmt = c.prepare(
-                "SELECT r.id, r.note_id, r.remind_at, r.repeat_type, r.status, r.created_at, r.triggered_at \
+                "SELECT r.id, r.note_id, r.remind_at, r.repeat_type, r.status, r.created_at, r.triggered_at, r.anchor_at \
                  FROM reminders r \
                  LEFT JOIN notes n ON n.id = r.note_id \
                  WHERE ?1 OR COALESCE(n.is_private, 0) = 0 \
@@ -81,6 +81,7 @@ pub fn build_export(db: &Db, include_private: bool) -> AppResult<ExportData> {
                     status: r.get(4)?,
                     created_at: r.get(5)?,
                     triggered_at: r.get(6)?,
+                    anchor_at: r.get(7)?,
                 })
             })?;
             for row in rows {
@@ -245,9 +246,9 @@ pub fn import_from_file(db: &Db, path: &str) -> AppResult<ImportSummary> {
             }
             tx.execute(
                 "INSERT OR REPLACE INTO reminders \
-                 (id, note_id, remind_at, repeat_type, status, created_at, triggered_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![r.id, r.note_id, r.remind_at, r.repeat_type, r.status, r.created_at, r.triggered_at],
+                 (id, note_id, remind_at, repeat_type, status, created_at, triggered_at, anchor_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![r.id, r.note_id, r.remind_at, r.repeat_type, r.status, r.created_at, r.triggered_at, r.anchor_at],
             )?;
         }
 

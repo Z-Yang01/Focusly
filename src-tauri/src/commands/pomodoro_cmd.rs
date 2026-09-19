@@ -108,6 +108,32 @@ pub fn pomodoro_stats_range(app: AppHandle, days: i64) -> AppResult<Vec<DailySta
         .with(|c| crate::db::pomodoro_sessions::stats_daily(c, days))
 }
 
+/// 复盘报表（周/月窗口；start_date..end_date 本地日闭区间 YYYY-MM-DD）：
+/// 逐日聚合 + 合计/完成率 + Top 任务 + 中断原因分布 + 时段分布。
+#[tauri::command]
+pub fn pomodoro_stats_report(
+    app: AppHandle,
+    start_date: String,
+    end_date: String,
+) -> AppResult<crate::db::pomodoro_sessions::FocusReport> {
+    let state = app.state::<AppState>();
+    state
+        .db
+        .with(|c| crate::db::pomodoro_sessions::stats_report(c, &start_date, &end_date))
+}
+
+/// 某本地日的实际专注会话（时间轴"实际专注块"），开始时间升序。
+#[tauri::command]
+pub fn pomodoro_sessions_by_date(
+    app: AppHandle,
+    date: String,
+) -> AppResult<Vec<crate::db::models::PomodoroSession>> {
+    let state = app.state::<AppState>();
+    state
+        .db
+        .with(|c| crate::db::pomodoro_sessions::sessions_by_date(c, &date))
+}
+
 /// 单条任务元数据（不存在返回 null）。
 #[tauri::command]
 pub fn task_meta_get(

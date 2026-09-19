@@ -138,6 +138,10 @@ pub struct Reminder {
     pub status: String,
     pub created_at: String,
     pub triggered_at: Option<String>,
+    /// 月/年重复的原始锚点（v11；NULL = v11 前旧行，退化为以 remind_at 为锚）。
+    /// 链式补建下一轮时透传本值，防止月末 clamp 后日号永久漂移（31→28→28）。
+    #[serde(default)]
+    pub anchor_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

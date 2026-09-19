@@ -180,14 +180,17 @@ pub fn list_for_note(conn: &Connection, note_id: &str) -> AppResult<Vec<TaskMeta
 /// 待办拖动排序落库：keys 顺序即展示顺序（1..n）。
 /// 只写 sort_order，不动正文（待办真相源 = 正文复选框）；
 /// 未包含的行（新增任务）保持 NULL，展示时排在已排序序列之后按内容顺序兜底。
+/// 单事务：中途失败整体回滚，不会留下半新半旧的序号。
 pub fn reorder(conn: &Connection, note_id: &str, keys: &[String]) -> AppResult<usize> {
+    let tx = conn.unchecked_transaction()?;
     let mut n = 0;
     for (i, key) in keys.iter().enumerate() {
-        n += conn.execute(
+        n += tx.execute(
             "UPDATE task_meta SET sort_order = ?3 WHERE note_id = ?1 AND task_key = ?2",
             params![note_id, key, (i + 1) as i64],
         )?;
     }
+    tx.commit()?;
     Ok(n)
 }
 

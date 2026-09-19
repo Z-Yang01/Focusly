@@ -218,6 +218,8 @@ pub fn run() {
             commands::pomodoro_cmd::pomodoro_complete_task,
             commands::pomodoro_cmd::pomodoro_stats_today,
             commands::pomodoro_cmd::pomodoro_stats_range,
+            commands::pomodoro_cmd::pomodoro_stats_report,
+            commands::pomodoro_cmd::pomodoro_sessions_by_date,
             commands::pomodoro_cmd::task_meta_get,
             commands::pomodoro_cmd::task_meta_list,
             commands::pomodoro_cmd::task_meta_update,

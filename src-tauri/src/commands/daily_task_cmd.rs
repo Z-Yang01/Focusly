@@ -1,12 +1,13 @@
 //! 今日任务命令（薄层）：CRUD / 状态 / 拖拽调时 / 转便签 / 统计 / 搜索。
 //! 前端参数 camelCase（tauri 自动转换），如 `daily_task_create({ date, title, ... })`。
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::daily_task;
 use crate::db::daily_tasks;
 use crate::db::models::{DailyTask, DailyTaskStats, Note};
 use crate::error::AppResult;
+use crate::pomodoro;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -46,6 +47,7 @@ pub fn daily_task_create(
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn daily_task_update(
+    app: AppHandle,
     state: State<'_, AppState>,
     id: String,
     date: String,
@@ -60,7 +62,7 @@ pub fn daily_task_update(
     is_private: Option<bool>,
     focus_min: Option<i64>,
 ) -> AppResult<DailyTask> {
-    state.db.with(|c| {
+    let task = state.db.with(|c| {
         daily_tasks::update(
             c,
             &id,
@@ -76,7 +78,12 @@ pub fn daily_task_update(
             is_private.unwrap_or(false),
             focus_min,
         )
-    })
+    })?;
+    // 私密防线：任务转私密 → 脱敏其全部番茄会话文本快照（含运行中与历史行）
+    if task.is_private {
+        crate::pomodoro::scrub_daily_task_text(&app, &id);
+    }
+    Ok(task)
 }
 
 /// 按日列表：先物化当日到期重复实例，再返回（模板行不出现）。
@@ -88,13 +95,32 @@ pub fn daily_task_list(state: State<'_, AppState>, date: String) -> AppResult<Ve
     })
 }
 
+/// 设置今日任务状态。置 done 时若该任务绑定的番茄仍在运行，
+/// 自动以 reason="task_done" 结束（防"事毕钟走"）；判定与停止在状态机内原子完成
+/// （StopIfTask），避免"读快照 → 发停止"窗口内 Start 换任务导致误杀新会话。
 #[tauri::command]
-pub fn daily_task_set_status(
-    state: State<'_, AppState>,
+pub async fn daily_task_set_status(
+    app: AppHandle,
     id: String,
     status: String,
 ) -> AppResult<DailyTask> {
-    state.db.with(|c| daily_tasks::set_status(c, &id, &status))
+    let task = {
+        let state = app.state::<AppState>();
+        state
+            .db
+            .with(|c| daily_tasks::set_status(c, &id, &status))?
+    };
+    if status == "done" {
+        pomodoro::send_sync(
+            &app,
+            pomodoro::PomodoroCmd::StopIfTask {
+                task_key: format!("daily:{id}"),
+                reason: "task_done".into(),
+            },
+        )
+        .await?;
+    }
+    Ok(task)
 }
 
 /// 拖拽调整时间块（15 分钟吸附由前端完成，后端只校验格式）。

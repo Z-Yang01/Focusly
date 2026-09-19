@@ -123,7 +123,7 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 
 ### 5. 数据库 Schema
 
-见 `src-tauri/src/db/migrations.rs`（PRAGMA user_version 迁移，当前 v10）：
+见 `src-tauri/src/db/migrations.rs`（PRAGMA user_version 迁移，当前 v11）：
 
 - v1（7 张表）：`notes`, `note_images`, `reminders`, `tags` + `note_tags`, `shortcuts`, `settings`
 - v2：`notes` 补列 `deleted_at` / `is_private` / `locked` / `readonly_flag` / `scale`；新增 `note_versions`（版本快照）、`clipboard_history`（剪贴板历史）、`saved_searches`（保存的搜索）、`notes_fts`（FTS5 trigram 虚表，触发器外由业务层同步）
@@ -135,6 +135,7 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 - v8：今日任务时间轴——`daily_tasks` 表 + `pomodoro_sessions.daily_task_id` 外键
 - v9：每任务专注时长覆盖——`task_meta.focus_min` / `daily_tasks.focus_min`（NULL = 跟随全局 `pomo_focus_min`）
 - v10：待办拖动排序——`task_meta.sort_order`（1..n；NULL = 未排序按内容顺序兜底；只决定展示顺序，不回写正文）
+- v11：月/年重复提醒的原始锚点——`reminders.anchor_at`（链式触发从锚点重算，防止月末 clamp 后日号永久漂移）
 
 ### 6. Rust / React 架构
 

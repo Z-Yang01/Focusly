@@ -9,6 +9,7 @@ import type {
   DupGroup,
   DueViewData,
   FullscreenBehavior,
+  FocusReport,
   ImportSummary,
   LayoutPreset,
   Note,
@@ -19,6 +20,7 @@ import type {
   NoteSummary,
   NoteVersion,
   NlParsed,
+  PomodoroSession,
   PrivacyFlag,
   PrivateNote,
   RepeatType,
@@ -153,6 +155,12 @@ export const pomodoroState = async (): Promise<StatePayload | null> => {
 export const pomodoroStatsToday = () => invoke<StatsToday>("pomodoro_stats_today");
 export const pomodoroStatsRange = (days: number) =>
   invoke<DailyStat[]>("pomodoro_stats_range", { days });
+/** 复盘报表（周/月窗口，本地日闭区间 YYYY-MM-DD） */
+export const pomodoroStatsReport = (startDate: string, endDate: string) =>
+  invoke<FocusReport>("pomodoro_stats_report", { startDate, endDate });
+/** 某本地日的实际专注会话（时间轴"实际专注块"） */
+export const pomodoroSessionsByDate = (date: string) =>
+  invoke<PomodoroSession[]>("pomodoro_sessions_by_date", { date });
 
 export const taskMetaGet = (noteId: string) => invoke<TaskMeta[]>("task_meta_list", { noteId });
 

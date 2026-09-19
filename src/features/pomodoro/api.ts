@@ -16,6 +16,8 @@ export {
   taskMetaGet,
   taskMetaReorder,
   taskMetaUpdate,
+  pomodoroStatsReport,
+  pomodoroSessionsByDate,
   type TaskMetaUpdateArgs,
 } from "@/lib/api";
 export {

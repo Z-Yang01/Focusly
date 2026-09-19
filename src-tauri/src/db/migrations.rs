@@ -219,6 +219,11 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     r#"
     ALTER TABLE task_meta ADD COLUMN sort_order INTEGER;
     "#,
+    // v11: 月/年重复提醒的原始锚点。链式补建下一轮时透传，防止月末 clamp 后日号
+    // 永久漂移（1-31 → 2-28 → 3-28…）；旧行 NULL = 以自身 remind_at 为锚（维持旧行为）。
+    r#"
+    ALTER TABLE reminders ADD COLUMN anchor_at TEXT;
+    "#,
 ];
 
 use rusqlite::Connection;

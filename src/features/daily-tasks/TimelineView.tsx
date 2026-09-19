@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Pencil, Play, SkipForward, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/stores/toast";
-import { onPomodoroFinished } from "@/lib/tauri";
+import { onPomodoroFinished, onPomodoroState } from "@/lib/tauri";
 import {
   dailyTaskCreate,
   dailyTaskDelete,
@@ -17,6 +17,7 @@ import {
   dailyTaskToNote,
   dailyTaskUpdate,
   openNoteWindow,
+  pomodoroSessionsByDate,
   pomodoroStart,
   pomodoroState,
   pomodoroStop,
@@ -65,11 +66,19 @@ export function TimelineView({ className }: Props) {
     },
   });
 
+  // 当日实际专注会话（时间轴右侧的"实际专注块"）
+  const sessionsQuery = useQuery({
+    queryKey: ["pomoSessions", date],
+    queryFn: () => pomodoroSessionsByDate(date),
+  });
+
   const tasks = useMemo(() => listQuery.data?.tasks ?? [], [listQuery.data]);
+  const sessions = useMemo(() => sessionsQuery.data ?? [], [sessionsQuery.data]);
   const stats = listQuery.data?.stats;
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["dailyTasks"] });
+    void queryClient.invalidateQueries({ queryKey: ["pomoSessions"] });
   }, [queryClient]);
 
   // 当前时间线每 30 秒刷新
@@ -302,7 +311,8 @@ export function TimelineView({ className }: Props) {
                     top: minutesToY(effStart, range, PX_PER_HOUR) + 24,
                     height: (durMin / 60) * PX_PER_HOUR - 4,
                     left: `calc(${lane * laneW}% + 4px)`,
-                    width: `calc(${laneW}% - 8px)`,
+                    // 右侧让出 18px 竖槽给"实际专注块"
+                    width: `calc(${laneW}% - 26px)`,
                     borderLeftWidth: 3,
                     borderLeftColor: t.priority === "high" ? "#ef4444" : t.priority === "low" ? "#38bdf8" : "#f59e0b",
                     touchAction: "none",
@@ -344,6 +354,28 @@ export function TimelineView({ className }: Props) {
                     </div>
                   </div>
                 </div>
+              );
+            })}
+            {/* 实际专注块（番茄会话：右侧竖槽细条，中断为灰色）。
+                渲染在任务块之后（后画者在上），且任务块宽度让出右侧竖槽，避免被常态遮挡 */}
+            {sessions.map((s) => {
+              const d = new Date(s.startedAt);
+              const startMin = d.getHours() * 60 + d.getMinutes();
+              if (startMin > range.endMin) return null;
+              const top = Math.max(0, minutesToY(startMin, range, PX_PER_HOUR)) + 24;
+              const axisBottom = ((range.endMin - range.startMin) / 60) * PX_PER_HOUR + 24;
+              const height = Math.max(6, Math.min((s.actualSec / 3600) * PX_PER_HOUR, axisBottom - top));
+              const label = s.taskTextSnapshot?.trim() ? s.taskTextSnapshot : "专注";
+              const t0 = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+              return (
+                <div
+                  key={s.id}
+                  title={`${t0} · ${label} · ${Math.round(s.actualSec / 60)} 分钟${s.status === "interrupted" ? "（中断）" : ""}`}
+                  className={`pointer-events-none absolute rounded-full ${
+                    s.status === "interrupted" ? "bg-muted-foreground/25" : "bg-primary/30"
+                  }`}
+                  style={{ top, height, right: 5, width: 8 }}
+                />
               );
             })}
           </div>
@@ -404,18 +436,28 @@ function IconBtn({ title, onClick, children }: { title: string; onClick: () => v
   );
 }
 
-/** 番茄启动按钮：运行中且绑定了同一任务 → 显示停止 */
+/** 番茄启动按钮：运行中且绑定了同一任务 → 显示停止。
+ *  订阅状态事件：番茄被自动停止（任务完成联动）或从其他窗口停止后按钮即时归位。 */
 function PomoBtn({ task, onStart }: { task: DailyTask; onStart: (t: DailyTask) => void }) {
   const [running, setRunning] = useState(false);
   const [sameTask, setSameTask] = useState(false);
   useEffect(() => {
     let alive = true;
-    void pomodoroState().then((st) => {
-      if (!alive) return;
+    const sync = (st: { running?: boolean; taskKey?: string | null } | null) => {
       setRunning(Boolean(st?.running));
       setSameTask(st?.taskKey === `daily:${task.id}`);
+    };
+    void pomodoroState().then((st) => {
+      if (alive) sync(st);
     });
-    return () => { alive = false; };
+    void onPomodoroState((st) => {
+      if (alive) sync(st?.running ? { running: true, taskKey: st.taskKey } : null);
+    }).then((off) => {
+      if (!alive) off();
+    });
+    return () => {
+      alive = false;
+    };
   }, [task.id]);
   if (running && sameTask) {
     return (
