@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use rusqlite::{params, Connection, Row};
 use uuid::Uuid;
 
@@ -124,7 +122,7 @@ fn attach_tags_and_summary(
     cap: bool,
 ) -> AppResult<Vec<NoteSummary>> {
     let ids: Vec<String> = notes.iter().map(|n| n.id.clone()).collect();
-    let tag_map = tags_batch(conn, &ids)?;
+    let tag_map = super::tags::for_notes(conn, &ids)?;
     Ok(notes
         .into_iter()
         .map(|n| {
@@ -132,34 +130,6 @@ fn attach_tags_and_summary(
             summary_with(n, tags, cap)
         })
         .collect())
-}
-
-/// 批量取标签：note_id -> 按名升序的标签列表（与 tags_for_note 同序）。
-fn tags_batch(
-    conn: &Connection,
-    note_ids: &[String],
-) -> AppResult<HashMap<String, Vec<String>>> {
-    let mut map: HashMap<String, Vec<String>> = HashMap::new();
-    // 分批防 SQLite 变量数上限
-    for chunk in note_ids.chunks(500) {
-        let placeholders = vec!["?"; chunk.len()].join(",");
-        let sql = format!(
-            "SELECT nt.note_id, t.name FROM note_tags nt \
-             JOIN tags t ON t.id = nt.tag_id \
-             WHERE nt.note_id IN ({placeholders}) ORDER BY t.name ASC"
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let binds: Vec<&dyn rusqlite::ToSql> =
-            chunk.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
-        let rows = stmt.query_map(binds.as_slice(), |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-        })?;
-        for row in rows {
-            let (note_id, name) = row?;
-            map.entry(note_id).or_default().push(name);
-        }
-    }
-    Ok(map)
 }
 
 /// 列表/搜索传输瘦身：正文截断上限（字符）。卡片摘要只需 60 字符，

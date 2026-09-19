@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rusqlite::{params, Connection};
 use uuid::Uuid;
 
@@ -17,6 +19,31 @@ pub fn tags_for_note(conn: &Connection, note_id: &str) -> AppResult<Vec<String>>
         .query_map(params![note_id], |r| r.get::<_, String>(0))?
         .collect::<rusqlite::Result<_>>()?;
     Ok(names)
+}
+
+/// 批量取标签：note_id -> 按名升序的标签列表（与 tags_for_note 同序）。
+/// 供列表/搜索等批量路径替代逐便签 N+1；分批防 SQLite 变量数上限。
+pub fn for_notes(conn: &Connection, note_ids: &[String]) -> AppResult<HashMap<String, Vec<String>>> {
+    let mut map: HashMap<String, Vec<String>> = HashMap::new();
+    for chunk in note_ids.chunks(500) {
+        let placeholders = vec!["?"; chunk.len()].join(",");
+        let sql = format!(
+            "SELECT nt.note_id, t.name FROM note_tags nt \
+             JOIN tags t ON t.id = nt.tag_id \
+             WHERE nt.note_id IN ({placeholders}) ORDER BY t.name ASC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let binds: Vec<&dyn rusqlite::ToSql> =
+            chunk.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        let rows = stmt.query_map(binds.as_slice(), |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (note_id, name) = row?;
+            map.entry(note_id).or_default().push(name);
+        }
+    }
+    Ok(map)
 }
 
 pub fn all_tags_with_counts(conn: &Connection) -> AppResult<Vec<(String, i64)>> {

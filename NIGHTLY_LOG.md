@@ -20,4 +20,13 @@
 - a11y：ReminderBanner 容器补 role="alert"（提醒横幅出现即被读屏播报）。
 - 测试：cargo test 215+5 通过，clippy 干净，vitest 294 通过。
 
+## Round 3（02:45–02:48）
+- 改动：搜索命中标签 N+1 消除——R1 的私有 tags_batch 提升为 `db::tags::for_notes`（pub，同序同果），
+  db/search.rs 的 finish_hit（逐条查）改为 finish_hits（单条聚合查询，500/批）；
+  FTS 与 LIKE 降级两条路径共用；db/notes.rs 列表路径改调共用函数（净 -29 行重复）。
+  搜索是每次按键（250ms 防抖）触发的热路径，最多 50 命中此前 = 50 次标签查询。
+- 测试：cargo test 215+5 通过，clippy 0 警告（清理了移动后残留的 unused import），vitest 294 通过。
+  既有搜索测试断言 tags 结果与排序（fts_finds_keyword_substring_and_highlights）覆盖了等价性。
+
+
 

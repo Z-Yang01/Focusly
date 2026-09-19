@@ -75,10 +75,20 @@ pub fn search(
     }
 }
 
-/// 每条命中聚合 tags 与待办统计。
-fn finish_hit(conn: &Connection, mut hit: SearchHit) -> AppResult<SearchHit> {
-    hit.tags = tags::tags_for_note(conn, &hit.id)?;
-    Ok(hit)
+/// 批量为命中聚合 tags（一条查询；此前逐条 tags_for_note，最多 50 命中 = 50 次查询）。
+fn finish_hits(
+    conn: &Connection,
+    hits: Vec<crate::db::models::SearchHit>,
+) -> AppResult<Vec<crate::db::models::SearchHit>> {
+    let ids: Vec<String> = hits.iter().map(|h| h.id.clone()).collect();
+    let tag_map = tags::for_notes(conn, &ids)?;
+    Ok(hits
+        .into_iter()
+        .map(|mut h| {
+            h.tags = tag_map.get(&h.id).cloned().unwrap_or_default();
+            h
+        })
+        .collect())
 }
 
 fn search_fts(
@@ -105,7 +115,7 @@ fn search_fts(
     let hits: Vec<crate::db::models::SearchHit> = stmt
         .query_map(params![phrase, include_private], row_to_hit)?
         .collect::<rusqlite::Result<_>>()?;
-    hits.into_iter().map(|h| finish_hit(conn, h)).collect()
+    finish_hits(conn, hits)
 }
 
 fn search_like(
@@ -141,7 +151,7 @@ fn search_like(
             Ok(hit)
         })?
         .collect::<rusqlite::Result<_>>()?;
-    hits.into_iter().map(|h| finish_hit(conn, h)).collect()
+    finish_hits(conn, hits)
 }
 
 fn row_to_hit(r: &Row) -> rusqlite::Result<SearchHit> {
