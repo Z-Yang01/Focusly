@@ -11,6 +11,7 @@ pub const SHORTCUT_ERROR: &str = "shortcut-error";
 pub const NOTES_VISIBILITY: &str = "notes-visibility";
 pub const FOCUS_SEARCH: &str = "focus-search";
 pub const OPEN_SETTINGS: &str = "open-settings";
+pub const APP_EXIT_FLUSH: &str = "app-exit-flush";
 pub const POMODORO_STATE: &str = "pomodoro-state";
 pub const POMODORO_FINISHED: &str = "pomodoro-finished";
 /// 前端已约定（types/index.ts#POMODORO_EVENTS.taskMetaChanged）；

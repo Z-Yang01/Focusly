@@ -3,7 +3,7 @@
  *  编辑、删除、转便签。纯几何逻辑在 ./timeline.ts。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Pencil, Play, SkipForward, Square, Trash2 } from "lucide-react";
+import { CalendarDays, Check, Copy, Pencil, Play, SkipForward, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/stores/toast";
 import { onPomodoroFinished, onPomodoroState } from "@/lib/tauri";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/api";
 import type { DailyTask, DailyTaskStats } from "@/types";
 import { TaskDialog, emptyValue, fromTask, type TaskDialogValue } from "./TaskDialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   addDays,
   currentLinePercent,
@@ -305,7 +306,7 @@ export function TimelineView({ className }: Props) {
                   onPointerDown={(e) => onBlockPointerDown(e, t)}
                   onPointerMove={onBlockPointerMove}
                   onPointerUp={() => void onBlockPointerUp()}
-                  className={`group absolute cursor-grab select-none rounded-md border bg-card/95 p-1.5 text-xs shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing ${
+                  className={`group absolute cursor-grab select-none rounded-md border bg-card/95 p-1.5 text-xs shadow-sm transition-shadow hover:z-10 hover:shadow-md active:cursor-grabbing ${
                     t.status === "done" ? "opacity-60" : ""}`}
                   style={{
                     top: minutesToY(effStart, range, PX_PER_HOUR) + 24,
@@ -348,7 +349,13 @@ export function TimelineView({ className }: Props) {
                       )}
                       <IconBtn title="编辑" onClick={() => openEdit(t)}><Pencil className="size-3" /></IconBtn>
                       <IconBtn title="转为便签" onClick={() => void toNote(t)}><Copy className="size-3" /></IconBtn>
-                      <IconBtn title="删除" onClick={() => void act(() => dailyTaskDelete(t.id), "已删除")}>
+                      <IconBtn
+                        title="删除"
+                        onClick={() => {
+                          if (!window.confirm(`删除任务「${t.isPrivate ? "🔒 私密任务" : t.title}」？不可恢复。`)) return;
+                          void act(() => dailyTaskDelete(t.id), "已删除");
+                        }}
+                      >
                         <Trash2 className="size-3" />
                       </IconBtn>
                     </div>
@@ -382,6 +389,17 @@ export function TimelineView({ className }: Props) {
         </div>
       </div>
 
+      {/* 空态引导：与其它视图的 EmptyState 一致，指向右上角「+ 添加任务」 */}
+      {tasks.length === 0 && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/60">
+          <EmptyState
+            icon={CalendarDays}
+            title="今天还没有安排"
+            description="点击右上角「+ 添加任务」把要做的事排进时间轴；也可以从便签待办右键「加入今日计划」。"
+          />
+        </div>
+      )}
+
       {/* 未排时区 */}
       {unscheduled.length > 0 && (
         <div className="shrink-0 border-t px-3 py-2">
@@ -397,7 +415,13 @@ export function TimelineView({ className }: Props) {
                     <Check className="size-3" />
                   </IconBtn>
                   <IconBtn title="编辑" onClick={() => openEdit(t)}><Pencil className="size-3" /></IconBtn>
-                  <IconBtn title="删除" onClick={() => void act(() => dailyTaskDelete(t.id), "已删除")}>
+                  <IconBtn
+                    title="删除"
+                    onClick={() => {
+                      if (!window.confirm(`删除任务「${t.isPrivate ? "🔒 私密任务" : t.title}」？不可恢复。`)) return;
+                      void act(() => dailyTaskDelete(t.id), "已删除");
+                    }}
+                  >
                     <Trash2 className="size-3" />
                   </IconBtn>
                 </span>

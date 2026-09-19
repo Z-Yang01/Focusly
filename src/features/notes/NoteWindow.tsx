@@ -252,7 +252,7 @@ interface NoteFooterProps {
 
 function NoteFooter({ noteId, detail, stats, autosave, onRefreshMeta }: NoteFooterProps) {
   return (
-    <div className="flex h-8 shrink-0 items-center gap-2 border-t border-primary/10 bg-primary/[0.03] px-2 text-xs text-muted-foreground">
+    <div className="flex h-8 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-primary/10 bg-primary/[0.03] px-2 text-xs text-muted-foreground">
       {stats.total > 0 && (
         <span className="flex shrink-0 items-center gap-1">
           <SquareCheck className="size-3.5" />
@@ -262,13 +262,13 @@ function NoteFooter({ noteId, detail, stats, autosave, onRefreshMeta }: NoteFoot
       <PomodoroBar noteId={noteId} />
       <div className="min-w-0 flex-1" />
       <ReminderPopover note={detail} onChanged={onRefreshMeta} />
-      <span className={cn("shrink-0 tabular-nums", autosave.error && "text-destructive")}>
+      <span className={cn("shrink-0 whitespace-nowrap tabular-nums", autosave.error && "text-destructive")}>
         {autosave.saving
           ? "保存中…"
           : autosave.error
             ? "保存失败"
             : autosave.lastSavedAt
-              ? `已保存 ${savedAtText(autosave.lastSavedAt)}`
+              ? savedAtText(autosave.lastSavedAt)
               : ""}
       </span>
     </div>
@@ -626,7 +626,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
 
   if (loadState === "loading") {
     return (
-      <div className="m-0.5 overflow-hidden rounded-xl border bg-background shadow-sm" style={{ height: "360px" }}>
+      <div className="m-0.5 h-[calc(100vh-4px)] overflow-hidden rounded-xl border bg-background shadow-sm">
         <div className="flex h-10 items-center gap-2 border-b px-3">
           <Skeleton className="h-4 w-32" />
         </div>

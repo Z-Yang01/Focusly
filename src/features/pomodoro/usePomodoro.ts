@@ -2,6 +2,7 @@
  *  多组件、多窗口（同一 webview 内）共享同一份状态；跨窗口靠 pomodoro-state 事件同步。
  *  剩余秒数的权威是 endsAt（本地 setInterval 每秒推算）；暂停时用 remainingSec 静态值。 */
 import { useCallback, useEffect, useMemo } from "react";
+import { toast } from "@/stores/toast";
 import { create } from "zustand";
 import {
   onPomodoroFinished,
@@ -84,6 +85,13 @@ async function ensureRuntime(): Promise<void> {
       // 提示音：focus 结束→chime；break 结束→soft
       if (e.phase === "focus") playPomodoroDone();
       else playBreakDone();
+      // 中断反馈：手动停止/跳过/意外退出导致 focus 会话中断时明确告知（本番茄未计入）
+      if (
+        e.phase === "focus" &&
+        (e.reason === "manual" || e.reason === "skip" || e.reason === "app_exit")
+      ) {
+        toast.info("专注已中断，本番茄未计入统计");
+      }
       void pomodoroState()
         .then((s) => {
           if (token === runtimeToken) usePomodoroStore.getState().apply(s);

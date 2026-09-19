@@ -227,6 +227,8 @@ export const resetShortcuts = () => invoke<void>("reset_shortcuts");
 
 // ---------- 数据 / 诊断 ----------
 export const exportData = (path: string) => invoke<void>("export_data", { path });
+/** 立即做一次备份快照（导入等覆盖性操作前调用） */
+export const backupNow = () => invoke<void>("backup_now");
 export const importData = (path: string) => invoke<ImportSummary>("import_data", { path });
 export const getAppInfo = () => invoke<AppInfo>("get_app_info");
 /** 导出诊断包：环境/数据库健康/日志尾部（不含便签内容，不含私密数据） */

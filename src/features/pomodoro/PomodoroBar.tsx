@@ -1,5 +1,8 @@
 /** 便签底栏番茄条：Idle → 开始按钮；Running/Paused → 倒计时 + 控制按钮。
- *  状态来自全局 usePomodoro（多窗口同源）；后端未就绪时降级为提示文本。 */
+ *  状态来自全局 usePomodoro（多窗口同源）；后端未就绪时降级为提示文本。
+ *  窄容器自适应：实测宽度 <300px 时收为 icon-only（320px 默认便签底栏
+ *  与顶栏固定项共存时不溢出，提醒/保存状态保持可见）。 */
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { StatePayload } from "./types";
@@ -20,15 +23,39 @@ function sessionActive(state: StatePayload | null): boolean {
   return state.paused && state.remainingSec > 0;
 }
 
+/** 实测容器宽度：<300px 视为窄态（320px 便签底栏 / 拖窄的顶栏） */
+function useCompact(): {
+  ref: React.RefObject<HTMLDivElement>;
+  compact: boolean;
+} {
+  const ref = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setCompact(entry.contentRect.width < 300);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, compact };
+}
+
 export function PomodoroBar({ noteId, taskKey, taskText }: PomodoroBarProps) {
   const { state, mmss, isRunning, available, start, pause, resume, skip, stop, addMinutes } =
     usePomodoro();
+  const { ref, compact } = useCompact();
 
   if (!available) {
     return (
-      <span className="select-none truncate text-muted-foreground/60" title="番茄钟后端未就绪">
-        番茄钟后端未就绪
-      </span>
+      <div ref={ref} className="flex min-w-0 items-center">
+        <span className="select-none truncate text-muted-foreground/60" title="番茄钟后端未就绪">
+          番茄钟后端未就绪
+        </span>
+      </div>
     );
   }
 
@@ -43,15 +70,17 @@ export function PomodoroBar({ noteId, taskKey, taskText }: PomodoroBarProps) {
       }
     };
     return (
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-        onClick={handleStart}
-      >
-        🍅 开始专注
-      </Button>
+      <div ref={ref} className="flex min-w-0 items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={handleStart}
+        >
+          🍅{compact ? "" : " 开始专注"}
+        </Button>
+      </div>
     );
   }
 
@@ -60,39 +89,44 @@ export function PomodoroBar({ noteId, taskKey, taskText }: PomodoroBarProps) {
   const paused = !isRunning && !!state?.paused;
 
   const ctrl =
-    "h-6 gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:text-foreground";
+    "h-6 shrink-0 gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:text-foreground";
+  const ctrlTitle = (label: string) => (compact ? label : undefined);
 
   return (
-    <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+    <div ref={ref} className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
       <span
-        className={cn("select-none font-medium tabular-nums text-foreground", paused && "opacity-70")}
+        className={cn("shrink-0 select-none font-medium tabular-nums text-foreground", paused && "opacity-70")}
         title={paused ? "已暂停" : "专注进行中"}
       >
         🍅 {mmss}
       </span>
       {paused && <span className="select-none">⏸</span>}
-      {taskLabel && (
+      {!compact && taskLabel && (
         <span className="max-w-[120px] truncate" title={taskLabel}>
           {taskLabel}
         </span>
       )}
-      {boundHere && (state?.completedInCycle ?? 0) > 0 && (
+      {!compact && boundHere && (state?.completedInCycle ?? 0) > 0 && (
         <span className="select-none tabular-nums" title="本轮已完成的番茄数">
           ×{state?.completedInCycle}
         </span>
       )}
-      <Button type="button" variant="ghost" size="sm" className={ctrl} onClick={() => void (paused ? resume() : pause())}>
-        {paused ? "继续" : "暂停"}
+      <Button type="button" variant="ghost" size="sm" className={ctrl} title={ctrlTitle(paused ? "继续" : "暂停")} onClick={() => void (paused ? resume() : pause())}>
+        {paused ? (compact ? "▶" : "继续") : compact ? "⏸" : "暂停"}
       </Button>
-      <Button type="button" variant="ghost" size="sm" className={ctrl} onClick={() => void skip()}>
-        跳过
+      {!compact && (
+        <Button type="button" variant="ghost" size="sm" className={ctrl} onClick={() => void skip()}>
+          跳过
+        </Button>
+      )}
+      <Button type="button" variant="ghost" size="sm" className={ctrl} title={ctrlTitle("停止")} onClick={() => void stop("manual")}>
+        {compact ? "■" : "停止"}
       </Button>
-      <Button type="button" variant="ghost" size="sm" className={ctrl} onClick={() => void stop("manual")}>
-        停止
-      </Button>
-      <Button type="button" variant="ghost" size="sm" className={ctrl} onClick={() => void addMinutes(5)}>
-        +5分钟
-      </Button>
+      {!compact && (
+        <Button type="button" variant="ghost" size="sm" className={ctrl} onClick={() => void addMinutes(5)}>
+          +5分钟
+        </Button>
+      )}
     </div>
   );
 }

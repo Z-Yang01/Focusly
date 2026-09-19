@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   exportData,
+  backupNow,
   exportDiagnostics,
   getAppInfo,
   getAllSettings,
@@ -197,6 +198,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       });
       const path = Array.isArray(picked) ? picked[0] : picked;
       if (!path) return;
+      // 导入会覆盖同 id 便签与设置（"不会丢"红线）：先确认，再自动做导入前备份
+      if (!window.confirm("导入将覆盖与文件中同 id 的现有便签/提醒/设置。\n已自动创建导入前备份，确认继续？")) return;
+      try {
+        await backupNow();
+      } catch (e) {
+        console.error("导入前备份失败", e);
+      }
       const summary = await importData(path);
       toast.success(`导入完成：新增 ${summary.importedNotes} 条，跳过 ${summary.skipped} 条`);
     } catch (err) {

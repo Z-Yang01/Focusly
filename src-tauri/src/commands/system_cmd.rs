@@ -37,8 +37,14 @@ pub fn hide_manager(app: AppHandle) {
 
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
-    log::info!("用户请求退出应用");
-    app.exit(0);
+    window::exit_app(&app);
+}
+
+/// 立即做一次备份快照（导入等覆盖性操作前调用），轮转策略与启动备份一致。
+#[tauri::command]
+pub fn backup_now(app: AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::state::AppState>();
+    crate::filesystem::backup_database(&state.db, &state.paths)
 }
 
 /// 便签窗口首次渲染完成：应用几何并显示。

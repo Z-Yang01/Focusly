@@ -90,7 +90,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 window::show_manager(app);
                 let _ = app.emit(crate::events::OPEN_SETTINGS, ());
             }
-            "quit" => app.exit(0),
+            "quit" => super::window::exit_app(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
