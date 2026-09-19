@@ -15,6 +15,8 @@ import {
   dailyTaskSetTime,
   dailyTaskStats,
   dailyTaskToNote,
+  dailyTaskListRange,
+  dailyTaskPostponeTo,
   dailyTaskUpdate,
   openNoteWindow,
   pomodoroSessionsByDate,
@@ -24,7 +26,9 @@ import {
 } from "@/lib/api";
 import type { DailyTask, DailyTaskStats } from "@/types";
 import { TaskDialog, emptyValue, fromTask, type TaskDialogValue } from "./TaskDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils";
 import {
   addDays,
   currentLinePercent,
@@ -33,6 +37,8 @@ import {
   localDateKey,
   minutesToY,
   timelineRange,
+  weekDaysOf,
+  weekStartOf,
   weekdayLabel,
 } from "./timeline";
 
@@ -48,6 +54,11 @@ export function TimelineView({ className }: Props) {
   const queryClient = useQueryClient();
   const today = localDateKey(new Date());
   const [date, setDate] = useState(today);
+  const [mode, setMode] = useState<"day" | "week">("day");
+  const [weekStart, setWeekStart] = useState(() => weekStartOf(localDateKey(new Date())));
+  /** 批量顺延选择模式：选中的任务 id 集合 */
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DailyTask | null>(null);
   const [dialogValue, setDialogValue] = useState<TaskDialogValue>(emptyValue());
@@ -66,6 +77,32 @@ export function TimelineView({ className }: Props) {
       return { tasks, stats };
     },
   });
+
+  /** 周概览：一次拉 7 天（命令层对周内最后一天物化重复实例） */
+  const weekQuery = useQuery({
+    queryKey: ["dailyTasks", "week", weekStart],
+    queryFn: () => dailyTaskListRange(weekStart, addDays(weekStart, 6)),
+    enabled: mode === "week",
+  });
+  const weekDays = useMemo(() => weekDaysOf(weekStart), [weekStart]);
+  const weekByDate = useMemo(() => {
+    const map = new Map<string, DailyTask[]>();
+    for (const d of weekDays) map.set(d, []);
+    for (const t of weekQuery.data ?? []) {
+      map.get(t.date)?.push(t);
+    }
+    return map;
+  }, [weekDays, weekQuery.data]);
+
+  const gotoDate = (d: string) => {
+    setDate(d);
+    setWeekStart(weekStartOf(d));
+  };
+  const shiftWeek = (delta: number) => {
+    const ws = addDays(weekStart, delta * 7);
+    setWeekStart(ws);
+    setDate(ws);
+  };
 
   // 当日实际专注会话（时间轴右侧的"实际专注块"）
   const sessionsQuery = useQuery({
@@ -236,27 +273,92 @@ export function TimelineView({ className }: Props) {
       {/* 头部：日期切换 + 进度 + 添加 */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="size-6 text-xs" title="前一天"
-            onClick={() => setDate(addDays(date, -1))}>‹</Button>
-          <input type="date" value={date} max="9999-12-31"
-            onChange={(e) => e.target.value && setDate(e.target.value)}
-            className="h-7 rounded-md border border-input bg-transparent px-2 text-xs" />
-          <Button variant="ghost" size="icon" className="size-6 text-xs" title="后一天"
-            onClick={() => setDate(addDays(date, 1))}>›</Button>
-          {date !== today && (
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setDate(today)}>
-              今天
-            </Button>
+          {mode === "day" ? (
+            <>
+              <Button variant="ghost" size="icon" className="size-6 text-xs" title="前一天"
+                onClick={() => gotoDate(addDays(date, -1))}>‹</Button>
+              <input type="date" value={date} max="9999-12-31"
+                onChange={(e) => e.target.value && gotoDate(e.target.value)}
+                className="h-7 rounded-md border border-input bg-transparent px-2 text-xs" />
+              <Button variant="ghost" size="icon" className="size-6 text-xs" title="后一天"
+                onClick={() => gotoDate(addDays(date, 1))}>›</Button>
+              {date !== today && (
+                <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => gotoDate(today)}>
+                  今天
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground">{weekdayLabel(date)}</span>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="icon" className="size-6 text-xs" title="上一周"
+                onClick={() => shiftWeek(-1)}>‹</Button>
+              <span className="px-1 text-xs tabular-nums text-muted-foreground">
+                {weekStart.slice(5)} ~ {addDays(weekStart, 6).slice(5)}
+              </span>
+              <Button variant="ghost" size="icon" className="size-6 text-xs" title="下一周"
+                onClick={() => shiftWeek(1)}>›</Button>
+              {weekStart !== weekStartOf(today) && (
+                <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => shiftWeek(0)}>
+                  本周
+                </Button>
+              )}
+            </>
           )}
-          <span className="text-xs text-muted-foreground">{weekdayLabel(date)}</span>
+          {/* 日/周切换 */}
+          <div className="ml-1 flex overflow-hidden rounded-md border text-xs">
+            {(["day", "week"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={cn(
+                  "px-2 py-1 transition-colors",
+                  mode === m ? "bg-accent font-medium" : "text-muted-foreground hover:bg-accent/60",
+                )}
+                onClick={() => {
+                  setMode(m);
+                  setSelectMode(false);
+                  setSelectedIds(new Set());
+                  if (m === "week") setWeekStart(weekStartOf(date));
+                }}
+              >
+                {m === "day" ? "日" : "周"}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <span>已完成 {stats?.done ?? 0}/{stats?.total ?? 0}</span>
-          <span>·</span>
-          <span>🍅 {stats?.completedPomodoros ?? 0}/{stats?.estimatePomodoros ?? 0}</span>
-          <span>·</span>
-          <span>专注 {stats?.plannedFocusMinutes ?? 0} 分钟</span>
-          <Button size="sm" className="h-7 px-2 text-xs" onClick={openCreate}>+ 添加任务</Button>
+          {mode === "week" ? (() => {
+            const all = weekQuery.data ?? [];
+            const todoCount = all.filter((t) => t.status === "todo").length;
+            const doneCount = all.filter((t) => t.status === "done").length;
+            return (
+              <>
+                <span>本周 {doneCount + todoCount === 0 ? "暂无任务" : `已完成 ${doneCount}/${doneCount + todoCount}`}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={todoCount === 0}
+                  onClick={() => {
+                    setSelectMode((v) => !v);
+                    setSelectedIds(new Set());
+                  }}
+                >
+                  {selectMode ? "退出选择" : "批量顺延"}
+                </Button>
+              </>
+            );
+          })() : (
+            <>
+              <span>已完成 {stats?.done ?? 0}/{stats?.total ?? 0}</span>
+              <span>·</span>
+              <span>🍅 {stats?.completedPomodoros ?? 0}/{stats?.estimatePomodoros ?? 0}</span>
+              <span>·</span>
+              <span>专注 {stats?.plannedFocusMinutes ?? 0} 分钟</span>
+              <Button size="sm" className="h-7 px-2 text-xs" onClick={openCreate}>+ 添加任务</Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -389,8 +491,8 @@ export function TimelineView({ className }: Props) {
         </div>
       </div>
 
-      {/* 空态引导：与其它视图的 EmptyState 一致，指向右上角「+ 添加任务」 */}
-      {tasks.length === 0 && (
+      {/* 空态引导（日模式）：与其它视图的 EmptyState 一致，指向右上角「+ 添加任务」 */}
+      {mode === "day" && tasks.length === 0 && (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/60">
           <EmptyState
             icon={CalendarDays}
@@ -400,8 +502,126 @@ export function TimelineView({ className }: Props) {
         </div>
       )}
 
-      {/* 未排时区 */}
-      {unscheduled.length > 0 && (
+      {/* 周概览：7 列只读，编辑/拖拽在日视图进行 */}
+      {mode === "week" && (
+        <div className="grid min-h-0 flex-1 grid-cols-7 gap-1.5 overflow-auto p-2">
+          {weekDays.map((d) => {
+            const items = weekByDate.get(d) ?? [];
+            const done = items.filter((t) => t.status === "done").length;
+            const skipped = items.filter((t) => t.status === "skipped").length;
+            const isToday = d === today;
+            return (
+              <div
+                key={d}
+                className={cn(
+                  "flex min-h-0 flex-col rounded-lg border text-xs",
+                  isToday && "border-primary/60 bg-primary/[0.03]",
+                )}
+              >
+                <button
+                  type="button"
+                  className="shrink-0 border-b px-2 py-1.5 text-left hover:bg-accent/60"
+                  onClick={() => {
+                    gotoDate(d);
+                    setMode("day");
+                  }}
+                  title="切到该日时间轴"
+                >
+                  <div className={cn("font-medium", isToday && "text-primary")}>
+                    {weekdayLabel(d)} {d.slice(5)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {items.length === 0
+                      ? "—"
+                      : `完成 ${done}/${items.length}${skipped > 0 ? ` · 跳过 ${skipped}` : ""}`}
+                  </div>
+                </button>
+                <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-1.5">
+                  {items.map((t) => {
+                    const checked = selectMode && t.status === "todo";
+                    return (
+                      <label
+                        key={t.id}
+                        className={cn(
+                          "flex items-center gap-1 rounded border px-1 py-0.5",
+                          t.status === "done" && "opacity-55",
+                          t.status === "skipped" && "text-muted-foreground line-through opacity-60",
+                          checked && "border-primary/70 bg-accent/60",
+                        )}
+                      >
+                        {selectMode && t.status === "todo" && (
+                          <Checkbox
+                            className="size-3"
+                            checked={selectedIds.has(t.id)}
+                            onCheckedChange={(v) =>
+                              setSelectedIds((prev) => {
+                                const nextSet = new Set(prev);
+                                if (v) nextSet.add(t.id);
+                                else nextSet.delete(t.id);
+                                return nextSet;
+                              })
+                            }
+                          />
+                        )}
+                        <span className="min-w-0 flex-1 truncate" title={t.isPrivate ? "🔒 私密任务" : t.title}>
+                          {hhmmToMinutes(t.startTime) !== null && (
+                            <span className="mr-0.5 tabular-nums text-muted-foreground">{t.startTime}</span>
+                          )}
+                          {t.isPrivate ? "🔒 私密任务" : t.title}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 批量顺延操作条 */}
+      {mode === "week" && selectMode && (
+        <div className="flex shrink-0 items-center gap-2 border-t bg-background/95 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            已选 <span className="font-medium tabular-nums text-foreground">{selectedIds.size}</span> 项（勾选待办状态的任务）
+          </span>
+          <Button
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={selectedIds.size === 0}
+            onClick={() => {
+              const target = addDays(date, 1);
+              void dailyTaskPostponeTo([...selectedIds], target)
+                .then((n) => {
+                  toast.success(`已把 ${n} 项顺延到 ${target.slice(5)}`);
+                  setSelectedIds(new Set());
+                  setSelectMode(false);
+                  void queryClient.invalidateQueries({ queryKey: ["dailyTasks"] });
+                })
+                .catch((err) => {
+                  console.error("批量顺延失败", err);
+                  toast.error(`顺延失败：${err instanceof Error ? err.message : String(err)}`);
+                });
+            }}
+          >
+            推迟到 {addDays(date, 1).slice(5)}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              setSelectMode(false);
+              setSelectedIds(new Set());
+            }}
+          >
+            取消
+          </Button>
+        </div>
+      )}
+
+      {/* 未排时区（日模式） */}
+      {mode === "day" && unscheduled.length > 0 && (
         <div className="shrink-0 border-t px-3 py-2">
           <div className="mb-1 text-xs text-muted-foreground">未排时</div>
           <div className="flex flex-wrap gap-1.5">

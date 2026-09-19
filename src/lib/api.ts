@@ -270,6 +270,12 @@ export const dailyTaskCreate = (input: DailyTaskInput) =>
 export const dailyTaskUpdate = (id: string, input: DailyTaskInput) =>
   invoke<DailyTask>("daily_task_update", { id, ...input });
 export const dailyTaskList = (date: string) => invoke<DailyTask[]>("daily_task_list", { date });
+/** 日期范围（闭区间）实例——周概览用；命令层先对 end 物化重复实例 */
+export const dailyTaskListRange = (startDate: string, endDate: string) =>
+  invoke<DailyTask[]>("daily_task_list_range", { startDate, endDate });
+/** 批量顺延到目标日期（重复模板被忽略），返回实际移动数 */
+export const dailyTaskPostponeTo = (ids: string[], date: string) =>
+  invoke<number>("daily_task_postpone_to", { ids, date });
 export const dailyTaskSetStatus = (id: string, status: string) =>
   invoke<DailyTask>("daily_task_set_status", { id, status });
 export const dailyTaskSetTime = (id: string, startTime: string | null, endTime: string | null) =>
