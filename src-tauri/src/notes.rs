@@ -268,16 +268,50 @@ pub fn restore_from_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
     Ok(note)
 }
 
-/// 清空回收站：逐个永久删除。
+/// 清空回收站：批量永久删除。
+/// 单事务删全部行（FTS/task_meta 清理同事务；个别删除失败记日志跳过，不阻塞其余），
+/// 窗口关闭/提醒取消/番茄解绑/图片文件清理逐条 best-effort；全部完成后只发一次 notes-changed。
+/// （此前逐条走 delete_permanently：N 条 = N 个事务 + N 次事件 + N 次前端失效级联）
 pub fn empty_trash(app: &AppHandle) -> AppResult<usize> {
     let state = app.state::<AppState>();
     let ids = state.db.with(crate::db::notes::list_trash_ids)?;
-    let n = ids.len();
-    for id in ids {
-        delete_permanently(app, &id)?;
+    let (image_paths, deleted) = state.db.tx(|c| {
+        let mut paths: Vec<String> = Vec::new();
+        let mut deleted = 0usize;
+        for id in &ids {
+            if let Err(e) = crate::db::search::fts_remove(c, id) {
+                log::warn!("清空回收站：清除便签 {id} 的 FTS 行失败: {e}");
+            }
+            if let Err(e) = crate::db::task_meta::delete_for_note(c, id) {
+                log::warn!("清空回收站：清理便签 {id} 的任务元数据失败: {e}");
+            }
+            match crate::db::notes::delete(c, id) {
+                Ok(p) => {
+                    paths.extend(p);
+                    deleted += 1;
+                }
+                Err(e) => log::warn!("清空回收站：删除便签 {id} 失败（跳过）: {e}"),
+            }
+        }
+        Ok((paths, deleted))
+    })?;
+    for id in &ids {
+        window::close_note_window(app, id);
+        cancel_pending_reminders_best_effort(app, id);
+        stop_bound_pomodoro_best_effort(app, id);
     }
-    log::info!("回收站已清空（{n} 条）");
-    Ok(n)
+    for path in &image_paths {
+        crate::db::images::delete_file_best_effort(&state.paths.images, path);
+    }
+    for id in &ids {
+        crate::db::images::cleanup_note_dir(&state.paths.images, id);
+    }
+    let _ = app.emit(
+        crate::events::NOTES_CHANGED,
+        json!({ "reason": change_reason::STRUCTURE }),
+    );
+    log::info!("回收站已清空（{deleted} 条）");
+    Ok(deleted)
 }
 
 /// 设置私密标志：private / locked / readonly。
