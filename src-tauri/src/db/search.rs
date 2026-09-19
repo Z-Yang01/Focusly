@@ -10,8 +10,23 @@ use crate::error::AppResult;
 
 const SEARCH_LIMIT: i64 = 50;
 
+/// 现有索引行内容（title, body, tags），无索引行返回 None。
+fn fts_current(conn: &Connection, note_id: &str) -> AppResult<Option<(String, String, String)>> {
+    let row = conn.query_row(
+        "SELECT title, body, tags FROM notes_fts WHERE note_id = ?1",
+        params![note_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    );
+    match row {
+        Ok(t) => Ok(Some(t)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// 同步一条便签到 FTS 索引（先删后插，幂等）。
 /// tags_joined 由调用方聚合（如 "工作 学习"），只影响 tags 列的可搜索性。
+/// 同值守卫：三元组与现有索引一致时跳过删插（省整行 trigram 重分词）。
 pub fn fts_sync(
     conn: &Connection,
     note_id: &str,
@@ -19,6 +34,11 @@ pub fn fts_sync(
     body: &str,
     tags_joined: &str,
 ) -> AppResult<()> {
+    if fts_current(conn, note_id)?.is_some_and(|t| {
+        t.0.as_str() == title && t.1.as_str() == body && t.2.as_str() == tags_joined
+    }) {
+        return Ok(());
+    }
     fts_remove(conn, note_id)?;
     conn.execute(
         "INSERT INTO notes_fts (note_id, title, body, tags) VALUES (?1, ?2, ?3, ?4)",

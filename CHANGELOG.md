@@ -198,6 +198,29 @@
 - 前端 +17 用例（qc tab 契约 3、命令面板过滤 6、勿扰纯函数 8）；Rust 新增 focus_silence_until 矩阵、
   迁移默认快捷键白名单/加速器冲突拦截、备份验收
 
+### 性能链路优化批（2026-09-19）
+
+#### Changed（性能）
+- notes-changed 事件风暴收敛：事件 payload 增加 `reason`（content/tags/structure，缺省按 structure）——
+  自动保存（content）在管理器侧 800ms 尾沿防抖合并、不再失效标签查询（正文保存不动标签集合）；
+  便签窗口对 content 事件整体跳过 refreshMeta（正文保存不改 flags/图片/标签/提醒，自身保存本地已是最新）。
+  连续打字从「每 500ms 三列表全量 refetch + 每便签窗一次 get_note」降为「每秒最多一次列表刷新、便签窗零请求」
+- 列表查询 N+1 消除：list/search/list_private 的标签获取改为一条批量聚合查询（500/批，与逐条查询同序同果）；
+  正式列表正文在 Rust 侧截断到 500 字符传输（todo 计数按截断前全文统计，卡片摘要只需 60 字符；
+  回收站列表保留全文——预览面板整文渲染；单便签详情始终全文）
+- 启动开窗查询瘦身：all_active_with_windows 投影不再取正文（开窗只消费 id/几何/标志位，
+  NoteWindow 打开后自行 get_note 加载全文）
+- 自动保存写放大治理：auto 版本快照 120s 节流——节流窗口内的打字中间态不再写 note_versions
+  （50 条配额不再被连续保存灌满；手动/恢复前快照不受限；查询失败退回照常快照），
+  单次自动保存 SQL 从 ~8 条降至 ~5 条
+- FTS 同步同值守卫：title/body/tags 三元组与现有索引一致时跳过删插（省整行 trigram 重分词）
+- NoteCard memo 化 + 管理器 onOpen 改稳定回调（useCallback），列表 refetch 未变卡片不再重渲染
+- 搜索栏任务 token 查询补 250ms 防抖（与主搜索一致，is:task 等前缀输入不再逐键打库）
+
+#### Tests
+- Rust 新增：auto_snapshot_throttle_window（节流窗口矩阵）、
+  list_caps_content_counts_full_trash_keeps_full（截断/全文计数/trash 不截断/详情全文）
+
 ## [0.1.0] - 2026-09-16
 
 ### 初始功能

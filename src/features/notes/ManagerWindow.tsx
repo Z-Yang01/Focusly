@@ -1,5 +1,5 @@
 /** 管理器主窗口（label=manager） */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -119,10 +119,29 @@ function ManagerContent() {
     };
     const onOpenSettingsEvent = () => setSettingsOpen(true);
     const onOpenStatsEvent = () => setStatsOpen(true);
+    // notes-changed 失效策略（按 payload.reason 收敛）：
+    // content（自动保存）→ 尾沿防抖 800ms 只失效列表，且不失效标签（正文保存不动标签集合）；
+    // tags/structure/缺省 → 立即失效列表+标签。连续打字从每 500ms 三列表全量 refetch 降为最多 1 次。
+    let contentTimer: ReturnType<typeof setTimeout> | null = null;
+    const invalidateLists = () => {
+      void queryClient.invalidateQueries({ queryKey: ["notes"] });
+      void queryClient.invalidateQueries({ queryKey: ["tags"] });
+    };
     const offs = [
-      onNotesChanged(() => {
-        void queryClient.invalidateQueries({ queryKey: ["notes"] });
-        void queryClient.invalidateQueries({ queryKey: ["tags"] });
+      onNotesChanged((e) => {
+        if (e.reason === "content") {
+          if (contentTimer) clearTimeout(contentTimer);
+          contentTimer = setTimeout(() => {
+            contentTimer = null;
+            void queryClient.invalidateQueries({ queryKey: ["notes"] });
+          }, 800);
+          return;
+        }
+        if (contentTimer) {
+          clearTimeout(contentTimer);
+          contentTimer = null;
+        }
+        invalidateLists();
       }),
       onFocusSearch(() => searchRef.current?.focus()),
       onOpenSettings(() => setSettingsOpen(true)),
@@ -132,6 +151,7 @@ function ManagerContent() {
     window.addEventListener(FOCUSLY_OPEN_STATS, onOpenStatsEvent);
     return () => {
       offs.forEach((p) => void p.then((f) => f()));
+      if (contentTimer) clearTimeout(contentTimer);
       window.removeEventListener(FOCUSLY_NAVIGATE, onNavigate);
       window.removeEventListener(FOCUSLY_OPEN_SETTINGS, onOpenSettingsEvent);
       window.removeEventListener(FOCUSLY_OPEN_STATS, onOpenStatsEvent);
@@ -187,12 +207,13 @@ function ManagerContent() {
     }
   };
 
-  const handleOpenNote = (id: string) => {
+  // 稳定回调：NoteCard memo 依赖引用相等，内联闭包会让 memo 失效
+  const handleOpenNote = useCallback((id: string) => {
     openNoteWindow(id).catch((err) => {
       console.error("打开便签失败", err);
       toast.error("打开便签失败，请重试");
     });
-  };
+  }, []);
 
   // 键盘网格导航：卡片（data-note-card）聚焦后，方向键在卡片间移动（列数按当前网格实测）
   const handleGridKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -463,7 +484,7 @@ function ManagerContent() {
                       <NoteCard
                         key={note.id}
                         note={note}
-                        onOpen={() => handleOpenNote(note.id)}
+                        onOpen={handleOpenNote}
                       />
                     ))}
                   </div>

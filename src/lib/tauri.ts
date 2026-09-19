@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type {
+  NotesChangedEvent,
   PomodoroFinishedEvent,
   ReminderFiredEvent,
   SettingsChangedEvent,
@@ -31,7 +32,8 @@ export function getWindowRole(): WindowRole {
 export { convertFileSrc, listen };
 export type { UnlistenFn };
 
-export const onNotesChanged = (cb: () => void) => listen(EVENTS.notesChanged, cb);
+export const onNotesChanged = (cb: (e: NotesChangedEvent) => void) =>
+  listen<NotesChangedEvent>(EVENTS.notesChanged, (e) => cb(e.payload));
 export const onSettingsChanged = (cb: (e: SettingsChangedEvent) => void) =>
   listen<SettingsChangedEvent>(EVENTS.settingsChanged, (e) => cb(e.payload));
 export const onReminderFired = (cb: (e: ReminderFiredEvent) => void) =>

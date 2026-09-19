@@ -26,7 +26,7 @@ pub fn set_reminder(
     state.scheduler.wake();
     let _ = app.emit(
         crate::events::NOTES_CHANGED,
-        serde_json::json!({"noteId": note_id}),
+        serde_json::json!({"noteId": note_id, "reason": crate::notes::change_reason::STRUCTURE}),
     );
     log::info!("已设置提醒 {}（{}，{}）", r.id, r.remind_at, r.repeat_type);
     Ok(r)

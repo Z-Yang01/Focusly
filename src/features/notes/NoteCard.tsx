@@ -1,5 +1,5 @@
-/** 便签卡片（管理器网格） */
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+/** 便签卡片（管理器网格）。memo 化：列表 refetch 未变的卡片不重渲染。 */
+import { memo, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Archive, ArchiveRestore, EllipsisVertical, Pin, SquareCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,11 @@ import type { NoteSummary } from "@/types";
 
 export interface NoteCardProps {
   note: NoteSummary;
-  onOpen: () => void;
+  /** 打开便签（传便签 id，由父组件提供稳定回调，配合 memo 生效） */
+  onOpen: (noteId: string) => void;
 }
 
-export function NoteCard({ note, onOpen }: NoteCardProps) {
+export const NoteCard = memo(function NoteCard({ note, onOpen }: NoteCardProps) {
   const handleTogglePin = async () => {
     try {
       await setNoteFlag(note.id, "pinned", !note.isPinned);
@@ -59,7 +60,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
     if (e.target !== e.currentTarget) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      onOpen();
+      onOpen(note.id);
     }
   };
 
@@ -70,7 +71,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
       tabIndex={0}
       aria-label={`打开便签：${note.title || "无标题"}`}
       className="group flex h-36 cursor-pointer flex-col rounded-lg border bg-card p-3 text-sm transition-[box-shadow,border-color] hover:border-primary/50 hover:shadow-md focus-visible:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      onClick={onOpen}
+      onClick={() => onOpen(note.id)}
       onKeyDown={handleCardKeyDown}
     >
       <div className="flex items-start gap-1">
@@ -93,7 +94,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="text-xs" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuItem onSelect={onOpen}>打开</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onOpen(note.id)}>打开</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void handleTogglePin()}>
               {note.isPinned ? "取消置顶" : "置顶"}
             </DropdownMenuItem>
@@ -148,4 +149,4 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
       </div>
     </div>
   );
-}
+});

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use rusqlite::{params, Connection, Row};
 use uuid::Uuid;
 
@@ -110,8 +112,76 @@ pub fn list(conn: &Connection, filter: &str) -> AppResult<Vec<NoteSummary>> {
     let notes: Vec<Note> = stmt
         .query_map(params_slice.as_slice(), row_to_note)?
         .collect::<rusqlite::Result<_>>()?;
+    // 回收站条目的正文供预览面板整文渲染，不截断；其余列表只消费摘要
+    attach_tags_and_summary(conn, notes, filter != "trash")
+}
 
-    notes.into_iter().map(|n| to_summary(conn, n)).collect()
+/// 标签批量聚合 + 摘要组装：一条聚合查询替代逐便签 tags_for_note 的 N+1。
+fn attach_tags_and_summary(
+    conn: &Connection,
+    notes: Vec<Note>,
+    cap: bool,
+) -> AppResult<Vec<NoteSummary>> {
+    let ids: Vec<String> = notes.iter().map(|n| n.id.clone()).collect();
+    let tag_map = tags_batch(conn, &ids)?;
+    Ok(notes
+        .into_iter()
+        .map(|n| {
+            let tags = tag_map.get(&n.id).cloned().unwrap_or_default();
+            summary_with(n, tags, cap)
+        })
+        .collect())
+}
+
+/// 批量取标签：note_id -> 按名升序的标签列表（与 tags_for_note 同序）。
+fn tags_batch(
+    conn: &Connection,
+    note_ids: &[String],
+) -> AppResult<HashMap<String, Vec<String>>> {
+    let mut map: HashMap<String, Vec<String>> = HashMap::new();
+    // 分批防 SQLite 变量数上限
+    for chunk in note_ids.chunks(500) {
+        let placeholders = vec!["?"; chunk.len()].join(",");
+        let sql = format!(
+            "SELECT nt.note_id, t.name FROM note_tags nt \
+             JOIN tags t ON t.id = nt.tag_id \
+             WHERE nt.note_id IN ({placeholders}) ORDER BY t.name ASC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let binds: Vec<&dyn rusqlite::ToSql> =
+            chunk.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        let rows = stmt.query_map(binds.as_slice(), |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (note_id, name) = row?;
+            map.entry(note_id).or_default().push(name);
+        }
+    }
+    Ok(map)
+}
+
+/// 列表/搜索传输瘦身：正文截断上限（字符）。卡片摘要只需 60 字符，
+/// todo 计数已在截断前按全文统计；单便签详情（get_note）始终全文。
+const LIST_CONTENT_CAP_CHARS: usize = 500;
+
+/// 组装列表摘要：todo 计数用截断前的全文算，再按需截断正文。
+/// cap=false（回收站预览）保留全文。
+fn summary_with(mut note: Note, tags: Vec<String>, cap: bool) -> NoteSummary {
+    let (todo_total, todo_done) = count_todos(&note.content);
+    if cap && note.content.chars().count() > LIST_CONTENT_CAP_CHARS {
+        note.content = note
+            .content
+            .chars()
+            .take(LIST_CONTENT_CAP_CHARS)
+            .collect();
+    }
+    NoteSummary {
+        note,
+        tags,
+        todo_total,
+        todo_done,
+    }
 }
 
 pub fn to_summary(conn: &Connection, note: Note) -> AppResult<NoteSummary> {
@@ -320,6 +390,29 @@ pub fn snapshot_version(conn: &Connection, note_id: &str, source: &str) -> AppRe
     Ok(())
 }
 
+/// auto 快照最小间隔（秒）：窗口内的打字中间态不进版本历史（防 50 条配额被连续保存灌满）。
+/// 手动快照与恢复前快照（source != 'auto'）不受限。
+pub const AUTO_SNAPSHOT_MIN_INTERVAL_SECS: i64 = 120;
+
+/// 距该便签最近一条 auto 快照是否仍在节流窗口内（true = 应跳过本次快照）。
+/// 无任何 auto 快照时返回 false（首个快照必落）。
+pub fn auto_snapshot_throttled(conn: &Connection, note_id: &str) -> AppResult<bool> {
+    let within: Option<bool> = conn
+        .query_row(
+            "SELECT (strftime('%s','now') - strftime('%s', created_at)) < ?1 \
+             FROM note_versions WHERE note_id = ?2 AND source = 'auto' \
+             ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            params![AUTO_SNAPSHOT_MIN_INTERVAL_SECS, note_id],
+            |r| r.get(0),
+        )
+        .map(Some)
+        .or_else(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(other),
+        })?;
+    Ok(within.unwrap_or(false))
+}
+
 /// 永久删除。返回该便签的图片文件路径列表（调用方负责删除物理文件）。
 pub fn delete(conn: &Connection, id: &str) -> AppResult<Vec<String>> {
     let paths: Vec<String> = {
@@ -350,12 +443,21 @@ pub fn search(conn: &Connection, query: &str) -> AppResult<Vec<NoteSummary>> {
     let notes: Vec<Note> = stmt
         .query_map(params![q], row_to_note)?
         .collect::<rusqlite::Result<_>>()?;
-    notes.into_iter().map(|n| to_summary(conn, n)).collect()
+    attach_tags_and_summary(conn, notes, true)
 }
+
+/// 开窗恢复专用投影：与 NOTE_COLS 同列，仅 content 以空串占位——
+/// 启动恢复/托盘显示只消费 id/几何/标志位，正文由 NoteWindow 打开后自行 get_note 加载。
+/// NOTE_COLS 增删列时此处同步。
+const NOTE_COLS_WINDOW: &str =
+    "id, title, '' AS content, content_format, status, is_pinned, is_always_on_top, \
+     show_on_all_desktops, desktop_pin_state, fullscreen_behavior, x, y, width, height, \
+     monitor_id, created_at, updated_at, archived_at, deleted_at, is_private, locked, \
+     readonly_flag, pin_mode, scale";
 
 pub fn all_active_with_windows(conn: &Connection) -> AppResult<Vec<Note>> {
     let sql = format!(
-        "SELECT {NOTE_COLS} FROM notes WHERE status='active' AND deleted_at IS NULL ORDER BY created_at ASC"
+        "SELECT {NOTE_COLS_WINDOW} FROM notes WHERE status='active' AND deleted_at IS NULL ORDER BY created_at ASC"
     );
     let mut stmt = conn.prepare(&sql)?;
     let notes = stmt
@@ -375,7 +477,7 @@ pub fn list_private(conn: &Connection) -> AppResult<Vec<NoteSummary>> {
     let notes: Vec<Note> = stmt
         .query_map([], row_to_note)?
         .collect::<rusqlite::Result<_>>()?;
-    notes.into_iter().map(|n| to_summary(conn, n)).collect()
+    attach_tags_and_summary(conn, notes, true)
 }
 
 pub fn count(conn: &Connection, status: &str) -> AppResult<i64> {
@@ -582,6 +684,69 @@ mod tests {
     fn todo_count() {
         assert_eq!(count_todos("- [ ] a\n- [x] b\n正文\n- [X] c"), (3, 2));
         assert_eq!(count_todos("没有任务"), (0, 0));
+    }
+
+    #[test]
+    fn auto_snapshot_throttle_window() {
+        let conn = setup();
+        let n = create(&conn, "t", "c").unwrap();
+        // 无任何快照：不节流（首个快照必落）
+        assert!(!auto_snapshot_throttled(&conn, &n.id).unwrap());
+        // 刚落一条 auto 快照：窗口内节流
+        snapshot_version(&conn, &n.id, "auto").unwrap();
+        assert!(auto_snapshot_throttled(&conn, &n.id).unwrap());
+        // 窗口外（回拨到 121s 前）：不再节流
+        let stale = (chrono::Utc::now() - chrono::Duration::seconds(121))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+        conn.execute(
+            "UPDATE note_versions SET created_at = ?2 WHERE note_id = ?1",
+            params![n.id, stale],
+        )
+        .unwrap();
+        assert!(!auto_snapshot_throttled(&conn, &n.id).unwrap());
+        // 仅有 manual 快照：不节流（手动/恢复前快照不受窗口约束）
+        let n2 = create(&conn, "t2", "c2").unwrap();
+        snapshot_version(&conn, &n2.id, "manual").unwrap();
+        assert!(!auto_snapshot_throttled(&conn, &n2.id).unwrap());
+    }
+
+    #[test]
+    fn list_caps_content_counts_full_trash_keeps_full() {
+        let conn = setup();
+        // 构造 >500 字符正文，唯一的 todo 位于截断点之后（独立成行才被计数）
+        let tail = "\n- [ ] 尾部任务";
+        let long = format!("{}{tail}", "字".repeat(600));
+        let n = create(&conn, "长文", &long).unwrap();
+        super::super::tags::attach_tag(&conn, &n.id, "工作").unwrap();
+
+        let active = list(&conn, "active").unwrap();
+        assert_eq!(active.len(), 1);
+        let s = &active[0];
+        assert_eq!(
+            s.note.content.chars().count(),
+            500,
+            "列表正文应截断到 500 字符"
+        );
+        assert_eq!(
+            (s.todo_total, s.todo_done),
+            (1, 0),
+            "计数必须按截断前全文统计"
+        );
+        assert_eq!(s.tags, vec!["工作".to_string()], "批量聚合与逐条查询同结果");
+
+        // 单便签详情始终全文
+        assert_eq!(
+            get(&conn, &n.id).unwrap().content.chars().count(),
+            600 + tail.chars().count()
+        );
+
+        // 回收站列表保留全文（预览面板整文渲染）
+        soft_delete(&conn, &n.id).unwrap();
+        let trash = list(&conn, "trash").unwrap();
+        assert!(
+            trash[0].note.content.chars().count() > 500,
+            "回收站不截断"
+        );
     }
 
     #[test]

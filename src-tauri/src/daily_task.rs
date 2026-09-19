@@ -80,7 +80,7 @@ pub fn scan_and_notify(app: &AppHandle) -> AppResult<()> {
         }
         let _ = app.emit(
             crate::events::NOTES_CHANGED,
-            serde_json::json!({ "dailyTaskStarted": t.id }),
+            serde_json::json!({ "dailyTaskStarted": t.id, "reason": crate::notes::change_reason::STRUCTURE }),
         );
         log::info!("今日任务到点通知: {}", t.id);
         notified.push(t.id);

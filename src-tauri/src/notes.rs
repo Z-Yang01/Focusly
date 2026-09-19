@@ -11,8 +11,19 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::window;
 
-fn emit_notes_changed(app: &AppHandle, note_id: &str) {
-    let _ = app.emit(crate::events::NOTES_CHANGED, json!({ "noteId": note_id }));
+/// notes-changed 事件原因（payload.reason）：前端据此收敛失效范围。
+/// content 走防抖且不失效标签（正文保存不动标签集合）；缺省视为 structure。
+pub mod change_reason {
+    pub const CONTENT: &str = "content";
+    pub const TAGS: &str = "tags";
+    pub const STRUCTURE: &str = "structure";
+}
+
+fn emit_notes_changed(app: &AppHandle, note_id: &str, reason: &str) {
+    let _ = app.emit(
+        crate::events::NOTES_CHANGED,
+        json!({ "noteId": note_id, "reason": reason }),
+    );
 }
 
 /// 只建行并写入层叠几何，不打开窗口（create_note 命令用）。
@@ -34,7 +45,7 @@ pub fn create_record(app: &AppHandle) -> AppResult<Note> {
 pub fn create_and_open(app: &AppHandle) -> AppResult<Note> {
     let note = create_record(app)?;
     window::open_note_window(app, &note)?;
-    emit_notes_changed(app, &note.id);
+    emit_notes_changed(app, &note.id, change_reason::STRUCTURE);
     log::info!("新建便签 {}", note.id);
     Ok(note)
 }
@@ -96,8 +107,12 @@ pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> 
             },
         )?;
         // 内容变更：快照 + 重建 FTS 索引（失败不阻塞保存主流程）
-        if let Err(e) = crate::db::notes::snapshot_version(c, id, "auto") {
-            log::warn!("版本快照失败 {id}: {e}");
+        // auto 快照节流：节流窗口内的打字中间态不写版本表（查询失败退回照常快照）
+        let throttled = crate::db::notes::auto_snapshot_throttled(c, id).unwrap_or(false);
+        if !throttled {
+            if let Err(e) = crate::db::notes::snapshot_version(c, id, "auto") {
+                log::warn!("版本快照失败 {id}: {e}");
+            }
         }
         let tags = crate::db::tags::tags_for_note(c, id)?;
         if let Err(e) = crate::db::search::fts_sync(c, id, title, content, &tags.join(" ")) {
@@ -109,7 +124,7 @@ pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> 
         }
         Ok(note)
     })?;
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::CONTENT);
     Ok(note)
 }
 
@@ -146,7 +161,7 @@ pub fn set_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> AppResult
     })?;
     // all_desktops 的虚拟桌面固定在 apply_note_flags -> apply_desktop_pin 内完成
     window::apply_note_flags(app, &note);
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -182,7 +197,7 @@ pub fn set_fullscreen_behavior(app: &AppHandle, id: &str, behavior: &str) -> App
         )
     })?;
     window::apply_note_flags(app, &note);
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -192,7 +207,7 @@ pub fn archive(app: &AppHandle, id: &str) -> AppResult<Note> {
     let state = app.state::<AppState>();
     let note = state.db.with(|c| crate::db::notes::archive(c, id))?;
     log::info!("便签已归档 {id}");
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -201,7 +216,7 @@ pub fn restore(app: &AppHandle, id: &str) -> AppResult<Note> {
     let state = app.state::<AppState>();
     let note = state.db.with(|c| crate::db::notes::restore(c, id))?;
     log::info!("便签已恢复 {id}");
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -256,7 +271,7 @@ pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
         "便签已永久删除 {id}（清理 {} 个图片文件）",
         image_paths.len()
     );
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(())
 }
 
@@ -269,7 +284,7 @@ pub fn move_to_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
     cancel_pending_reminders_best_effort(app, id);
     stop_bound_pomodoro_best_effort(app, id);
     log::info!("便签已移入回收站 {id}");
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -280,7 +295,7 @@ pub fn restore_from_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
         .db
         .with(|c| crate::db::notes::restore_from_trash(c, id))?;
     log::info!("便签已从回收站恢复 {id}");
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -332,7 +347,7 @@ pub fn set_privacy_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> A
         crate::pomodoro::scrub_private_text(app, id);
     }
     log::info!("便签 {id} 隐私标志 {flag}={value}");
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -346,7 +361,7 @@ pub fn restore_note_version(app: &AppHandle, version_id: &str) -> AppResult<Note
         crate::db::search::fts_sync(c, &note.id, &note.title, &note.content, &tags.join(" "))?;
         Ok(note)
     })?;
-    emit_notes_changed(app, &note.id);
+    emit_notes_changed(app, &note.id, change_reason::CONTENT);
     Ok(note)
 }
 
@@ -427,7 +442,7 @@ pub fn set_pin_mode(app: &AppHandle, id: &str, mode: &str) -> AppResult<Note> {
     }
 
     log::info!("便签 {id} 图钉模式 → {mode}");
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::STRUCTURE);
     Ok(note)
 }
 
@@ -464,7 +479,7 @@ pub fn set_note_tags(app: &AppHandle, id: &str, tags: Vec<String>) -> AppResult<
             log::error!("标签变更后 FTS 同步失败 {id}: {e}");
         }
     }
-    emit_notes_changed(app, id);
+    emit_notes_changed(app, id, change_reason::TAGS);
     Ok(final_tags)
 }
 
@@ -481,7 +496,10 @@ pub fn export_data(app: &AppHandle, path: &str) -> AppResult<()> {
 pub fn import_data(app: &AppHandle, path: &str) -> AppResult<crate::export::ImportSummary> {
     let state = app.state::<AppState>();
     let summary = crate::export::import_from_file(&state.db, path)?;
-    let _ = app.emit(crate::events::NOTES_CHANGED, json!({}));
+    let _ = app.emit(
+        crate::events::NOTES_CHANGED,
+        json!({ "reason": change_reason::STRUCTURE }),
+    );
     log::info!("数据导入完成: {summary:?}");
     Ok(summary)
 }

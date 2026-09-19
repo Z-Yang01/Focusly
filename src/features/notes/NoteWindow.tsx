@@ -405,9 +405,14 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       .catch((err) => console.error("刷新便签失败", err));
   }, [noteId]);
 
-  // 便签变更：仅刷新 flags / images / tags / nextReminder，不覆盖正在编辑的标题与正文
+  // 便签变更：仅刷新 flags / images / tags / nextReminder，不覆盖正在编辑的标题与正文。
+  // content 事件（自动保存/版本恢复）跳过——正文保存不改 flags/图片/标签/提醒；
+  // 本窗自身保存本地已是最新，版本恢复走 VersionHistoryPanel 的 onRestored 显式刷新。
   useEffect(() => {
-    const off = onNotesChanged(() => refreshMeta());
+    const off = onNotesChanged((e) => {
+      if (e.reason === "content") return;
+      refreshMeta();
+    });
     return () => {
       void off.then((f) => f());
     };

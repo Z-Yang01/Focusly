@@ -163,6 +163,15 @@ export interface ShortcutErrorEvent {
   message: string;
 }
 
+/**
+ * notes-changed 事件载荷。reason 缺省（旧发射点/导入）视为 "structure" 全量失效；
+ * "content" 由前端防抖合并且不失效标签（正文保存不动标签集合）。
+ */
+export interface NotesChangedEvent {
+  noteId?: string;
+  reason?: "content" | "tags" | "structure";
+}
+
 /** 事件名常量（Rust 侧 emit 同名） */
 export const EVENTS = {
   notesChanged: "notes-changed",

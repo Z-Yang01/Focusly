@@ -143,7 +143,7 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
     };
   }, [parsed]);
 
-  // 任务 token（is:task / is:today / status:… / due:today）→ 并行拉取今日任务
+  // 任务 token（is:task / is:today / status:… / due:today）→ 并行拉取今日任务（与主搜索同 250ms 防抖）
   useEffect(() => {
     const tokens = parseTaskQuery(parsed.raw, localDateKey(new Date()));
     if (!tokens) {
@@ -151,15 +151,18 @@ export const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function Se
       return;
     }
     let alive = true;
-    dailyTaskSearch(tokens.text, tokens.status ?? undefined, tokens.date ?? undefined)
-      .then((list) => {
-        if (alive) setTaskHits(list);
-      })
-      .catch(() => {
-        if (alive) setTaskHits([]);
-      });
+    const timer = setTimeout(() => {
+      dailyTaskSearch(tokens.text, tokens.status ?? undefined, tokens.date ?? undefined)
+        .then((list) => {
+          if (alive) setTaskHits(list);
+        })
+        .catch(() => {
+          if (alive) setTaskHits([]);
+        });
+    }, 250);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [parsed.raw]);
 
