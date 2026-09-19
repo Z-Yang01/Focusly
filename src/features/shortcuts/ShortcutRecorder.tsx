@@ -1,5 +1,5 @@
 /** 全局快捷键录制控件 */
-import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   acceleratorToDisplay,
@@ -17,6 +17,14 @@ export interface ShortcutRecorderProps {
 export function ShortcutRecorder({ value, onChange, onError }: ShortcutRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 录制态在根元素打标志：命令面板等全局捕获监听器据此放行，
+  // 否则 Ctrl+K 这类组合永远被面板抢占、录制框收不到事件
+  useEffect(() => {
+    if (!recording) return;
+    document.documentElement.setAttribute("data-shortcut-recording", "1");
+    return () => document.documentElement.removeAttribute("data-shortcut-recording");
+  }, [recording]);
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     e.preventDefault();

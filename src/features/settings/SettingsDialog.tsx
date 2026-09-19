@@ -241,7 +241,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const [soundOn, setSoundOn] = useState(isSoundEnabled());
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        // 有未保存的快捷键修改时，Esc/点遮罩不静默丢弃
+        if (!v && hasStaged && !window.confirm("有未保存的快捷键修改，确定放弃并关闭？")) return;
+        onOpenChange(v);
+      }}
+    >
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
