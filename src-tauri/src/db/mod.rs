@@ -35,6 +35,10 @@ impl Db {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(std::time::Duration::from_millis(3000))?;
+        // 读侧调优（本地单连接，无并发风险）：临时表进内存、主库 mmap、页缓存 64MB
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        conn.pragma_update(None, "mmap_size", 256i64 * 1024 * 1024)?;
+        conn.pragma_update(None, "cache_size", -64_000i64)?;
         Ok(Db(Mutex::new(conn)))
     }
 

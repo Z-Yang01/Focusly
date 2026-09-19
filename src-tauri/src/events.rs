@@ -12,6 +12,8 @@ pub const NOTES_VISIBILITY: &str = "notes-visibility";
 pub const FOCUS_SEARCH: &str = "focus-search";
 pub const OPEN_SETTINGS: &str = "open-settings";
 pub const APP_EXIT_FLUSH: &str = "app-exit-flush";
+/// 快速捕获窗口模式切换（Rust → quick-capture 窗前端），payload: "task" = 切到任务 tab
+pub const QC_MODE: &str = "qc-mode";
 pub const POMODORO_STATE: &str = "pomodoro-state";
 pub const POMODORO_FINISHED: &str = "pomodoro-finished";
 /// 前端已约定（types/index.ts#POMODORO_EVENTS.taskMetaChanged）；

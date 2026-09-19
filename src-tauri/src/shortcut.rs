@@ -45,6 +45,14 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
             window::show_manager(app);
             let _ = app.emit(crate::events::FOCUS_SEARCH, ());
         }
+        "quick_capture_task" => {
+            let handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = crate::quickcapture::open_task(&handle) {
+                    log::error!("快速捕获任务失败: {e}");
+                }
+            });
+        }
         "quick_capture" => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {

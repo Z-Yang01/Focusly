@@ -230,6 +230,15 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     r#"
     UPDATE settings SET value = 'false' WHERE key = 'launch_show_notes';
     "#,
+    // v13: 「快速捕获到今日计划」全局快捷键默认绑定（速记箱任务 tab，Ctrl+Shift+T）
+    r#"
+    INSERT OR IGNORE INTO shortcuts (action, accelerator, enabled, updated_at) VALUES ('quick_capture_task', 'Ctrl+Shift+T', 1, '');
+    "#,
+    // v14: 专注联动勿扰——番茄钟专注区间内抑制通知提醒（推迟到本专注段结束，不丢失；
+    // 休息/暂停恢复通知）。默认开：专注即免打扰，可在设置「行为」页关闭。
+    r#"
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('pomo_dnd', 'true');
+    "#,
 ];
 
 use rusqlite::Connection;
@@ -273,11 +282,50 @@ mod tests {
             .unwrap();
         assert_eq!(theme, "system");
 
-        // shortcuts 默认值存在（v5 起含 quick_capture 与 pomodoro_toggle）
+        // shortcuts 默认值存在（v5 起含 quick_capture/pomodoro_toggle，v13 加 quick_capture_task）
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM shortcuts", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 6);
+    }
+
+    /// 迁移落库的默认快捷键必须与设置命令白名单一一对应，且启用项加速器无空值、无互相冲突
+    /// （冲突会在注册时整批失败，这里前置拦截）。
+    #[test]
+    fn default_shortcuts_match_allowlist_without_accelerator_conflicts() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+
+        let mut actions: Vec<String> = conn
+            .prepare("SELECT action FROM shortcuts")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        actions.sort();
+        let mut allow: Vec<String> = crate::commands::settings_cmd::SHORTCUT_ACTIONS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        allow.sort();
+        assert_eq!(actions, allow, "shortcuts 表与 SHORTCUT_ACTIONS 白名单不一致");
+
+        let mut accels: Vec<String> = conn
+            .prepare("SELECT accelerator FROM shortcuts WHERE enabled = 1")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(
+            accels.iter().all(|a| !a.trim().is_empty()),
+            "存在空的默认加速器: {accels:?}"
+        );
+        accels.sort();
+        let n = accels.len();
+        accels.dedup();
+        assert_eq!(accels.len(), n, "默认快捷键加速器存在重复冲突: {accels:?}");
     }
 
     /// 模拟 v1 旧库：只跑第一条迁移并手工把 user_version 置为 1。

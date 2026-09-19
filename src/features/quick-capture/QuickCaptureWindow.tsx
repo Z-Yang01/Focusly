@@ -4,12 +4,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
-import { Check, ClipboardList, PenLine, Pin, PinOff, Trash2, X, type LucideIcon } from "lucide-react";
+import { CalendarClock, Check, ClipboardList, PenLine, Pin, PinOff, Trash2, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { duration, easing, spacing } from "@/design-tokens";
 import { describeTime } from "@/lib/format";
+import { listen } from "@/lib/tauri";
+import { EVENTS } from "@/types";
 import { cn } from "@/lib/utils";
 import {
   clipboardAdd,
@@ -18,19 +20,20 @@ import {
   clipboardPin,
   clipboardRemove,
   createNoteRecord,
+  dailyTaskCreate,
+  localDateKey,
   quickCaptureHide,
   quickCaptureReady,
   setNoteTags,
   updateNoteContent,
   type ClipboardEntry,
 } from "./api";
+import { tabFromSearch, type Tab } from "./mode";
 
 /** 速记统一打上收件箱标签 */
 const INBOX_TAG = "收件箱";
 const HISTORY_LIMIT = 20;
 const PREVIEW_MAX = 60;
-
-type Tab = "write" | "history";
 
 /** 历史条目预览：压平空白并截断到前 60 字 */
 function previewOf(text: string, max = PREVIEW_MAX): string {
@@ -40,6 +43,7 @@ function previewOf(text: string, max = PREVIEW_MAX): string {
 
 const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
   { key: "write", label: "速记", icon: PenLine },
+  { key: "task", label: "任务", icon: CalendarClock },
   { key: "history", label: "剪贴板", icon: ClipboardList },
 ];
 
@@ -95,7 +99,10 @@ function EmptyHint({ text }: { text: string }) {
 }
 
 export function QuickCaptureWindow() {
-  const [tab, setTab] = useState<Tab>("write");
+  const [tab, setTab] = useState<Tab>(() => tabFromSearch(window.location.search));
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskTime, setTaskTime] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [entries, setEntries] = useState<ClipboardEntry[]>([]);
@@ -107,6 +114,7 @@ export function QuickCaptureWindow() {
   const [savedFlash, setSavedFlash] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const taskInputRef = useRef<HTMLInputElement>(null);
   const readyRef = useRef(false);
   /** 上次入库的剪贴板文本：相同内容不重复入库 */
   const lastClipRef = useRef<string | null>(null);
@@ -173,16 +181,71 @@ export function QuickCaptureWindow() {
       setSavedFlash(false);
       void captureClipboard();
       if (tab === "write") textareaRef.current?.focus();
+      if (tab === "task") taskInputRef.current?.focus();
     });
     return () => {
       void un.then((f) => f());
     };
   }, [captureClipboard, tab]);
 
-  // 切回速记页（含首次挂载）时聚焦正文
+  // 切页聚焦：速记页 → 正文；任务页 → 标题输入
   useEffect(() => {
     if (tab === "write") textareaRef.current?.focus();
+    if (tab === "task") taskInputRef.current?.focus();
   }, [tab]);
+
+  // Rust 全局快捷键（快速捕获：新建今日任务）→ 切到任务 tab
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let alive = true;
+    void listen<string>(EVENTS.qcMode, (e) => {
+      if (e.payload === "task") setTab("task");
+    }).then((off) => {
+      if (alive) unlisten = off;
+      else off();
+    });
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
+  }, []);
+
+  /** 保存今日任务：标题必填，时间可选 → daily_task_create（今天）→ 关窗 */
+  const saveTask = useCallback(async () => {
+    if (taskSaving) return;
+    const t = taskTitle.trim();
+    if (!t) {
+      taskInputRef.current?.focus();
+      return;
+    }
+    setTaskSaving(true);
+    setSaveError(false);
+    try {
+      const today = localDateKey(new Date());
+      await dailyTaskCreate({
+        date: today,
+        startTime: taskTime || null,
+        endTime: null,
+        title: t,
+        note: null,
+        estimatePomodoros: 0,
+        priority: "medium",
+        repeatRule: "none",
+        tags: null,
+        isPrivate: false,
+        focusMin: null,
+      });
+      setTaskTitle("");
+      setTaskTime("");
+      setSavedFlash(true);
+      setTimeout(() => void hideWindow(), 600);
+    } catch (err) {
+      console.error("保存今日任务失败", err);
+      setSaveError(true);
+    } finally {
+      setTaskSaving(false);
+    }
+  }, [taskSaving, taskTitle, taskTime, hideWindow]);
 
   /** 保存 = 建行 → 写标题/正文 → 打「收件箱」标签 → "已保存"闪现 → 隐藏。空内容不保存直接关闭。 */
   const save = useCallback(async () => {
@@ -221,15 +284,16 @@ export function QuickCaptureWindow() {
         void hideWindow();
       } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        void save();
+        if (tab === "task") void saveTask();
+        else void save();
       } else if (e.key === "Tab" && e.ctrlKey) {
         e.preventDefault();
-        setTab((t) => (t === "write" ? "history" : "write"));
+        setTab((t) => (t === "write" ? "task" : t === "task" ? "history" : "write"));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hideWindow, save]);
+  }, [hideWindow, save, saveTask]);
 
   /** 点击历史条目 = 追加到速记正文并切回速记页 */
   const appendToDraft = (entry: ClipboardEntry) => {
@@ -305,6 +369,36 @@ export function QuickCaptureWindow() {
             className="min-h-[64px] flex-1 resize-none rounded-none border-0 px-3 py-2 shadow-none focus-visible:ring-0"
           />
         </>
+      ) : tab === "task" ? (
+        <div className="flex min-h-0 flex-1 flex-col px-3 py-2">
+          <Input
+            ref={taskInputRef}
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            autoFocus
+            placeholder="今天要做什么？（必填）"
+            className="h-9 shrink-0 rounded-none border-x-0 border-t-0 px-0 text-sm shadow-none focus-visible:ring-0"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="time"
+              value={taskTime}
+              onChange={(e) => setTaskTime(e.target.value)}
+              className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+              aria-label="开始时间（可选）"
+            />
+            <span className="text-xs text-muted-foreground">开始时间可选；Ctrl+Enter 保存</span>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-auto h-8 w-full text-xs"
+            disabled={taskSaving || !taskTitle.trim()}
+            onClick={() => void saveTask()}
+          >
+            {taskSaving ? "保存中…" : "加入今日计划"}
+          </Button>
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col px-2 py-1.5">
           <div className="flex shrink-0 items-center justify-between pb-1 text-xs text-muted-foreground">

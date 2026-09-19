@@ -169,6 +169,35 @@
 - 前端收敛：修复 StrictMode 事件监听泄漏、React Query staleTime 调优、NoteWindow 子组件拆分
 - R3 UX：NoteWindow 工具栏智能收纳/预览沉浸/底栏精简、管理器密度提升、QuickCapture 紧凑化
 
+### 快捕任务直达 × 番茄专注勿扰批（2026-09-19）
+
+#### Added
+- 【迁移 v13】快速捕获「新建今日任务」全局快捷键（默认 Ctrl+Shift+T）：速记箱新增「任务」tab
+  （标题必填 + 可选开始时间，一键写入今日计划）；冷启动经 `index.html?mode=task` 直达任务 tab
+  （新建窗口瞬间前端事件监听未注册，emit 必丢——用 URL 契约承载初始模式），已开窗则 `qc-mode` 事件热切换
+- 【迁移 v14】番茄专注联动勿扰（设置「番茄专注期间通知勿扰」默认开）：专注运行区间内到点的提醒
+  自动顺延（snooze）到本段结束——不弹窗、不丢失；暂停/休息/过期快照不抑制；勿扰指示 🔕 显示在控制条
+- 勿扰设置卡片交互重做：三个预设时段一键套用 + ±15 分钟步进（跨午夜回绕），替代原生 time input；
+  本地即时生效 + 400ms 防抖合并落盘，写写交叠串行化、失败回滚上次成功值
+- 跨层契约集成测试（`src-tauri/tests/contracts.rs`，5 项）：Rust↔TS 事件名集合一致、
+  每个快捷键 action 三处接线齐全、qc 任务模式 URL 契约、命令面板 view 在管理器有处理分支、
+  `pomo_dnd` 四处真相源 + reminder 必消费 `focus_silence_until`（防死设置键）
+- 命令面板扩充 6 条命令（呼出速记箱/今日计划/已归档/私密空间/番茄统计/生成专注周报便签），
+  全部命令补拼音首字母检索；Ctrl+K 面板测试基建（mock api）
+- 番茄控制条会话归属语义：归属便签与管理器顶栏渲染完整控制条，其他便签只显示弱化倒计时
+  （整行按钮=点击接管会话，toast 提示原任务已停止）；编辑模式禁启动
+- 命令面板 navigate 支持 all/archived/private 视图直跳
+
+#### Changed（内部质量）
+- SQLite 读侧调优：temp_store=MEMORY、mmap_size=256MB、cache_size=-64MB
+- 启动备份加完整性校验：integrity_check + notes/reminders/settings/pomodoro_sessions 四表行数与源库比对，
+  失败报错且坏备份文件保留不轮转；备份失败写结构化错误日志
+- 退出路径 best-effort `PRAGMA optimize`；快捷键 action 白名单 `pub(crate)` 供迁移测试比对
+
+#### Tests
+- 前端 +17 用例（qc tab 契约 3、命令面板过滤 6、勿扰纯函数 8）；Rust 新增 focus_silence_until 矩阵、
+  迁移默认快捷键白名单/加速器冲突拦截、备份验收
+
 ## [0.1.0] - 2026-09-16
 
 ### 初始功能

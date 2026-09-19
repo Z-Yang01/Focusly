@@ -71,6 +71,14 @@ pub fn run() {
             app_db.with(db::migrations::run)?;
             if let Err(e) = filesystem::backup_database(&app_db, &paths) {
                 log::warn!("启动备份数据库失败: {e}");
+                filesystem::journal_error(
+                    &paths,
+                    "database",
+                    "启动自动备份失败（或备份完整性校验未通过）",
+                    &e.to_string(),
+                    "本次启动的数据没有备份点；若连续失败，恢复能力下降",
+                    "检查磁盘空间与数据目录写权限；必要时手动复制 database.db 到 backups 目录",
+                );
             }
 
             // 3. 共享状态（先 manage，后续模块才能 app.state::<AppState>()）
@@ -240,6 +248,11 @@ pub fn run() {
                 if label.starts_with("note-") {
                     window::save_geometry_now(app, &win);
                 }
+            }
+            // 让 SQLite 按使用情况补统计/增量自动索引（best-effort，退出路径不报错）
+            let st = app.state::<state::AppState>();
+            if let Err(e) = st.db.with(|c| Ok(c.execute_batch("PRAGMA optimize;")?)) {
+                log::warn!("退出前 PRAGMA optimize 失败: {e}");
             }
         }
     });

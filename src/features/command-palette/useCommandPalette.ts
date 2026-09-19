@@ -1,30 +1,47 @@
 /** 命令面板命令注册表：CommandItem 类型 + 默认命令集 + 输入过滤 */
 import { useMemo } from "react";
 import {
+  CalendarClock,
   CalendarDays,
   Eye,
   EyeOff,
+  FileText,
+  Lock,
   Monitor,
   Moon,
+  PenLine,
   Plus,
   RefreshCw,
   Search,
   Settings,
   Sun,
   Trash2,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
-import { hideAllNotes, newNote, setSetting, showAllNotes, toggleAllNotes } from "@/lib/api";
+import {
+  hideAllNotes,
+  newNote,
+  openNoteWindow,
+  pomodoroReportToNote,
+  quickCaptureToggle,
+  setSetting,
+  showAllNotes,
+  toggleAllNotes,
+} from "@/lib/api";
+import { addDays, localDateKey, weekStartOf } from "@/features/daily-tasks/timeline";
 import { SETTINGS_KEYS } from "@/types";
 import { toast } from "@/stores/toast";
 
 /** window CustomEvent：打开设置（ManagerWindow 后续接线） */
 export const FOCUSLY_OPEN_SETTINGS = "focusly:open-settings";
+/** window CustomEvent：打开番茄统计弹窗（ManagerWindow 监听 setStatsOpen） */
+export const FOCUSLY_OPEN_STATS = "focusly:open-stats";
 /** window CustomEvent：导航到指定视图（today / trash / search） */
 export const FOCUSLY_NAVIGATE = "focusly:navigate";
 
 export interface NavigateDetail {
-  view: "today" | "trash" | "search" | "plan";
+  view: "today" | "trash" | "search" | "plan" | "all" | "archived" | "private";
   /** view=search 时携带搜索词 */
   query?: string;
 }
@@ -59,7 +76,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "新建便签",
     group: "便签",
     icon: Plus,
-    keywords: "new create 新建 创建 便签 note",
+    keywords: "new create 新建 创建 便签 note xjbj xjb",
     run: withErrorToast("新建便签", newNote),
   },
   {
@@ -67,7 +84,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "显示全部便签",
     group: "便签",
     icon: Eye,
-    keywords: "show 显示 全部 可见 visible",
+    keywords: "show 显示 全部 可见 visible xsqb",
     run: withErrorToast("显示全部便签", showAllNotes),
   },
   {
@@ -75,7 +92,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "隐藏全部便签",
     group: "便签",
     icon: EyeOff,
-    keywords: "hide 隐藏 全部 隐身",
+    keywords: "hide 隐藏 全部 隐身 ycqb",
     run: withErrorToast("隐藏全部便签", hideAllNotes),
   },
   {
@@ -83,15 +100,31 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "切换全部便签可见性",
     group: "便签",
     icon: RefreshCw,
-    keywords: "toggle 切换 可见性 显示 隐藏",
+    keywords: "toggle 切换 可见性 显示 隐藏 qhbj",
     run: withErrorToast("切换便签可见性", toggleAllNotes),
+  },
+  {
+    id: "capture.quick",
+    title: "呼出速记箱",
+    group: "便签",
+    icon: PenLine,
+    keywords: "capture quick 速记 快速捕获 呼出 sjx kjbh",
+    run: withErrorToast("呼出速记箱", quickCaptureToggle),
+  },
+  {
+    id: "nav.plan",
+    title: "打开今日计划",
+    group: "导航",
+    icon: CalendarClock,
+    keywords: "plan today plan 今日计划 时间轴 任务 jrjh sjz",
+    run: () => dispatchNavigate({ view: "plan" }),
   },
   {
     id: "nav.today",
     title: "打开今日视图",
     group: "导航",
     icon: CalendarDays,
-    keywords: "today 今日 视图 待办 due",
+    keywords: "today 今日 视图 待办 due jr st",
     run: () => dispatchNavigate({ view: "today" }),
   },
   {
@@ -99,15 +132,50 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "打开回收站",
     group: "导航",
     icon: Trash2,
-    keywords: "trash 回收站 已删除 废纸篓",
+    keywords: "trash 回收站 已删除 废纸篓 hsz",
     run: () => dispatchNavigate({ view: "trash" }),
+  },
+  {
+    id: "nav.archived",
+    title: "打开已归档",
+    group: "导航",
+    icon: FileText,
+    keywords: "archive archived 已归档 归档 ygd",
+    run: () => dispatchNavigate({ view: "archived" }),
+  },
+  {
+    id: "nav.private",
+    title: "打开私密空间",
+    group: "导航",
+    icon: Lock,
+    keywords: "private secret 私密 空间 smkj sm",
+    run: () => dispatchNavigate({ view: "private" }),
+  },
+  {
+    id: "stats.pomodoro",
+    title: "打开番茄统计",
+    group: "工具",
+    icon: Zap,
+    keywords: "stats pomodoro 番茄 统计 复盘 fq tj",
+    run: () => window.dispatchEvent(new CustomEvent(FOCUSLY_OPEN_STATS)),
+  },
+  {
+    id: "report.week",
+    title: "生成本周专注周报便签",
+    group: "工具",
+    icon: FileText,
+    keywords: "report week 日报 周报 生成 专注 zzb zbb sc",
+    run: withErrorToast("生成本周专注周报", () => {
+      const start = weekStartOf(localDateKey(new Date()));
+      return pomodoroReportToNote(start, addDays(start, 6), `专注周报 ${start.slice(5)} ~ ${addDays(start, 6).slice(5)}`).then((n) => openNoteWindow(n.id));
+    }),
   },
   {
     id: "theme.light",
     title: "外观：浅色主题",
     group: "外观",
     icon: Sun,
-    keywords: "theme light 浅色 亮色 白天",
+    keywords: "theme light 浅色 亮色 白色 qs ys",
     run: withErrorToast("切换浅色主题", () => setSetting(SETTINGS_KEYS.theme, "light")),
   },
   {
@@ -115,7 +183,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "外观：深色主题",
     group: "外观",
     icon: Moon,
-    keywords: "theme dark 深色 暗色 夜间",
+    keywords: "theme dark 深色 暗色 夜间 ss",
     run: withErrorToast("切换深色主题", () => setSetting(SETTINGS_KEYS.theme, "dark")),
   },
   {
@@ -123,7 +191,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "外观：跟随系统主题",
     group: "外观",
     icon: Monitor,
-    keywords: "theme system 跟随 系统 自动 auto",
+    keywords: "theme system 跟随 系统 自动 auto gsxt",
     run: withErrorToast("切换主题", () => setSetting(SETTINGS_KEYS.theme, "system")),
   },
   {
@@ -131,7 +199,7 @@ const DEFAULT_COMMANDS: CommandItem[] = [
     title: "打开设置",
     group: "应用",
     icon: Settings,
-    keywords: "settings 设置 偏好 preference options",
+    keywords: "settings 设置 偏好 preference options sz szx",
     run: () => window.dispatchEvent(new CustomEvent(FOCUSLY_OPEN_SETTINGS)),
   },
 ];

@@ -44,7 +44,11 @@ export interface SettingsDialogProps {
  * 本地扩展动作：quick_capture（速记箱）由 DB 迁移 v4 引入，
  * types/index.ts 的 ShortcutAction 尚未包含；此处本地联合扩展，后端已支持 set/get。
  */
-type ShortcutActionExt = ShortcutAction | "quick_capture";
+type ShortcutActionExt =
+  | ShortcutAction
+  | "quick_capture"
+  | "quick_capture_task"
+  | "pomodoro_toggle";
 
 type ShortcutMap = Record<ShortcutActionExt, string>;
 
@@ -53,6 +57,8 @@ const SHORTCUT_ACTIONS: { action: ShortcutActionExt; label: string }[] = [
   { action: "new_note", label: "新建便签" },
   { action: "focus_search", label: "聚焦搜索" },
   { action: "quick_capture", label: "速记箱（快速捕获）" },
+  { action: "quick_capture_task", label: "快速捕获：新建今日任务" },
+  { action: "pomodoro_toggle", label: "番茄钟：开始 / 暂停" },
 ];
 
 const SHORTCUT_ACTION_NAMES: Record<string, string> = {
@@ -60,6 +66,8 @@ const SHORTCUT_ACTION_NAMES: Record<string, string> = {
   new_note: "新建便签",
   focus_search: "聚焦搜索",
   quick_capture: "速记箱（快速捕获）",
+  quick_capture_task: "快速捕获：新建今日任务",
+  pomodoro_toggle: "番茄钟：开始 / 暂停",
 };
 
 function shortcutsToMap(list: ShortcutEntry[]): ShortcutMap {
@@ -68,6 +76,8 @@ function shortcutsToMap(list: ShortcutEntry[]): ShortcutMap {
     new_note: "",
     focus_search: "",
     quick_capture: "",
+    quick_capture_task: "",
+    pomodoro_toggle: "",
   };
   for (const entry of list) {
     if (entry.action in map) map[entry.action] = entry.accelerator;
@@ -84,6 +94,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     new_note: "",
     focus_search: "",
     quick_capture: "",
+    quick_capture_task: "",
+    pomodoro_toggle: "",
   });
   const [staged, setStaged] = useState<Partial<ShortcutMap>>({});
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -336,6 +348,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </div>
               <p className="text-xs text-muted-foreground">
                 默认关闭：启动只开管理器，便签用托盘「显示全部便签」或 Ctrl+Shift+Space 唤出
+              </p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="pomo-dnd" className="text-sm font-normal">
+                  番茄专注期间通知勿扰
+                </Label>
+                <Switch
+                  id="pomo-dnd"
+                  disabled={loading}
+                  // 缺键 = 默认开（迁移 v14 / 后端 parse_setting_bool 同规则）
+                  checked={settings[SETTINGS_KEYS.pomoDnd] !== "false"}
+                  onCheckedChange={(v) => void writeSetting(SETTINGS_KEYS.pomoDnd, String(v))}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                专注区间到点的提醒推迟到本段专注结束后通知，不会丢失；暂停或休息期间照常通知
               </p>
             </div>
             <div className="space-y-2 pt-1">

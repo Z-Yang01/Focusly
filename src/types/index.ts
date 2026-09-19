@@ -174,6 +174,8 @@ export const EVENTS = {
   openSettings: "open-settings",
   /** 应用退出前广播：各便签窗口把防抖中的未保存内容立即落库 */
   appExitFlush: "app-exit-flush",
+  /** 快速捕获窗口模式切换（payload: "task" = 切到任务 tab） */
+  qcMode: "qc-mode",
 } as const;
 
 /** 设置键 */
@@ -183,6 +185,8 @@ export const SETTINGS_KEYS = {
   autostart: "autostart",
   startMinimized: "start_minimized",
   launchShowNotes: "launch_show_notes",
+  /** 专注联动勿扰：番茄钟专注区间内抑制到点提醒通知（迁移 v14 默认 "true"） */
+  pomoDnd: "pomo_dnd",
 } as const;
 
 // ============================================================================

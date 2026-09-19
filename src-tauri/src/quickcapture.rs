@@ -54,13 +54,28 @@ pub fn toggle(app: &AppHandle) -> AppResult<()> {
             capture_ready(app)
         };
     }
-    create_window(app)
+    create_window(app, false)
 }
 
-/// 创建窗口（不可见），定位到主屏顶部居中。
-fn create_window(app: &AppHandle) -> AppResult<()> {
+/// 全局快捷键入口：打开/聚焦速记箱并切到「今日任务」tab。
+/// 窗口不存在则先创建（保持不可见，前端 ready 后显示——防白闪惯例）。
+/// 注意：新建窗口的瞬间前端还没加载、事件监听未注册，emit 必丢——
+/// 此时把初始 tab 编码进 URL（?mode=task，前端挂载时读取）；已存在的窗口才走事件。
+pub fn open_task(app: &AppHandle) -> AppResult<()> {
+    if app.get_webview_window(LABEL).is_none() {
+        create_window(app, true)?;
+        return capture_ready(app);
+    }
+    use tauri::Emitter;
+    let _ = app.emit_to(LABEL, crate::events::QC_MODE, "task");
+    capture_ready(app)
+}
+
+/// 创建窗口（不可见），定位到主屏顶部居中。`task=true` 时 URL 携带初始「任务」tab。
+fn create_window(app: &AppHandle, task: bool) -> AppResult<()> {
     let (x, y) = top_position(app);
-    let win = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
+    let url = if task { "index.html?mode=task" } else { "index.html" };
+    let win = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App(url.into()))
         .title("快速捕获")
         .decorations(false)
         .transparent(true)

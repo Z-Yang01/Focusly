@@ -197,6 +197,13 @@ fn fire_due(app: &AppHandle) {
     );
     let now_local = chrono::Local::now().time();
 
+    // 专注联动勿扰：本批读一次番茄快照（键 pomo_dnd，缺省 = 开）
+    let focus_until = crate::pomodoro::focus_silence_until(
+        crate::pomodoro::parse_setting_bool(&settings, "pomo_dnd", true),
+        &crate::pomodoro::current_snapshot(),
+        now,
+    );
+
     for r in due {
         let Ok(t) = parse(&r.remind_at) else { continue };
 
@@ -230,6 +237,20 @@ fn fire_due(app: &AppHandle) {
                 } else {
                     log::info!("提醒 {} 处于勿扰时段，推迟到 {}", r.id, exit_utc);
                 }
+            }
+            continue;
+        }
+
+        // 专注勿扰：番茄钟专注区间到点的提醒推迟到本专注段结束（保持 pending 不丢失；
+        // 暂停/休息期间 focus_until=None，通知照常走上面的勿扰判定）
+        if let Some(u) = focus_until {
+            if let Err(e) = state
+                .db
+                .with(|c| crate::db::reminders::snooze_to(c, &r.id, &crate::reminder::fmt(u)))
+            {
+                log::error!("专注勿扰推迟提醒 {} 失败: {e}", r.id);
+            } else {
+                log::info!("提醒 {} 处于专注区间，推迟到 {}", r.id, u);
             }
             continue;
         }

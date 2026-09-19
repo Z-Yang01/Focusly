@@ -26,13 +26,16 @@ const SETTING_KEYS: &[&str] = &[
     "pomo_auto_next",
     "pomo_sound",
     "pomo_force_remind",
+    // 专注联动勿扰（"true"/"false"，默认开；读取端见 pomodoro::focus_silence_until）
+    "pomo_dnd",
 ];
 
-const SHORTCUT_ACTIONS: &[&str] = &[
+pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "toggle_notes",
     "new_note",
     "focus_search",
     "quick_capture",
+    "quick_capture_task",
     "pomodoro_toggle",
 ];
 

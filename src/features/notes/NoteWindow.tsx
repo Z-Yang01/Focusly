@@ -248,9 +248,11 @@ interface NoteFooterProps {
   stats: ReturnType<typeof todoStats>;
   autosave: NoteAutoSaveState;
   onRefreshMeta: () => void;
+  /** 编辑模式（非预览）下禁用番茄钟启动/接管入口 */
+  preview: boolean;
 }
 
-function NoteFooter({ noteId, detail, stats, autosave, onRefreshMeta }: NoteFooterProps) {
+function NoteFooter({ noteId, detail, stats, autosave, onRefreshMeta, preview }: NoteFooterProps) {
   return (
     <div className="flex h-8 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-primary/10 bg-primary/[0.03] px-2 text-xs text-muted-foreground">
       {stats.total > 0 && (
@@ -259,7 +261,7 @@ function NoteFooter({ noteId, detail, stats, autosave, onRefreshMeta }: NoteFoot
           {stats.done}/{stats.total}
         </span>
       )}
-      <PomodoroBar noteId={noteId} />
+      <PomodoroBar noteId={noteId} startBlocked={!preview} />
       <div className="min-w-0 flex-1" />
       <ReminderPopover note={detail} onChanged={onRefreshMeta} />
       <span className={cn("shrink-0 whitespace-nowrap tabular-nums", autosave.error && "text-destructive")}>
@@ -813,6 +815,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
               stats={stats}
               autosave={autosave}
               onRefreshMeta={refreshMeta}
+              preview={preview}
             />
           </div>
         </ContextMenuTrigger>

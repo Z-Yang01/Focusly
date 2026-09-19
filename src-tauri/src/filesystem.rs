@@ -68,6 +68,32 @@ impl AppPaths {
     }
 }
 
+/// 备份验收用关键表（覆盖"会不会丢"的全部用户数据面；表名为代码内常量，非用户输入）
+const BACKUP_VERIFY_TABLES: &[&str] = &["notes", "reminders", "settings", "pomodoro_sessions"];
+
+/// 校验备份文件：integrity_check 必须为 ok，且关键表行数与源库一致。
+fn verify_backup(src: &rusqlite::Connection, dest: &Path) -> AppResult<()> {
+    let dst = rusqlite::Connection::open(dest)?;
+    let status: String = dst.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
+    if status != "ok" {
+        return Err(crate::error::AppError::Db(format!(
+            "备份 integrity_check 失败: {status}"
+        )));
+    }
+    for table in BACKUP_VERIFY_TABLES {
+        let count = |c: &rusqlite::Connection| -> AppResult<i64> {
+            Ok(c.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?)
+        };
+        let (a, b) = (count(src)?, count(&dst)?);
+        if a != b {
+            return Err(crate::error::AppError::Db(format!(
+                "备份表 {table} 行数不一致: 源 {a} ≠ 备份 {b}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// 启动时轮转备份：通过 SQLite Online Backup API 生成原子一致性快照，
 /// 最多保留 5 份。数据库不存在（首次启动）则跳过。
 /// 注意：必须在拿到 `&Db` 连接后调用（备份 API 需要源连接）。
@@ -91,6 +117,10 @@ pub fn backup_database(db: &crate::db::Db, paths: &AppPaths) -> AppResult<()> {
         dst.pragma_update(None, "journal_mode", "DELETE")?; // 备份文件自包含，无 WAL
         Ok(())
     })?;
+
+    // 备份验收：integrity_check + 关键表行数与源库一致。
+    // 失败视为备份不可信（返回 Err 由调用方记入 error/*.md），坏文件保留作证据、不轮转删除。
+    db.with(|src| verify_backup(src, &dest))?;
 
     // 清理旧备份，保留最近 5 份
     let mut backups: Vec<PathBuf> = std::fs::read_dir(&paths.backups)?
@@ -228,11 +258,13 @@ mod tests {
         let latest = backups.last().unwrap().clone();
         assert!(latest.is_file());
 
-        // 破坏原库（模拟损坏）
+        // 破坏原库（模拟损坏）。先关连接再动文件：mmap_size 开启后，
+        // SQLite 会以内存映射持有 db 文件，连接未关闭时外部写入会报 1224。
+        // 真实还原流程同样要求应用退出（连接关闭）后才替换 db 文件。
+        drop(db);
         std::fs::write(&paths.db, b"corrupted junk data").unwrap();
 
-        // 还原：关闭连接 → 拷贝备份覆盖 → 重开验证
-        drop(db);
+        // 还原：拷贝备份覆盖 → 重开验证
         std::fs::copy(&latest, &paths.db).unwrap();
         let db2 = Db::open(&paths.db).unwrap();
         let (title, content): (String, String) = db2

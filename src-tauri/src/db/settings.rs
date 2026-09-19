@@ -18,6 +18,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("pomo_auto_next", "false"),    // 阶段结束自动开始下一阶段
     ("pomo_sound", "off"),          // 提示音（MVP 仅占位）
     ("pomo_force_remind", "false"), // 勿扰时段仍强制提醒
+    ("pomo_dnd", "true"),           // 专注区间内抑制到点提醒通知（v14；读取端 focus_silence_until）
 ];
 
 pub fn get_all(conn: &Connection) -> AppResult<HashMap<String, String>> {

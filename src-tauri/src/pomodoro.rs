@@ -351,6 +351,22 @@ pub fn parse_setting_bool(map: &HashMap<String, String>, key: &str, default: boo
     }
 }
 
+/// 专注联动勿扰（提醒调度器 fire_due 每批读一次）：开关开启且快照处于
+/// 「专注 / 运行中 / 未暂停」、结束时刻严格在未来时，返回抑制截止时刻（ends_at），
+/// 提醒即推迟到本专注段结束再通知（snooze 语义，不丢失）。
+/// 暂停 / 休息阶段 / 空闲 / endsAt 缺失或已过期 → None（正常通知）。
+pub fn focus_silence_until(
+    enabled: bool,
+    snap: &PomoSnapshot,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    if !enabled || !snap.running || snap.paused || snap.phase != "focus" {
+        return None;
+    }
+    let ends = snap.ends_at.as_deref().and_then(|s| crate::reminder::parse(s).ok())?;
+    (ends > now).then_some(ends)
+}
+
 /// settings map → 番茄钟设置（键名见 migrations v5 默认值）。
 pub fn settings_from(map: &HashMap<String, String>) -> PomoSettings {
     PomoSettings {
@@ -1295,6 +1311,45 @@ mod tests {
             force_remind: false,
             sound: "off".into(),
         }
+    }
+
+    #[test]
+    fn focus_silence_until_matrix() {
+        let now = at(2026, 9, 19, 10, 0, 0);
+        let future = crate::reminder::fmt(at(2026, 9, 19, 10, 20, 0));
+        let past = crate::reminder::fmt(at(2026, 9, 19, 9, 59, 0));
+        let snap = |running: bool, phase: &str, paused: bool, ends: Option<String>| PomoSnapshot {
+            running,
+            phase: phase.into(),
+            ends_at: ends,
+            paused,
+            remaining_sec: 0,
+            note_id: String::new(),
+            task_key: String::new(),
+            task_text: String::new(),
+            completed_in_cycle: 0,
+        };
+        let focus = snap(true, "focus", false, Some(future.clone()));
+        assert_eq!(
+            focus_silence_until(true, &focus, now),
+            Some(crate::reminder::parse(&future).unwrap()),
+            "专注运行中 → 抑制到 ends_at"
+        );
+        assert!(
+            focus_silence_until(false, &focus, now).is_none(),
+            "开关关闭不抑制"
+        );
+        let paused = snap(true, "focus", true, Some(future.clone()));
+        assert!(focus_silence_until(true, &paused, now).is_none(), "暂停即恢复通知");
+        let brk = snap(true, "short_break", false, Some(future.clone()));
+        assert!(focus_silence_until(true, &brk, now).is_none(), "休息即恢复通知");
+        let expired = snap(true, "focus", false, Some(past));
+        assert!(
+            focus_silence_until(true, &expired, now).is_none(),
+            "ends_at 不严格在未来 → 不抑制（防调度停滞）"
+        );
+        let no_end = snap(true, "focus", false, None);
+        assert!(focus_silence_until(true, &no_end, now).is_none(), "缺 endsAt 不抑制");
     }
 
     // ---------- Phase ----------

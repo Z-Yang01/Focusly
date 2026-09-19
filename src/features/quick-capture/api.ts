@@ -1,6 +1,7 @@
 /** 快速捕获 / 剪贴板 API — 薄 re-export 层（实现统一收敛在 src/lib/api.ts）。
  *  clipboard_* / quickcapture_* 命令注册前调用会 reject，调用方需优雅降级。 */
 export {
+  dailyTaskCreate,
   clipboardAdd,
   clipboardClear,
   clipboardList,
@@ -15,4 +16,5 @@ export {
   /** 写入标题/正文（Rust 侧同步版本快照 + FTS + notes-changed 事件） */
   updateNoteContent,
 } from "@/lib/api";
+export { localDateKey } from "@/features/daily-tasks/timeline";
 export type { ClipboardEntry } from "@/types";

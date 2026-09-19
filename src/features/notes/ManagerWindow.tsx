@@ -49,7 +49,7 @@ import { TodayOverdueView } from "@/features/views/DueViews";
 import { PrivateSpaceView } from "@/features/privacy/PrivateSpaceView";
 import { LayoutToolbar } from "@/features/layout/LayoutToolbar";
 import { CommandPaletteHost } from "@/features/command-palette/CommandPalette";
-import { FOCUSLY_NAVIGATE, FOCUSLY_OPEN_SETTINGS, type NavigateDetail } from "@/features/command-palette/useCommandPalette";
+import { FOCUSLY_NAVIGATE, FOCUSLY_OPEN_SETTINGS, FOCUSLY_OPEN_STATS, type NavigateDetail } from "@/features/command-palette/useCommandPalette";
 import { TemplatePicker } from "@/features/templates/TemplatePicker";
 import { applyTemplate, type NoteTemplate } from "@/features/templates/templates";
 import { DailyNoteButton } from "@/features/templates/DailyNoteButton";
@@ -109,12 +109,16 @@ function ManagerContent() {
       if (detail.view === "today") setView("today");
       else if (detail.view === "plan") setView("plan");
       else if (detail.view === "trash") setView("trash");
+      else if (detail.view === "archived") setView("archived");
+      else if (detail.view === "private") setView("private");
+      else if (detail.view === "all") setView("all");
       else if (detail.view === "search" && detail.query) {
         setView("all");
         searchRef.current?.focus();
       }
     };
     const onOpenSettingsEvent = () => setSettingsOpen(true);
+    const onOpenStatsEvent = () => setStatsOpen(true);
     const offs = [
       onNotesChanged(() => {
         void queryClient.invalidateQueries({ queryKey: ["notes"] });
@@ -125,10 +129,12 @@ function ManagerContent() {
     ];
     window.addEventListener(FOCUSLY_NAVIGATE, onNavigate);
     window.addEventListener(FOCUSLY_OPEN_SETTINGS, onOpenSettingsEvent);
+    window.addEventListener(FOCUSLY_OPEN_STATS, onOpenStatsEvent);
     return () => {
       offs.forEach((p) => void p.then((f) => f()));
       window.removeEventListener(FOCUSLY_NAVIGATE, onNavigate);
       window.removeEventListener(FOCUSLY_OPEN_SETTINGS, onOpenSettingsEvent);
+      window.removeEventListener(FOCUSLY_OPEN_STATS, onOpenStatsEvent);
     };
   }, [queryClient]);
 
