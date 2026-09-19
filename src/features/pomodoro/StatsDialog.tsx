@@ -1,8 +1,8 @@
 /** 番茄统计弹窗：今日（数字卡）/ 本周（28 天热力图）/ 复盘（周·月区间报表）。
  *  后端未就绪时降级为提示 + 重试。 */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
-import { dailyTaskStats } from "@/lib/api";
+import { ChevronLeft, ChevronRight, FileText, RefreshCw } from "lucide-react";
+import { dailyTaskStats, openNoteWindow, pomodoroReportToNote } from "@/lib/api";
 import { pomodoroStatsRange, pomodoroStatsReport, pomodoroStatsToday } from "./api";
 import { computeStreak, heatTier, humanizeSec, localDateKey } from "./format";
 import { barPct, REASON_LABEL, reportRange, type ReportMode } from "./report";
@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/stores/toast";
 import { cn } from "@/lib/utils";
 
 export interface StatsDialogProps {
@@ -251,6 +252,29 @@ export function StatsDialog({ open, onOpenChange }: StatsDialogProps) {
                 <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                   {reportLoading ? "加载中…" : range.label}
                 </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 shrink-0"
+                  title="把本区间报表生成为便签"
+                  aria-label="生成为便签"
+                  disabled={reportLoading}
+                  onClick={() => {
+                    void pomodoroReportToNote(range.start, range.end, `专注${mode === "week" ? "周报" : "月报"} ${range.label}`)
+                      .then((n) => {
+                        toast.success("已生成报表便签");
+                        void openNoteWindow(n.id);
+                        onOpenChange(false);
+                      })
+                      .catch((err) => {
+                        console.error("生成报表便签失败", err);
+                        toast.error(`生成失败：${err instanceof Error ? err.message : String(err)}`);
+                      });
+                  }}
+                >
+                  <FileText className="size-3.5" />
+                </Button>
               </div>
 
               {/* 逐日专注分钟条形图 */}

@@ -161,6 +161,9 @@ export const pomodoroStatsReport = (startDate: string, endDate: string) =>
 /** 某本地日的实际专注会话（时间轴"实际专注块"） */
 export const pomodoroSessionsByDate = (date: string) =>
   invoke<PomodoroSession[]>("pomodoro_sessions_by_date", { date });
+/** 复盘报表生成为便签（每周/每月日报），返回新便签 */
+export const pomodoroReportToNote = (startDate: string, endDate: string, label: string) =>
+  invoke<Note>("pomodoro_report_to_note", { startDate, endDate, label });
 
 export const taskMetaGet = (noteId: string) => invoke<TaskMeta[]>("task_meta_list", { noteId });
 
