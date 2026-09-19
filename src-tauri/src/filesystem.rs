@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::error::AppResult;
 use tauri::Manager;
 
+#[derive(Clone)]
 pub struct AppPaths {
     pub root: PathBuf,
     pub db: PathBuf,

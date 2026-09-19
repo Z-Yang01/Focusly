@@ -66,19 +66,31 @@ pub fn run() {
                 paths.root.display()
             );
 
-            // 2. 数据库：打开 → 迁移 → 启动备份
+            // 2. 数据库：打开 → 迁移；启动备份移入后台线程（独立连接走 Online Backup API，
+            //    与 WAL 主连接并发安全），窗口出现不再等备份 IO；失败链路（日志 + 错误账本）不变
             let app_db = db::Db::open(&paths.db)?;
             app_db.with(db::migrations::run)?;
-            if let Err(e) = filesystem::backup_database(&app_db, &paths) {
-                log::warn!("启动备份数据库失败: {e}");
-                filesystem::journal_error(
-                    &paths,
-                    "database",
-                    "启动自动备份失败（或备份完整性校验未通过）",
-                    &e.to_string(),
-                    "本次启动的数据没有备份点；若连续失败，恢复能力下降",
-                    "检查磁盘空间与数据目录写权限；必要时手动复制 database.db 到 backups 目录",
-                );
+            {
+                let backup_paths = paths.clone();
+                let backup_db_path = paths.db.clone();
+                std::thread::spawn(move || {
+                    match db::Db::open(&backup_db_path)
+                        .and_then(|db| filesystem::backup_database(&db, &backup_paths))
+                    {
+                        Ok(()) => log::info!("启动备份完成（后台）"),
+                        Err(e) => {
+                            log::warn!("启动备份数据库失败: {e}");
+                            filesystem::journal_error(
+                                &backup_paths,
+                                "database",
+                                "启动自动备份失败（或备份完整性校验未通过）",
+                                &e.to_string(),
+                                "本次启动的数据没有备份点；若连续失败，恢复能力下降",
+                                "检查磁盘空间与数据目录写权限；必要时手动复制 database.db 到 backups 目录",
+                            );
+                        }
+                    }
+                });
             }
 
             // 3. 共享状态（先 manage，后续模块才能 app.state::<AppState>()）

@@ -221,6 +221,18 @@
 - Rust 新增：auto_snapshot_throttle_window（节流窗口矩阵）、
   list_caps_content_counts_full_trash_keeps_full（截断/全文计数/trash 不截断/详情全文）
 
+### 启动与加载优化批（2026-09-19）
+
+#### Changed（性能）
+- 启动备份移出关键路径：备份（Online Backup 复制 + integrity_check + 行数校验）移入后台线程，
+  独立连接与 WAL 主连接并发安全；失败链路（warn 日志 + error/*.md 错误账本 + 坏文件不轮转）不变。
+  管理器/便签窗口出现不再等待备份 IO
+- 按窗口角色代码分割（React.lazy）：manager / note / quick-capture / pomodoro-mini 四窗口各自独立 chunk，
+  按需加载——迷你番茄窗 JS 从 ~740KB（全量 bundle）降至 ~237KB（-68%），速记箱 ~247KB；
+  Markdown 渲染器与管理器代码不再被非目标窗口下载解析。便签/速记窗本就 visible:false 等前端就绪再显示，
+  chunk 加载延迟不产生白闪（Suspense fallback 为主题底色空壳）
+- 启动开窗查询不再加载正文（随性能链路批 all_active_with_windows 瘦身生效）
+
 ## [0.1.0] - 2026-09-16
 
 ### 初始功能
