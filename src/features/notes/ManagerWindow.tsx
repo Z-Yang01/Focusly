@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import {
   newNote,
   listNotes,
+  dailyTaskStats,
   getTags,
   openNoteWindow,
   quickCaptureToggle,
@@ -57,6 +58,7 @@ import { StatsDialog } from "@/features/pomodoro/StatsDialog";
 import { DndSettingsCard } from "@/features/dnd/DndSettingsCard";
 import { TimelineView } from "@/features/daily-tasks/TimelineView";
 import { PomodoroBar } from "@/features/pomodoro/PomodoroBar";
+import { localDateKey } from "@/features/daily-tasks/timeline";
 import { cn } from "@/lib/utils";
 import { QuickTodoInput } from "@/features/todo/QuickTodoInput";
 import { toast } from "@/stores/toast";
@@ -66,8 +68,22 @@ type ViewKey = "all" | "todo" | "plan" | "archived" | "today" | "trash" | "priva
 function ManagerContent() {
   const queryClient = useQueryClient();
 
-  const [view, setView] = useState<ViewKey>("all");
+  const [view, setView] = useState<ViewKey>(() => {
+    // 记住上次使用的视图（重启回到离开时的界面）
+    try {
+      const saved = localStorage.getItem("focusly-manager-view");
+      if (saved === "all" || saved === "todo" || saved === "plan" || saved === "archived" || saved === "today" || saved === "trash" || saved === "private") {
+        return saved;
+      }
+    } catch { /* 忽略隐私模式 */ }
+    return "all";
+  });
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem("focusly-manager-view", view);
+    } catch { /* 忽略隐私模式 */ }
+  }, [view]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -79,6 +95,11 @@ function ManagerContent() {
     queryFn: () => listNotes("archived"),
   });
   const todoQuery = useQuery({ queryKey: ["notes", "todo"], queryFn: () => listNotes("todo") });
+  // 侧栏「今日计划」角标：当日任务数
+  const planStatsQuery = useQuery({
+    queryKey: ["dailyTasksStats", "sidebar"],
+    queryFn: () => dailyTaskStats(localDateKey(new Date())),
+  });
   const tagsQuery = useQuery({ queryKey: ["tags"], queryFn: getTags });
 
   // 全局事件：数据失效 / 可见性同步 / 聚焦搜索 / 打开设置（Tauri 事件 + 命令面板 CustomEvent）
@@ -200,7 +221,7 @@ function ManagerContent() {
   const views: { key: ViewKey; label: string; icon: typeof StickyNote; count?: number }[] = [
     { key: "all", label: "全部便签", icon: StickyNote, count: activeQuery.data?.length ?? 0 },
     { key: "todo", label: "待办", icon: SquareCheck, count: todoQuery.data?.length ?? 0 },
-    { key: "plan", label: "今日计划", icon: CalendarClock },
+    { key: "plan", label: "今日计划", icon: CalendarClock, count: planStatsQuery.data?.total },
     { key: "today", label: "今日 / 逾期", icon: CalendarClock },
     { key: "archived", label: "已归档", icon: Archive, count: archivedQuery.data?.length ?? 0 },
     { key: "trash", label: "回收站", icon: Trash2 },
@@ -279,8 +300,9 @@ function ManagerContent() {
           新建
         </Button>
         <div aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
-        {/* 常驻番茄控制：任意窗口状态都可开始/暂停/停止（修复"番茄没地方关"） */}
-        <div className="flex shrink-0 items-center rounded-md border px-1 py-0.5">
+        {/* 常驻番茄控制：任意窗口状态都可开始/暂停/停止（修复"番茄没地方关"）；
+            窄窗口允许收缩，PomodoroBar 自适应为图标态，给搜索框留空间 */}
+        <div className="flex min-w-0 items-center overflow-hidden rounded-md border px-1 py-0.5">
           <PomodoroBar noteId="" />
         </div>
         <div aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />

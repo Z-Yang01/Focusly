@@ -438,6 +438,32 @@ export function TimelineView({ className }: Props) {
         onValueChange={setDialogValue}
         onCancel={() => setDialogOpen(false)}
         onSubmit={() => void submitDialog()}
+        onPostpone={
+          editing
+            ? () => {
+                // 以当前表单内容写入明天（高频操作：没做完的事顺延一天）
+                const input = {
+                  date: addDays(date, 1),
+                  startTime: dialogValue.startTime || null,
+                  endTime: dialogValue.endTime || null,
+                  title: dialogValue.title.trim(),
+                  note: dialogValue.note.trim() || null,
+                  estimatePomodoros: dialogValue.estimatePomodoros,
+                  priority: dialogValue.priority,
+                  repeatRule: dialogValue.repeatRule,
+                  tags: dialogValue.tags.trim() || null,
+                  isPrivate: dialogValue.isPrivate,
+                  focusMin: dialogValue.focusMin === "" ? null : Number(dialogValue.focusMin),
+                };
+                void act(async () => {
+                  await dailyTaskUpdate(editing.id, input);
+                  setDialogOpen(false);
+                  // 推迟后跳到明天看安排
+                  setDate(input.date);
+                }, "已推迟到明天");
+              }
+            : undefined
+        }
       />
     </div>
   );
