@@ -221,6 +221,7 @@ pub fn run() {
             commands::pomodoro_cmd::pomodoro_stats_report,
             commands::system_cmd::backup_now,
             commands::pomodoro_cmd::pomodoro_sessions_by_date,
+            commands::pomodoro_cmd::pomodoro_report_to_note,
             commands::pomodoro_cmd::task_meta_get,
             commands::pomodoro_cmd::task_meta_list,
             commands::pomodoro_cmd::task_meta_update,

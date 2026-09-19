@@ -122,6 +122,39 @@ pub fn pomodoro_stats_report(
         .with(|c| crate::db::pomodoro_sessions::stats_report(c, &start_date, &end_date))
 }
 
+/// 复盘报表生成为便签（每周/每月日报）：Markdown 正文，返回新便签（前端决定打开）。
+/// 内容源自 stats_report 聚合，私密任务在写入端已脱敏，无泄漏面。
+#[tauri::command]
+pub fn pomodoro_report_to_note(
+    app: AppHandle,
+    start_date: String,
+    end_date: String,
+    label: String,
+) -> AppResult<crate::db::models::Note> {
+    use tauri::Manager;
+    let state = app.state::<AppState>();
+    let report = state
+        .db
+        .with(|c| crate::db::pomodoro_sessions::stats_report(c, &start_date, &end_date))?;
+    let content = crate::db::pomodoro_sessions::report_markdown(&label, &report);
+    let title = if label.starts_with("专注") {
+        label.clone()
+    } else {
+        format!("专注 {label}")
+    };
+    let note = state
+        .db
+        .with(|c| crate::db::notes::create(c, &title, &content))?;
+    // 层叠几何：与 daily_task_to_note 同款，避免盖在已有便签上
+    let (x, y) = crate::window::cascade_position(&app, 0);
+    let (w, h) = crate::window::default_note_size_physical(&app);
+    state
+        .db
+        .with(|c| crate::db::notes::update_geometry(c, &note.id, x, y, w, h, None))?;
+    log::info!("报表已生成便签 [{label}] → {}", note.id);
+    Ok(note)
+}
+
 /// 某本地日的实际专注会话（时间轴"实际专注块"），开始时间升序。
 #[tauri::command]
 pub fn pomodoro_sessions_by_date(

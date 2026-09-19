@@ -564,6 +564,145 @@ pub fn stats_report(conn: &Connection, start_date: &str, end_date: &str) -> AppR
     })
 }
 
+// ---------- 报表便签（每周/每月日报） ----------
+
+/// 秒 → "X 小时 Y 分钟"（与前端 humanizeSec 口径一致；不足 1 小时只显示分钟）。
+fn humanize_sec_cn(total_sec: i64) -> String {
+    let s = total_sec.max(0);
+    let h = s / 3600;
+    let m = (s % 3600) / 60;
+    if h > 0 && m > 0 {
+        format!("{h} 小时 {m} 分钟")
+    } else if h > 0 {
+        format!("{h} 小时")
+    } else {
+        format!("{m} 分钟")
+    }
+}
+
+/// 中断原因中文标签（与前端 REASON_LABEL 对齐）。
+fn reason_label(reason: &str) -> &'static str {
+    match reason {
+        "manual" => "手动停止",
+        "skip" => "跳过阶段",
+        "task_done" => "任务完成",
+        "app_exit" => "应用退出",
+        "switch_task" => "切换任务",
+        _ => "其他",
+    }
+}
+
+/// 复盘报表 → Markdown 便签正文（每周/每月日报）。
+/// 空段落整节省略；任务/中断分布最多取前若干条控制篇幅；纯函数可单测。
+pub fn report_markdown(label: &str, r: &FocusReport) -> String {
+    let mut out = String::with_capacity(1024);
+    out.push_str(&format!(
+        "# 🍅 {label}
+
+"
+    ));
+
+    out.push_str(
+        "## 合计
+",
+    );
+    out.push_str(&format!(
+        "- 番茄 **{}** 个 · 专注 **{}**
+",
+        r.focus_count,
+        humanize_sec_cn(r.focus_sec)
+    ));
+    let rate = match r.completion_rate {
+        Some(x) => format!("{}%", (x * 100.0).round() as i64),
+        None => "—".into(),
+    };
+    out.push_str(&format!(
+        "- 专注完成率 {rate} · 中断 {} 次
+",
+        r.interrupted_count
+    ));
+
+    out.push_str(
+        "
+## 每日明细
+",
+    );
+    out.push_str(
+        "| 日期 | 番茄 | 时长 |
+|---|---|---|
+",
+    );
+    for d in &r.days {
+        if d.focus_count > 0 {
+            out.push_str(&format!(
+                "| {} | {} | {} |
+",
+                &d.date[5..],
+                d.focus_count,
+                humanize_sec_cn(d.focus_sec)
+            ));
+        }
+    }
+    if r.days.iter().all(|d| d.focus_count == 0) {
+        out.push_str(
+            "| （本窗口无专注记录） | 0 | 0 分钟 |
+",
+        );
+    }
+
+    if !r.top_tasks.is_empty() {
+        out.push_str(
+            "
+## 最专注任务
+",
+        );
+        for (i, t) in r.top_tasks.iter().enumerate() {
+            out.push_str(&format!(
+                "{}. **{}** — {}（{} 次）
+",
+                i + 1,
+                t.label,
+                humanize_sec_cn(t.focus_sec),
+                t.session_count
+            ));
+        }
+    }
+
+    if !r.by_reason.is_empty() {
+        out.push_str(
+            "
+## 中断原因
+",
+        );
+        let parts: Vec<String> = r
+            .by_reason
+            .iter()
+            .map(|x| format!("{} {}", reason_label(&x.reason), x.count))
+            .collect();
+        out.push_str(&format!(
+            "- {}
+",
+            parts.join(" · ")
+        ));
+    }
+
+    let top_hour = r
+        .by_hour
+        .iter()
+        .max_by_key(|h| h.count)
+        .filter(|h| h.count > 0);
+    if let Some(h) = top_hour {
+        out.push_str(&format!(
+            "
+## 高发时段
+最常在 {:02}:00 开始专注（{} 次）
+",
+            h.hour, h.count
+        ));
+    }
+    out
+}
+
 /// 某本地日的 focus 会话（时间轴"实际专注块"用），按开始时间升序。
 /// running 会话不返回（进行中的专注由托盘/控制条/迷你窗呈现）；
 /// 私密便签会话的 task_text_snapshot 已在写入端清空，此处仅透传。
@@ -887,6 +1026,67 @@ mod tests {
         assert_eq!(normalize_reason(Some("switch_task")), "switch_task");
         assert_eq!(normalize_reason(Some("任意历史字符串")), "other");
         assert_eq!(normalize_reason(None), "other");
+    }
+
+    #[test]
+    fn report_markdown_renders_sections() {
+        let r = FocusReport {
+            days: vec![
+                DailyStat {
+                    date: "2026-09-15".into(),
+                    focus_count: 3,
+                    focus_sec: 4500,
+                },
+                DailyStat {
+                    date: "2026-09-16".into(),
+                    focus_count: 0,
+                    focus_sec: 0,
+                },
+            ],
+            focus_count: 3,
+            focus_sec: 4500,
+            interrupted_count: 2,
+            completion_rate: Some(0.6),
+            top_tasks: vec![TaskFocus {
+                label: "写周报".into(),
+                focus_sec: 3600,
+                session_count: 3,
+                kind: "daily".into(),
+            }],
+            by_reason: vec![
+                ReasonCount {
+                    reason: "manual".into(),
+                    count: 1,
+                },
+                ReasonCount {
+                    reason: "weird历史".into(),
+                    count: 1,
+                },
+            ],
+            by_hour: vec![
+                HourCount { hour: 9, count: 2 },
+                HourCount { hour: 10, count: 1 },
+            ],
+        };
+        let md = report_markdown("专注周报 09-14 ~ 09-20", &r);
+        assert!(md.contains("# 🍅 专注周报 09-14 ~ 09-20"));
+        assert!(md.contains("番茄 **3** 个 · 专注 **1 小时 15 分钟**"));
+        assert!(md.contains("专注完成率 60% · 中断 2 次"));
+        assert!(md.contains("| 09-15 | 3 | 1 小时 15 分钟 |"));
+        assert!(!md.contains("09-16"), "零填充日不出现在明细表");
+        assert!(md.contains("1. **写周报** — 1 小时（3 次）"));
+        assert!(
+            md.contains("- 手动停止 1 · 其他 1"),
+            "未知原因归其他中文标签"
+        );
+        assert!(md.contains("最常在 09:00 开始专注（2 次）"));
+        // 空报表：空段省略 + 占位行
+        let empty = empty_report();
+        let md2 = report_markdown("专注月报", &empty);
+        assert!(md2.contains("（本窗口无专注记录）"));
+        assert!(!md2.contains("最专注任务"));
+        assert!(!md2.contains("中断原因"));
+        assert!(!md2.contains("高发时段"));
     }
 
     #[test]
