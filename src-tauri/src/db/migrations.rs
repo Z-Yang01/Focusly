@@ -224,6 +224,12 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     r#"
     ALTER TABLE reminders ADD COLUMN anchor_at TEXT;
     "#,
+    // v12: 「启动自动显示便签」默认反转为关闭——便签多时启动全弹到桌面是惊吓面，
+    // 需要常驻的用户在设置里一键开回（托盘「显示全部便签」/ Ctrl+Shift+Space 始终可达）。
+    // 覆盖写 false 是产品行为修正：旧行为是未经确认的默认值，而非用户显式选择。
+    r#"
+    UPDATE settings SET value = 'false' WHERE key = 'launch_show_notes';
+    "#,
 ];
 
 use rusqlite::Connection;
@@ -570,6 +576,51 @@ mod tests {
             conn.execute_batch(sql).unwrap();
         }
         conn.pragma_update(None, "user_version", 9).unwrap();
+    }
+
+    /// 模拟 v11 旧库：跑前十一条迁移并手工把 user_version 置为 11。
+    fn setup_v11(conn: &Connection) {
+        for sql in MIGRATIONS.iter().take(11) {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 11).unwrap();
+    }
+
+    #[test]
+    fn v12_inverts_launch_show_notes_default() {
+        let conn = Connection::open_in_memory().unwrap();
+        setup_v11(&conn);
+        // v1 起该键默认 'true'（存量库无论用户是否动过）
+        let before: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key='launch_show_notes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(before, "true");
+
+        run(&conn).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, MIGRATIONS.len() as i64);
+
+        let after: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key='launch_show_notes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(after, "false", "启动不再自动全弹便签；设置里可一键开回");
+        // 其他设置不受影响
+        let theme: String = conn
+            .query_row("SELECT value FROM settings WHERE key='theme'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(theme, "system");
     }
 
     #[test]

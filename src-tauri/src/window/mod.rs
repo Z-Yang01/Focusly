@@ -449,7 +449,7 @@ pub fn startup_windows(app: &AppHandle) -> AppResult<()> {
     let launch_show_notes = state
         .db
         .with(|c| crate::db::settings::get(c, "launch_show_notes"))?
-        .unwrap_or_else(|| "true".into())
+        .unwrap_or_else(|| "false".into())
         == "true";
     let start_minimized = state
         .db
