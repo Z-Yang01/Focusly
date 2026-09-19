@@ -30,7 +30,10 @@ export function ReminderBanner({
   onOpenNote,
 }: ReminderBannerProps) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-amber-200 bg-amber-50 px-2 py-1.5 text-sm dark:border-amber-900 dark:bg-amber-950/60">
+    <div
+      role="alert"
+      className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-amber-200 bg-amber-50 px-2 py-1.5 text-sm dark:border-amber-900 dark:bg-amber-950/60"
+    >
       <BellRing className="size-4 shrink-0 text-amber-500" />
       <button
         type="button"

@@ -92,8 +92,9 @@ pub fn list(conn: &Connection, filter: &str) -> AppResult<Vec<NoteSummary>> {
             vec![],
         ),
         "todo" => (
+            // - [X] 大写勾选与前端解析器/count_todos 同口径（GFM 允许两种写法）
             "WHERE status = 'active' AND deleted_at IS NULL \
-             AND (content LIKE '%- [ ]%' OR content LIKE '%- [x]%')"
+             AND (content LIKE '%- [ ]%' OR content LIKE '%- [x]%' OR content LIKE '%- [X]%')"
                 .into(),
             vec![],
         ),
@@ -761,6 +762,12 @@ mod tests {
         assert_eq!(list(&conn, "archived").unwrap().len(), 1);
         assert_eq!(list(&conn, "todo").unwrap().len(), 0, "归档的不算待办视图");
         assert_eq!(list(&conn, "all").unwrap().len(), 2);
+
+        // 大写勾选 - [X]：count_todos/前端解析器均认，待办视图不得漏掉
+        create(&conn, "C", "- [X] 大写勾选").unwrap();
+        let todo = list(&conn, "todo").unwrap();
+        assert_eq!(todo.len(), 1, "大写 - [X] 也应进待办视图");
+        assert_eq!((todo[0].todo_total, todo[0].todo_done), (1, 1));
     }
 
     /// 回归：pin_mode 不依赖 scale，单独更新也必须落库（set_pin_mode 命令路径）。
