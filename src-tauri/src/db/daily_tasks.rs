@@ -191,6 +191,43 @@ pub fn list_by_date(conn: &Connection, date: &str) -> AppResult<Vec<DailyTask>> 
     Ok(out)
 }
 
+/// 日期范围（闭区间）内的全部实例（repeat_rule='none'），按日期+开始时间升序。
+/// 周概览用：一次查询取 7 天，调用方（命令层）需先对 end 物化重复实例。
+pub fn list_by_range(
+    conn: &Connection,
+    start_date: &str,
+    end_date: &str,
+) -> AppResult<Vec<DailyTask>> {
+    let sql = format!(
+        "SELECT {COLS} FROM daily_tasks          WHERE date BETWEEN ?1 AND ?2 AND repeat_rule = 'none'          ORDER BY date, (start_time IS NULL), start_time, created_at"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params![start_date, end_date], row_to_task)?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
+/// 批量顺延：把 ids 指定的任务移动到目标日期（单事务）。
+/// 重复模板（repeat_rule != 'none'）不允许顺延——改模板日期等于改锚点，语义不同；
+/// 命令层只应传未完成实例，此处再做一道防线。返回实际移动的行数。
+pub fn postpone_to(conn: &Connection, ids: &[String], to_date: &str) -> AppResult<usize> {
+    chrono::NaiveDate::parse_from_str(to_date, "%Y-%m-%d")
+        .map_err(|_| AppError::Invalid(format!("目标日期不合法: {to_date}")))?;
+    let tx = conn.unchecked_transaction()?;
+    let mut n = 0;
+    for id in ids {
+        n += tx.execute(
+            "UPDATE daily_tasks SET date = ?2, start_notified = 0, updated_at = ?3              WHERE id = ?1 AND repeat_rule = 'none'",
+            params![id, to_date, now_iso()],
+        )?;
+    }
+    tx.commit()?;
+    Ok(n)
+}
+
 /// 状态切换：todo | done | skipped。
 pub fn set_status(conn: &Connection, id: &str, status: &str) -> AppResult<DailyTask> {
     if !VALID_STATUSES.contains(&status) {
@@ -1028,6 +1065,120 @@ mod tests {
         let list = list_by_date(&conn, "2026-09-18").unwrap();
         let inst = list.iter().find(|x| x.title == "每日长专注").unwrap();
         assert_eq!(inst.focus_min, Some(50), "模板 focus_min 传播到实例");
+    }
+
+    #[test]
+    fn list_by_range_covers_days_in_order() {
+        let conn = setup();
+        create(
+            &conn,
+            "2026-09-15",
+            Some("09:00"),
+            None,
+            "周一",
+            None,
+            0,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-17",
+            None,
+            None,
+            "周三",
+            None,
+            0,
+            "low",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        // 范围外 + 重复模板不入结果
+        create(
+            &conn,
+            "2026-09-20",
+            None,
+            None,
+            "范围外",
+            None,
+            0,
+            "low",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-15",
+            Some("08:00"),
+            None,
+            "模板",
+            None,
+            0,
+            "medium",
+            REPEAT_DAILY,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        let list = list_by_range(&conn, "2026-09-14", "2026-09-19").unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].title, "周一");
+        assert_eq!(list[1].title, "周三");
+    }
+
+    #[test]
+    fn postpone_moves_instances_skips_templates_and_resets_notify() {
+        let conn = setup();
+        let a = create(
+            &conn,
+            "2026-09-18",
+            Some("09:00"),
+            None,
+            "甲",
+            None,
+            1,
+            "medium",
+            REPEAT_NONE,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        create(
+            &conn,
+            "2026-09-18",
+            Some("10:00"),
+            None,
+            "模板",
+            None,
+            0,
+            "high",
+            REPEAT_DAILY,
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+        // 标记已通知，顺延后应复位（新的一天需要重新到点通知）
+        mark_notified(&conn, &[a.id.clone()]).unwrap();
+        let n = postpone_to(&conn, &[a.id.clone(), "nonexistent".into()], "2026-09-19").unwrap();
+        assert_eq!(n, 1, "模板与不存在的 id 被忽略");
+        let moved = get(&conn, &a.id).unwrap();
+        assert_eq!(moved.date, "2026-09-19");
+        assert!(!moved.start_notified, "顺延后通知标记复位");
+        // 非法目标日期报错
+        assert!(postpone_to(&conn, &[a.id.clone()], "bad").is_err());
     }
 
     #[test]

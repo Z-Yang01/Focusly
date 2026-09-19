@@ -125,6 +125,8 @@ pub fn run() {
             commands::daily_task_cmd::daily_task_stats,
             commands::daily_task_cmd::daily_task_to_note,
             commands::daily_task_cmd::daily_task_search,
+            commands::daily_task_cmd::daily_task_list_range,
+            commands::daily_task_cmd::daily_task_postpone_to,
             commands::notes_cmd::get_note,
             commands::notes_cmd::list_notes,
             commands::notes_cmd::update_note_content,

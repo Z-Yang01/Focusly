@@ -96,6 +96,19 @@ export function addDays(dateKey: string, days: number): string {
   return localDateKey(d);
 }
 
+/** 日期所在周的周一（YYYY-MM-DD）。周一为一周起点。 */
+export function weekStartOf(dateKey: string): string {
+  const d = new Date(`${dateKey}T00:00:00`);
+  const dow = (d.getDay() + 6) % 7; // 周一 = 0
+  d.setDate(d.getDate() - dow);
+  return localDateKey(d);
+}
+
+/** 周一起始的 7 天日期键（旧 → 新） */
+export function weekDaysOf(weekStart: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+}
+
 /** 今天是周几的中文（日期切换显示用） */
 export function weekdayLabel(dateKey: string): string {
   const d = new Date(`${dateKey}T00:00:00`);

@@ -123,6 +123,29 @@ pub async fn daily_task_set_status(
     Ok(task)
 }
 
+/// 日期范围实例（周概览用）：先对 end 物化到期重复实例，再返回闭区间内全部实例。
+#[tauri::command]
+pub fn daily_task_list_range(
+    state: State<'_, AppState>,
+    start_date: String,
+    end_date: String,
+) -> AppResult<Vec<DailyTask>> {
+    state.db.with(|c| -> AppResult<Vec<DailyTask>> {
+        daily_tasks::materialize_recurring(c, &end_date)?;
+        daily_tasks::list_by_range(c, &start_date, &end_date)
+    })
+}
+
+/// 批量顺延：把选中任务移动到目标日期（重复模板被忽略）。返回实际移动数。
+#[tauri::command]
+pub fn daily_task_postpone_to(
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+    date: String,
+) -> AppResult<usize> {
+    state.db.with(|c| daily_tasks::postpone_to(c, &ids, &date))
+}
+
 /// 拖拽调整时间块（15 分钟吸附由前端完成，后端只校验格式）。
 #[tauri::command]
 pub fn daily_task_set_time(
