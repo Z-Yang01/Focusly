@@ -209,6 +209,19 @@ pub fn restore(app: &AppHandle, id: &str) -> AppResult<Note> {
 /// 事务边界：FTS/task_meta 清理与删行同事务；删行失败时前两者一并回滚。
 /// 幽灵提醒防线（best-effort）：取消便签的全部待触发提醒并唤醒调度器重排。
 /// 失败只记日志不阻塞删除主流程（调度器下次 tick 仍会按状态过滤）。
+/// 悬挂会话防线：便签删除/回收时停止绑定该便签的运行中番茄（防跑到点白转、统计挂空）。
+fn stop_bound_pomodoro_best_effort(app: &AppHandle, id: &str) {
+    if let Err(e) = crate::pomodoro::send_cmd(
+        app,
+        crate::pomodoro::PomodoroCmd::StopIfNote {
+            note_id: id.to_string(),
+            reason: "note_deleted".into(),
+        },
+    ) {
+        log::warn!("停止便签 {id} 的绑定番茄失败: {e}");
+    }
+}
+
 fn cancel_pending_reminders_best_effort(app: &AppHandle, id: &str) {
     let state = app.state::<AppState>();
     if let Err(e) = state
@@ -234,6 +247,7 @@ pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
         crate::db::notes::delete(c, id)
     })?;
     cancel_pending_reminders_best_effort(app, id);
+    stop_bound_pomodoro_best_effort(app, id);
     for path in &image_paths {
         crate::db::images::delete_file_best_effort(&state.paths.images, path);
     }
@@ -253,6 +267,7 @@ pub fn move_to_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
     let note = state.db.with(|c| crate::db::notes::soft_delete(c, id))?;
     // 幽灵提醒防线：回收后取消待触发提醒（否则重复提醒对已删便签永续再生）
     cancel_pending_reminders_best_effort(app, id);
+    stop_bound_pomodoro_best_effort(app, id);
     log::info!("便签已移入回收站 {id}");
     emit_notes_changed(app, id);
     Ok(note)

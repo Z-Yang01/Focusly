@@ -173,6 +173,8 @@ export function CommandPaletteHost() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // 快捷键录制中不抢占（用户可能正在录制 Ctrl+K 本身）
+      if (document.documentElement.hasAttribute("data-shortcut-recording")) return;
       if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         e.stopPropagation();

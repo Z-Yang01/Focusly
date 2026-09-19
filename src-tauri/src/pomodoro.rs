@@ -98,6 +98,11 @@ pub enum PomodoroCmd {
         task_key: String,
         reason: String,
     },
+    /// 仅当当前运行会话绑定指定便签时才停止（便签删除/回收时防悬挂会话）。
+    StopIfNote {
+        note_id: String,
+        reason: String,
+    },
     /// 私密翻转后的机内文本清洗：运行会话匹配便签/今日任务则清空 task_text 并重播。
     /// DB 快照清理由调用方配合 DAO 完成（scrub_private_text / scrub_daily_task_text）。
     ScrubText {
@@ -720,6 +725,13 @@ fn handle_cmd(app: &AppHandle, st: &mut Machine, cmd: PomodoroCmd) {
         PomodoroCmd::StopIfTask { task_key, reason } => {
             if let Machine::Running(r) = st {
                 if r.task_key == task_key {
+                    stop_running(app, st, &reason);
+                }
+            }
+        }
+        PomodoroCmd::StopIfNote { note_id, reason } => {
+            if let Machine::Running(r) = st {
+                if !note_id.is_empty() && r.note_id == note_id {
                     stop_running(app, st, &reason);
                 }
             }
