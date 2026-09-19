@@ -115,7 +115,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
               className="text-destructive focus:text-destructive"
               onSelect={() => void handleDelete()}
             >
-              永久删除
+              移入回收站
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -133,7 +133,7 @@ export function NoteCard({ note, onOpen }: NoteCardProps) {
           </span>
         )}
         {note.tags.slice(0, 3).map((tag) => (
-          <Badge key={tag} variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px]">
+          <Badge key={tag} variant="secondary" className="max-w-16 shrink-0 truncate px-1.5 py-0 text-[10px]">
             {tag}
           </Badge>
         ))}

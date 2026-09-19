@@ -400,12 +400,12 @@ function ManagerContent() {
             </div>
           )}
           {/* key=view 触发重挂载 + 淡入动画（B1） */}
-          <div key={view} className="min-h-0 flex-1 animate-fade-in">
+          <div key={view} className="flex min-h-0 flex-1 flex-col animate-fade-in">
             {view === "todo" && (
-            <div className="mb-3">
-              <QuickTodoInput onSubmit={handleQuickTodo} />
-            </div>
-          )}
+              <div className="mb-3 shrink-0">
+                <QuickTodoInput onSubmit={handleQuickTodo} />
+              </div>
+            )}
           {view === "plan" ? (
               <TimelineView className="h-full" />
             ) : view === "today" ? (
@@ -419,7 +419,7 @@ function ManagerContent() {
                 <PrivateSpaceView />
               </div>
             ) : (
-              <ScrollArea className="h-full">
+              <ScrollArea className="min-h-0 flex-1">
                 {isLoading ? (
                   <div className="flex h-40 items-center justify-center text-xs text-muted-foreground">
                     加载中…

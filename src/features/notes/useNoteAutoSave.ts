@@ -1,5 +1,6 @@
 /** 便签自动保存：500ms 防抖、blur/卸载 flush、失败可见 */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { onAppExitFlush } from "@/lib/tauri";
 import { updateNoteContent } from "@/lib/api";
 
 export interface UseNoteAutoSaveOptions {
@@ -110,6 +111,22 @@ export function useNoteAutoSave({
     };
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
+  }, [isDirty]);
+
+  // 应用退出前广播（Rust 统一退出路径）：立即落库防抖中的内容（"不会丢"红线）
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let alive = true;
+    void onAppExitFlush(() => {
+      if (isDirty()) void saveNowRef.current();
+    }).then((off) => {
+      if (alive) unlisten = off;
+      else off();
+    });
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
   }, [isDirty]);
 
   // 卸载时若有未保存修改，直接保存

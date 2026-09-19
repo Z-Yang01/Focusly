@@ -207,6 +207,19 @@ pub fn restore(app: &AppHandle, id: &str) -> AppResult<Note> {
 
 /// 永久删除：关窗口 → 删行（级联图片/标签记录）→ 清理图片文件与目录。
 /// 事务边界：FTS/task_meta 清理与删行同事务；删行失败时前两者一并回滚。
+/// 幽灵提醒防线（best-effort）：取消便签的全部待触发提醒并唤醒调度器重排。
+/// 失败只记日志不阻塞删除主流程（调度器下次 tick 仍会按状态过滤）。
+fn cancel_pending_reminders_best_effort(app: &AppHandle, id: &str) {
+    let state = app.state::<AppState>();
+    if let Err(e) = state
+        .db
+        .with(|c| crate::db::reminders::cancel_pending_for_note(c, id))
+    {
+        log::warn!("取消便签 {id} 的待触发提醒失败: {e}");
+    }
+    state.scheduler.wake();
+}
+
 pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
     window::close_note_window(app, id);
     let state = app.state::<AppState>();
@@ -220,6 +233,7 @@ pub fn delete_permanently(app: &AppHandle, id: &str) -> AppResult<()> {
         }
         crate::db::notes::delete(c, id)
     })?;
+    cancel_pending_reminders_best_effort(app, id);
     for path in &image_paths {
         crate::db::images::delete_file_best_effort(&state.paths.images, path);
     }
@@ -237,6 +251,8 @@ pub fn move_to_trash(app: &AppHandle, id: &str) -> AppResult<Note> {
     window::close_note_window(app, id);
     let state = app.state::<AppState>();
     let note = state.db.with(|c| crate::db::notes::soft_delete(c, id))?;
+    // 幽灵提醒防线：回收后取消待触发提醒（否则重复提醒对已删便签永续再生）
+    cancel_pending_reminders_best_effort(app, id);
     log::info!("便签已移入回收站 {id}");
     emit_notes_changed(app, id);
     Ok(note)

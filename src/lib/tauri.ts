@@ -42,6 +42,7 @@ export const onNotesVisibility = (cb: (visible: boolean) => void) =>
   listen<boolean>(EVENTS.notesVisibility, (e) => cb(e.payload));
 export const onFocusSearch = (cb: () => void) => listen(EVENTS.focusSearch, cb);
 export const onOpenSettings = (cb: () => void) => listen(EVENTS.openSettings, cb);
+export const onAppExitFlush = (cb: () => void) => listen(EVENTS.appExitFlush, cb);
 
 // ---------- 番茄钟事件（原 features/pomodoro/api.ts 内监听，事件监听统一归本文件） ----------
 export const onPomodoroState = (cb: (state: StatePayload) => void) =>

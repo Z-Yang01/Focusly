@@ -257,6 +257,7 @@ export function QuickCaptureWindow() {
   };
 
   const clearAll = async () => {
+    if (!window.confirm("清空全部剪贴板历史（最多 100 条）？不可恢复。")) return;
     try {
       await clipboardClear();
       setEntries([]);

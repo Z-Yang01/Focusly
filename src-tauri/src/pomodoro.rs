@@ -1083,6 +1083,7 @@ fn stop_running(app: &AppHandle, st: &mut Machine, reason: &str) {
             "noteId": r.note_id,
             "taskKey": r.task_key,
             "taskText": if is_private { "" } else { r.task_text.as_str() },
+            "reason": reason,
         }),
     );
     log::info!("番茄钟已停止: reason={reason} actual={actual}s");

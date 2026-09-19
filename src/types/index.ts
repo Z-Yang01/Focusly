@@ -172,6 +172,8 @@ export const EVENTS = {
   notesVisibility: "notes-visibility",
   focusSearch: "focus-search",
   openSettings: "open-settings",
+  /** 应用退出前广播：各便签窗口把防抖中的未保存内容立即落库 */
+  appExitFlush: "app-exit-flush",
 } as const;
 
 /** 设置键 */
@@ -303,6 +305,8 @@ export interface PomodoroFinishedEvent {
   taskKey: string | null;
   /** 私密便签任务时为 "" */
   taskText: string | null;
+  /** 停止原因（manual | skip | switch_task | task_done | app_exit）；自然完成时缺省 */
+  reason?: string | null;
 }
 
 /** task-meta-changed 事件载荷 */

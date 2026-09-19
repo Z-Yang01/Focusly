@@ -205,6 +205,17 @@ pub fn focus_note_window(app: &AppHandle, note_id: &str) {
     }
 }
 
+/// 统一退出：先广播 flush 事件让各便签窗口把防抖中的未保存内容落库
+/// （"不会丢"红线——直接 exit 会丢掉最近 500ms 防抖窗口内的输入），
+/// 短暂等待 IPC 往返后再退出。
+pub fn exit_app(app: &AppHandle) {
+    use tauri::Emitter;
+    log::info!("应用退出：广播便签保存落库");
+    let _ = app.emit(crate::events::APP_EXIT_FLUSH, ());
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    app.exit(0);
+}
+
 pub fn show_manager(app: &AppHandle) {
     if let Some(win) = app.get_webview_window(MANAGER_LABEL) {
         let _ = win.show();
