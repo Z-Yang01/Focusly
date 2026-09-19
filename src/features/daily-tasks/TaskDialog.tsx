@@ -1,5 +1,5 @@
 /** 今日任务添加/编辑对话框（Radix Dialog 封装）。 */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,6 +65,8 @@ interface TaskDialogProps {
   onValueChange: (v: TaskDialogValue) => void;
   onCancel: () => void;
   onSubmit: () => void;
+  /** 编辑态显示「推迟到明天」（外层实现：以当前表单内容写入明天） */
+  onPostpone?: () => void;
 }
 
 const PRIORITIES = [
@@ -81,12 +83,36 @@ const REPEATS = [
   { value: "yearly", label: "每年" },
 ];
 
-export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSubmit }: TaskDialogProps) {
+export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSubmit, onPostpone }: TaskDialogProps) {
   const [error, setError] = useState<string | null>(null);
+  /** 打开时的表单快照：Esc/遮罩关闭前判断是否有未保存改动（防静默丢弃） */
+  const initialRef = useRef<TaskDialogValue | null>(null);
 
   useEffect(() => {
-    if (open) setError(null);
+    if (open) {
+      setError(null);
+      initialRef.current = value;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const requestClose = () => {
+    const initial = initialRef.current;
+    const dirty =
+      !initial ||
+      initial.title !== value.title ||
+      initial.note !== value.note ||
+      initial.startTime !== value.startTime ||
+      initial.endTime !== value.endTime ||
+      initial.estimatePomodoros !== value.estimatePomodoros ||
+      initial.priority !== value.priority ||
+      initial.repeatRule !== value.repeatRule ||
+      initial.tags !== value.tags ||
+      initial.isPrivate !== value.isPrivate ||
+      initial.focusMin !== value.focusMin;
+    if (dirty && !window.confirm("有未保存的修改，确定放弃并关闭？")) return;
+    onCancel();
+  };
 
   const set = (patch: Partial<TaskDialogValue>) => onValueChange({ ...value, ...patch });
 
@@ -104,7 +130,7 @@ export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSu
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
+    <Dialog open={open} onOpenChange={(v) => !v && requestClose()}>
       <DialogContent className="w-80 max-w-[90vw] text-sm">
         <DialogHeader>
           <DialogTitle>{editing ? "编辑任务" : "添加任务"}</DialogTitle>
@@ -181,7 +207,21 @@ export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSu
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
         <DialogFooter className="gap-2">
-          <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={onCancel}>取消</Button>
+          {editing && onPostpone && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mr-auto h-7 text-xs text-muted-foreground hover:text-foreground"
+              title="以当前内容写入明天的计划"
+              onClick={() => {
+                onPostpone();
+              }}
+            >
+              ⏭ 推迟到明天
+            </Button>
+          )}
+          <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={requestClose}>取消</Button>
           <Button type="button" size="sm" className="h-7 text-xs" onClick={submit}>
             {editing ? "保存" : "添加"}
           </Button>

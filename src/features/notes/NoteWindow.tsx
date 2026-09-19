@@ -348,6 +348,20 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
     },
     [content, taskMetaList, noteId, refreshTaskMeta],
   );
+
+  /** 任务菜单操作统一出口：成功刷新 meta（+可选提示），失败 toast——禁止静默失败 */
+  const guardTask = useCallback(
+    (p: Promise<unknown>, okMsg?: string) => {
+      p.then(() => {
+        void refreshTaskMeta();
+        if (okMsg) toast.success(okMsg);
+      }).catch((err) => {
+        console.error("任务操作失败", err);
+        toast.error(`操作失败：${err instanceof Error ? err.message : String(err)}`);
+      });
+    },
+    [refreshTaskMeta],
+  );
   const [dragOver, setDragOver] = useState(false);
 
   const readyCalledRef = useRef(false);
@@ -887,49 +901,48 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
               {
                 label: "🍅 设为当前番茄任务",
                 act: () =>
-                  taskMenu && void pomodoroStart(noteId, taskMenu.taskKey, taskMenu.lineText),
+                  taskMenu &&
+                  guardTask(pomodoroStart(noteId, taskMenu.taskKey, taskMenu.lineText)),
               },
               {
                 label: "✔️ 完成任务",
                 act: () =>
                   taskMenu &&
-                  void pomodoroCompleteTask(noteId, taskMenu.taskKey, taskMenu.lineText),
+                  guardTask(
+                    pomodoroCompleteTask(noteId, taskMenu.taskKey, taskMenu.lineText),
+                  ),
               },
               {
                 label: "📅 加入今日计划",
                 act: () =>
                   taskMenu &&
-                  void dailyTaskCreate({
-                    date: localDateKey(new Date()),
-                    startTime: null,
-                    endTime: null,
-                    title: taskMenu.lineText,
-                    note: `来自便签：${detail?.title || noteId.slice(0, 8)}`,
-                    estimatePomodoros: 0,
-                    priority: "medium",
-                    repeatRule: "none",
-                    tags: null,
-                    isPrivate: Boolean(detail?.isPrivate),
-                    focusMin: null,
-                  })
-                    .then(() => toast.success("已加入今日计划"))
-                    .catch((err: unknown) => {
-                      console.error("加入今日计划失败", err);
-                      toast.error(
-                        `加入失败：${err instanceof Error ? err.message : String(err)}`,
-                      );
+                  guardTask(
+                    dailyTaskCreate({
+                      date: localDateKey(new Date()),
+                      startTime: null,
+                      endTime: null,
+                      title: taskMenu.lineText,
+                      note: `来自便签：${detail?.title || noteId.slice(0, 8)}`,
+                      estimatePomodoros: 0,
+                      priority: "medium",
+                      repeatRule: "none",
+                      tags: null,
+                      isPrivate: Boolean(detail?.isPrivate),
+                      focusMin: null,
                     }),
+                    "已加入今日计划",
+                  ),
               },
               ...[1, 2, 3, 5, 8].map((n) => ({
                 label: `🍅 预计番茄数：${n}`,
                 act: () =>
                   taskMenu &&
-                  void taskMetaUpdate({
+                  guardTask(taskMetaUpdate({
                     noteId,
                     taskKey: taskMenu.taskKey,
                     lineText: taskMenu.lineText,
                     estimate: n,
-                  }),
+                  })),
               })),
               // 本任务专注时长：null = 恢复全局默认（设置里的番茄分钟数）
               ...[
@@ -943,12 +956,12 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 label: o.label,
                 act: () =>
                   taskMenu &&
-                  void taskMetaUpdate({
+                  guardTask(taskMetaUpdate({
                     noteId,
                     taskKey: taskMenu.taskKey,
                     lineText: taskMenu.lineText,
                     focusMin: o.v,
-                  }),
+                  })),
               })),
               ...[
                 { label: "⬆ 优先级：高", v: "high" },
@@ -958,34 +971,34 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 label: o.label,
                 act: () =>
                   taskMenu &&
-                  void taskMetaUpdate({
+                  guardTask(taskMetaUpdate({
                     noteId,
                     taskKey: taskMenu.taskKey,
                     lineText: taskMenu.lineText,
                     priority: o.v,
-                  }),
+                  })),
               })),
               {
                 label: "✖️ 跳过今天",
                 act: () =>
                   taskMenu &&
-                  void taskMetaUpdate({
+                  guardTask(taskMetaUpdate({
                     noteId,
                     taskKey: taskMenu.taskKey,
                     lineText: taskMenu.lineText,
                     status: "skipped",
-                  }),
+                  })),
               },
               {
                 label: "↺ 清除跳过状态",
                 act: () =>
                   taskMenu &&
-                  void taskMetaUpdate({
+                  guardTask(taskMetaUpdate({
                     noteId,
                     taskKey: taskMenu.taskKey,
                     lineText: taskMenu.lineText,
                     clearSkip: true,
-                  }),
+                  })),
               },
             ].map((item) => (
               <Button
@@ -996,7 +1009,6 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 className="justify-start"
                 onClick={() => {
                   item.act();
-                  void refreshTaskMeta();
                   setTaskMenu(null);
                 }}
               >
