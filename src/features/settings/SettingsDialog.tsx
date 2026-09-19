@@ -320,18 +320,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 onCheckedChange={(v) => void writeSetting(SETTINGS_KEYS.startMinimized, String(v))}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="launch-show-notes" className="text-sm font-normal">
-                启动后自动显示便签
-              </Label>
-              <Switch
-                id="launch-show-notes"
-                disabled={loading}
-                checked={boolValue(SETTINGS_KEYS.launchShowNotes)}
-                onCheckedChange={(v) =>
-                  void writeSetting(SETTINGS_KEYS.launchShowNotes, String(v))
-                }
-              />
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="launch-show-notes" className="text-sm font-normal">
+                  启动后自动显示便签
+                </Label>
+                <Switch
+                  id="launch-show-notes"
+                  disabled={loading}
+                  checked={boolValue(SETTINGS_KEYS.launchShowNotes)}
+                  onCheckedChange={(v) =>
+                    void writeSetting(SETTINGS_KEYS.launchShowNotes, String(v))
+                  }
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                默认关闭：启动只开管理器，便签用托盘「显示全部便签」或 Ctrl+Shift+Space 唤出
+              </p>
             </div>
             <div className="space-y-2 pt-1">
               <Label className="text-xs text-muted-foreground">关闭主窗口时</Label>

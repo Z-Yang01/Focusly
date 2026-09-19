@@ -9,7 +9,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("close_action", "tray"), // tray | quit
     ("autostart", "false"),
     ("start_minimized", "true"),
-    ("launch_show_notes", "true"),
+    ("launch_show_notes", "false"),
     // 番茄钟（v5 迁移默认值；读取端见 pomodoro.rs settings_from）
     ("pomo_focus_min", "25"),       // 专注时长（分钟）
     ("pomo_short_min", "5"),        // 短休时长
