@@ -1,8 +1,9 @@
 /** 便签卡片（管理器网格）。memo 化：列表 refetch 未变的卡片不重渲染。 */
-import { memo, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { memo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Archive, ArchiveRestore, EllipsisVertical, Pin, SquareCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,7 @@ export interface NoteCardProps {
 }
 
 export const NoteCard = memo(function NoteCard({ note, onOpen }: NoteCardProps) {
+  const [confirmTrash, setConfirmTrash] = useState(false);
   const handleTogglePin = async () => {
     try {
       await setNoteFlag(note.id, "pinned", !note.isPinned);
@@ -46,7 +48,6 @@ export const NoteCard = memo(function NoteCard({ note, onOpen }: NoteCardProps) 
 
   const handleDelete = async () => {
     // 契约审计修复：删除改为移入回收站（trash_note），永久删除走回收站视图的 purge
-    if (!confirm(`确定将「${note.title || "无标题"}」移入回收站？可在回收站中恢复。`)) return;
     try {
       await trashNote(note.id);
     } catch (err) {
@@ -114,7 +115,7 @@ export const NoteCard = memo(function NoteCard({ note, onOpen }: NoteCardProps) 
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onSelect={() => void handleDelete()}
+              onSelect={() => setConfirmTrash(true)}
             >
               移入回收站
             </DropdownMenuItem>
@@ -147,6 +148,16 @@ export const NoteCard = memo(function NoteCard({ note, onOpen }: NoteCardProps) 
           {describeTime(note.updatedAt)}
         </span>
       </div>
+
+      <ConfirmDialog
+        open={confirmTrash}
+        onOpenChange={setConfirmTrash}
+        danger
+        title="移入回收站"
+        description={`「${note.title || "无标题"}」将移入回收站，可在回收站中恢复。`}
+        confirmText="移入回收站"
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 });

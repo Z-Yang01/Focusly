@@ -4,6 +4,7 @@ import { ArchiveRestore, RefreshCw, SquareCheck, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -100,16 +101,18 @@ export function TrashView({ className }: TrashViewProps) {
     setSelected(allSelected ? new Set() : new Set(items.map((i) => i.id)));
   };
 
-  const handlePurge = (item: TrashItem) => {
-    if (!confirm(`确定永久删除「${item.title || "无标题"}」？此操作不可恢复。`)) return;
-    void run(() => purgeNote(item.id));
-  };
+  // 待确认的危险操作（原生 confirm → 项目内 ConfirmDialog；清空回收站的双重确认合并为一条）
+  type PendingDanger =
+    | { kind: "purge"; item: TrashItem }
+    | { kind: "empty" }
+    | { kind: "purge-selected"; ids: string[] };
+  const [pending, setPending] = useState<PendingDanger | null>(null);
+
+  const handlePurge = (item: TrashItem) => setPending({ kind: "purge", item });
 
   const handleEmpty = () => {
     if (items.length === 0) return;
-    if (!confirm(`确定清空回收站？共 ${items.length} 条便签将被永久删除。`)) return;
-    if (!confirm("再次确认：清空后无法恢复，确定继续？")) return;
-    void run(() => emptyTrash());
+    setPending({ kind: "empty" });
   };
 
   const handleRestoreSelected = () => {
@@ -131,18 +134,29 @@ export function TrashView({ className }: TrashViewProps) {
   const handlePurgeSelected = () => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
-    if (!confirm(`确定永久删除所选 ${ids.length} 条便签？此操作不可恢复。`)) return;
-    void run(async () => {
-      let failed = 0;
-      for (const id of ids) {
-        try {
-          await purgeNote(id);
-        } catch {
-          failed++;
+    setPending({ kind: "purge-selected", ids });
+  };
+
+  const confirmDanger = () => {
+    if (!pending) return;
+    if (pending.kind === "purge") {
+      void run(() => purgeNote(pending.item.id));
+    } else if (pending.kind === "empty") {
+      void run(() => emptyTrash());
+    } else {
+      const ids = pending.ids;
+      void run(async () => {
+        let failed = 0;
+        for (const id of ids) {
+          try {
+            await purgeNote(id);
+          } catch {
+            failed++;
+          }
         }
-      }
-      if (failed > 0) throw new Error(`${failed} 条删除失败`);
-    });
+        if (failed > 0) throw new Error(`${failed} 条删除失败`);
+      });
+    }
   };
 
   const preview = items.find((i) => i.id === previewId) ?? null;
@@ -310,6 +324,30 @@ export function TrashView({ className }: TrashViewProps) {
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(v) => !v && setPending(null)}
+        danger
+        title={
+          pending?.kind === "empty"
+            ? "清空回收站"
+            : pending?.kind === "purge-selected"
+              ? "批量永久删除"
+              : "永久删除"
+        }
+        description={
+          pending?.kind === "empty"
+            ? `共 ${items.length} 条便签将被永久删除，此操作不可恢复。`
+            : pending?.kind === "purge-selected"
+              ? `所选 ${pending.ids.length} 条便签将被永久删除，此操作不可恢复。`
+              : pending
+                ? `「${pending.item.title || "无标题"}」将被永久删除，此操作不可恢复。`
+                : ""
+        }
+        confirmText="永久删除"
+        onConfirm={confirmDanger}
+      />
     </div>
   );
 }

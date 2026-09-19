@@ -6,6 +6,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { CalendarClock, Check, ClipboardList, PenLine, Pin, PinOff, Trash2, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { duration, easing, spacing } from "@/design-tokens";
@@ -106,6 +107,7 @@ export function QuickCaptureWindow() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [entries, setEntries] = useState<ClipboardEntry[]>([]);
+  const [confirmClear, setConfirmClear] = useState(false);
   /** clipboard_* 命令是否可用（后端未接线时历史区优雅降级） */
   const [backendOk, setBackendOk] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -321,7 +323,6 @@ export function QuickCaptureWindow() {
   };
 
   const clearAll = async () => {
-    if (!window.confirm("清空全部剪贴板历史（最多 100 条）？不可恢复。")) return;
     try {
       await clipboardClear();
       setEntries([]);
@@ -409,7 +410,7 @@ export function QuickCaptureWindow() {
               className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
               disabled={entries.length === 0}
               aria-label="清空剪贴板历史"
-              onClick={() => void clearAll()}
+              onClick={() => setConfirmClear(true)}
             >
               清空
             </Button>
@@ -487,6 +488,16 @@ export function QuickCaptureWindow() {
         )}
         <span className="text-[10px]">Ctrl+Enter 保存并关闭 · Esc 关闭 · Ctrl+Tab 切换</span>
       </div>
+
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        danger
+        title="清空剪贴板历史"
+        description="全部剪贴板历史（最多 100 条）将被清空，不可恢复。"
+        confirmText="清空"
+        onConfirm={() => void clearAll()}
+      />
     </div>
   );
 }

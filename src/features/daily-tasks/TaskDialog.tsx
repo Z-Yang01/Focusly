@@ -1,6 +1,7 @@
 /** 今日任务添加/编辑对话框（Radix Dialog 封装）。 */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -96,6 +97,8 @@ export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
   const requestClose = () => {
     const initial = initialRef.current;
     const dirty =
@@ -110,7 +113,10 @@ export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSu
       initial.tags !== value.tags ||
       initial.isPrivate !== value.isPrivate ||
       initial.focusMin !== value.focusMin;
-    if (dirty && !window.confirm("有未保存的修改，确定放弃并关闭？")) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
     onCancel();
   };
 
@@ -226,6 +232,16 @@ export function TaskDialog({ open, editing, value, onValueChange, onCancel, onSu
             {editing ? "保存" : "添加"}
           </Button>
         </DialogFooter>
+
+        <ConfirmDialog
+          open={confirmDiscard}
+          onOpenChange={setConfirmDiscard}
+          danger
+          title="放弃未保存的修改？"
+          description="关闭后将丢失本次填写的内容。"
+          confirmText="放弃并关闭"
+          onConfirm={onCancel}
+        />
       </DialogContent>
     </Dialog>
   );

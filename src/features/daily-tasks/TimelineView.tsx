@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Check, Copy, Pencil, Play, SkipForward, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "@/stores/toast";
 import { onPomodoroFinished, onPomodoroState } from "@/lib/tauri";
 import {
@@ -60,6 +61,8 @@ export function TimelineView({ className }: Props) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
+  // 待确认删除的任务（原生 confirm → ConfirmDialog，时间轴与未排时区两处共用）
+  const [deleteTarget, setDeleteTarget] = useState<DailyTask | null>(null);
   const [editing, setEditing] = useState<DailyTask | null>(null);
   const [dialogValue, setDialogValue] = useState<TaskDialogValue>(emptyValue());
   const [nowMin, setNowMin] = useState(() => {
@@ -453,10 +456,7 @@ export function TimelineView({ className }: Props) {
                       <IconBtn title="转为便签" onClick={() => void toNote(t)}><Copy className="size-3" /></IconBtn>
                       <IconBtn
                         title="删除"
-                        onClick={() => {
-                          if (!window.confirm(`删除任务「${t.isPrivate ? "🔒 私密任务" : t.title}」？不可恢复。`)) return;
-                          void act(() => dailyTaskDelete(t.id), "已删除");
-                        }}
+                        onClick={() => setDeleteTarget(t)}
                       >
                         <Trash2 className="size-3" />
                       </IconBtn>
@@ -637,10 +637,7 @@ export function TimelineView({ className }: Props) {
                   <IconBtn title="编辑" onClick={() => openEdit(t)}><Pencil className="size-3" /></IconBtn>
                   <IconBtn
                     title="删除"
-                    onClick={() => {
-                      if (!window.confirm(`删除任务「${t.isPrivate ? "🔒 私密任务" : t.title}」？不可恢复。`)) return;
-                      void act(() => dailyTaskDelete(t.id), "已删除");
-                    }}
+                    onClick={() => setDeleteTarget(t)}
                   >
                     <Trash2 className="size-3" />
                   </IconBtn>
@@ -684,6 +681,18 @@ export function TimelineView({ className }: Props) {
               }
             : undefined
         }
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        danger
+        title="删除任务"
+        description={`「${deleteTarget?.isPrivate ? "🔒 私密任务" : deleteTarget?.title ?? ""}」将被删除，不可恢复。`}
+        confirmText="删除"
+        onConfirm={() => {
+          if (deleteTarget) void act(() => dailyTaskDelete(deleteTarget.id), "已删除");
+        }}
       />
     </div>
   );

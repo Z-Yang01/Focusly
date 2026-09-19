@@ -39,6 +39,7 @@ import { ReminderPopover } from "@/features/reminders/ReminderPopover";
 import { ReminderBanner } from "@/features/reminders/ReminderBanner";
 import { useNoteAutoSave, type NoteAutoSaveState } from "./useNoteAutoSave";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -116,6 +117,171 @@ const FULLSCREEN_OPTIONS: { value: FullscreenBehavior; label: string }[] = [
   { value: "fullscreen_show", label: "全屏时显示" },
   { value: "fullscreen_hide", label: "全屏时自动隐藏" },
 ];
+
+/** 打开管理器并聚焦本便签；失败可见（顶部菜单/右键菜单/提醒横幅/错误页四处共用收口） */
+function showManagerSafe() {
+  showManager().catch((err) => {
+    console.error("打开管理器失败", err);
+    toast.error("打开管理器失败");
+  });
+}
+
+/** 便签菜单共享动作模型：DropdownMenu 与 ContextMenu 两个组件族渲染同一份配置，防止两处漂移 */
+interface NoteMenuModel {
+  isPinned: boolean;
+  showOnAllDesktops: boolean;
+  desktopUnsupported: boolean;
+  fullscreenBehavior: FullscreenBehavior;
+  togglePin: () => void;
+  toggleAllDesktops: () => void;
+  changeFullscreen: (v: FullscreenBehavior) => void;
+  showInManager: () => void;
+  archive: () => void;
+  remove: () => void;
+}
+
+const allDesktopsLabel = (unsupported: boolean) =>
+  `所有桌面显示${unsupported ? "（系统不支持）" : ""}`;
+
+/** DropdownMenu 族的共享菜单段（flags 块尾含分隔线） */
+function DropdownNoteMenuFlags({ m }: { m: NoteMenuModel }) {
+  return (
+    <>
+      <DropdownMenuCheckboxItem checked={m.isPinned} onCheckedChange={m.togglePin}>
+        置顶
+      </DropdownMenuCheckboxItem>
+      <DropdownMenuCheckboxItem
+        checked={m.showOnAllDesktops}
+        disabled={m.desktopUnsupported}
+        onCheckedChange={m.toggleAllDesktops}
+      >
+        {allDesktopsLabel(m.desktopUnsupported)}
+      </DropdownMenuCheckboxItem>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>全屏行为</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <DropdownMenuRadioGroup
+            value={m.fullscreenBehavior}
+            onValueChange={(v) => m.changeFullscreen(v as FullscreenBehavior)}
+          >
+            {FULLSCREEN_OPTIONS.map((opt) => (
+              <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <DropdownMenuSeparator />
+    </>
+  );
+}
+
+/** ContextMenu 族的共享菜单段（flags 块尾含分隔线） */
+function ContextNoteMenuFlags({ m }: { m: NoteMenuModel }) {
+  return (
+    <>
+      <ContextMenuCheckboxItem checked={m.isPinned} onCheckedChange={m.togglePin}>
+        置顶
+      </ContextMenuCheckboxItem>
+      <ContextMenuCheckboxItem
+        checked={m.showOnAllDesktops}
+        disabled={m.desktopUnsupported}
+        onCheckedChange={m.toggleAllDesktops}
+      >
+        {allDesktopsLabel(m.desktopUnsupported)}
+      </ContextMenuCheckboxItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>全屏行为</ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          <ContextMenuRadioGroup
+            value={m.fullscreenBehavior}
+            onValueChange={(v) => m.changeFullscreen(v as FullscreenBehavior)}
+          >
+            {FULLSCREEN_OPTIONS.map((opt) => (
+              <ContextMenuRadioItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </ContextMenuRadioItem>
+            ))}
+          </ContextMenuRadioGroup>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+      <ContextMenuSeparator />
+    </>
+  );
+}
+
+/** 任务操作菜单：数据驱动的配置骨架（自 JSX 内联数组抽出，便于维护与测试） */
+interface TaskMenuState {
+  taskKey: string;
+  lineText: string;
+  status: "todo" | "done" | "skipped" | "running";
+}
+
+function buildTaskMenuActions(
+  task: TaskMenuState,
+  ctx: {
+    noteId: string;
+    noteTitle: string;
+    isPrivate: boolean;
+    today: string;
+    guardTask: (p: Promise<unknown>, okMsg?: string) => void;
+  },
+): { label: string; act: () => void }[] {
+  const { noteId, guardTask } = ctx;
+  const meta = (patch: Partial<Parameters<typeof taskMetaUpdate>[0]>) =>
+    guardTask(taskMetaUpdate({ noteId, taskKey: task.taskKey, lineText: task.lineText, ...patch }));
+  return [
+    {
+      label: "🍅 设为当前番茄任务",
+      act: () => guardTask(pomodoroStart(noteId, task.taskKey, task.lineText)),
+    },
+    {
+      label: "✔️ 完成任务",
+      act: () => guardTask(pomodoroCompleteTask(noteId, task.taskKey, task.lineText)),
+    },
+    {
+      label: "📅 加入今日计划",
+      act: () =>
+        guardTask(
+          dailyTaskCreate({
+            date: ctx.today,
+            startTime: null,
+            endTime: null,
+            title: task.lineText,
+            note: `来自便签：${ctx.noteTitle || noteId.slice(0, 8)}`,
+            estimatePomodoros: 0,
+            priority: "medium",
+            repeatRule: "none",
+            tags: null,
+            isPrivate: ctx.isPrivate,
+            focusMin: null,
+          }),
+          "已加入今日计划",
+        ),
+    },
+    ...[1, 2, 3, 5, 8].map((n) => ({
+      label: `🍅 预计番茄数：${n}`,
+      act: () => meta({ estimate: n }),
+    })),
+    // 本任务专注时长：null = 恢复全局默认（设置里的番茄分钟数）
+    ...[
+      { label: "⏱ 专注 15 分钟", v: 15 },
+      { label: "⏱ 专注 25 分钟（默认）", v: 25 },
+      { label: "⏱ 专注 30 分钟", v: 30 },
+      { label: "⏱ 专注 45 分钟", v: 45 },
+      { label: "⏱ 专注 60 分钟", v: 60 },
+      { label: "⏱ 恢复默认时长", v: null },
+    ].map((o) => ({ label: o.label, act: () => meta({ focusMin: o.v }) })),
+    ...[
+      { label: "⬆ 优先级：高", v: "high" },
+      { label: "➖ 优先级：中", v: "medium" },
+      { label: "⬇ 优先级：低", v: "low" },
+    ].map((o) => ({ label: o.label, act: () => meta({ priority: o.v }) })),
+    { label: "✖️ 跳过今天", act: () => meta({ status: "skipped" }) },
+    { label: "↺ 清除跳过状态", act: () => meta({ clearSkip: true }) },
+  ];
+}
 
 interface IconButtonProps {
   title: string;
@@ -302,6 +468,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   });
   const [banner, setBanner] = useState<ReminderFiredEvent | null>(null);
   const [versionOpen, setVersionOpen] = useState(false);
+  const [confirmTrash, setConfirmTrash] = useState(false);
   const pomo = usePomodoro();
   const [taskMetaList, setTaskMetaList] = useState<TaskMeta[]>([]);
   const [taskMenu, setTaskMenu] = useState<{
@@ -623,7 +790,6 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
 
   const handleDelete = async () => {
     // 契约审计修复：删除改为移入回收站（trash_note），永久删除走回收站视图的 purge
-    if (!confirm("确定将该便签移入回收站？可在回收站中恢复。")) return;
     try {
       await trashNote(noteId);
       await closeNoteWindow(noteId);
@@ -661,11 +827,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   }
 
   if (loadState === "error" || !detail) {
-    const openInManager = () =>
-      void showManager().catch((err) => {
-        console.error("打开管理器失败", err);
-        toast.error("打开管理器失败");
-      });
+    const openInManager = () => showManagerSafe();
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-2 bg-background px-6 text-sm">
         <AlertCircle className="size-8 text-destructive/70" />
@@ -690,53 +852,33 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
   const stats = todoStats(content);
   const desktopUnsupported = detail.desktopPinState === "unsupported";
 
+  // 共享菜单模型：顶部 DropdownMenu 与右键 ContextMenu 渲染同一份动作配置
+  const noteMenuModel: NoteMenuModel = {
+    isPinned: detail.isPinned,
+    showOnAllDesktops: detail.showOnAllDesktops,
+    desktopUnsupported,
+    fullscreenBehavior: detail.fullscreenBehavior,
+    togglePin: () => void toggleFlag("pinned"),
+    toggleAllDesktops: () => void toggleFlag("all_desktops"),
+    changeFullscreen: (v) => void changeFullscreen(v),
+    showInManager: showManagerSafe,
+    archive: () => void handleArchive(),
+    remove: () => setConfirmTrash(true),
+  };
+
   const menuItems = (
     <>
-      <DropdownMenuCheckboxItem
-        checked={detail.isPinned}
-        onCheckedChange={() => void toggleFlag("pinned")}
-      >
-        置顶
-      </DropdownMenuCheckboxItem>
-      <DropdownMenuCheckboxItem
-        checked={detail.showOnAllDesktops}
-        disabled={desktopUnsupported}
-        onCheckedChange={() => void toggleFlag("all_desktops")}
-      >
-        所有桌面显示{desktopUnsupported ? "（系统不支持）" : ""}
-      </DropdownMenuCheckboxItem>
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger>全屏行为</DropdownMenuSubTrigger>
-        <DropdownMenuSubContent>
-          <DropdownMenuRadioGroup
-            value={detail.fullscreenBehavior}
-            onValueChange={(v) => void changeFullscreen(v as FullscreenBehavior)}
-          >
-            {FULLSCREEN_OPTIONS.map((opt) => (
-              <DropdownMenuRadioItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
-      <DropdownMenuSeparator />
+      <DropdownNoteMenuFlags m={noteMenuModel} />
       <DropdownMenuItem onSelect={() => void handleInsertImage()}>插入图片</DropdownMenuItem>
-      <DropdownMenuItem
-        onSelect={() =>
-          void showManager().catch((err) => {
-            console.error("打开管理器失败", err);
-            toast.error("打开管理器失败");
-          })
-        }
-      >
-        在管理器中显示
-      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={showManagerSafe}>在管理器中显示</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => void ensureMiniPomodoro()}>迷你番茄窗</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setVersionOpen(true)}>版本历史</DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => void handleArchive()}>归档</DropdownMenuItem>
+      <DropdownMenuItem onSelect={noteMenuModel.archive}>归档</DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => void handleDelete()}>
+      <DropdownMenuItem
+        className="text-destructive focus:text-destructive"
+        onSelect={noteMenuModel.remove}
+      >
         删除
       </DropdownMenuItem>
     </>
@@ -769,12 +911,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
                 onDone={() => void handleBannerDone()}
                 onSnooze={(m) => void handleBannerSnooze(m)}
                 onDismiss={() => void handleBannerDismiss()}
-                onOpenNote={() =>
-                  void showManager().catch((err) => {
-                    console.error("打开管理器失败", err);
-                    toast.error("打开管理器失败");
-                  })
-                }
+                onOpenNote={showManagerSafe}
               />
             )}
 
@@ -844,50 +981,13 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
               ))}
             </ContextMenuSubContent>
           </ContextMenuSub>
-          <ContextMenuCheckboxItem
-            checked={detail.isPinned}
-            onCheckedChange={() => void toggleFlag("pinned")}
-          >
-            置顶
-          </ContextMenuCheckboxItem>
-          <ContextMenuCheckboxItem
-            checked={detail.showOnAllDesktops}
-            disabled={desktopUnsupported}
-            onCheckedChange={() => void toggleFlag("all_desktops")}
-          >
-            所有桌面显示{desktopUnsupported ? "（系统不支持）" : ""}
-          </ContextMenuCheckboxItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>全屏行为</ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuRadioGroup
-                value={detail.fullscreenBehavior}
-                onValueChange={(v) => void changeFullscreen(v as FullscreenBehavior)}
-              >
-                {FULLSCREEN_OPTIONS.map((opt) => (
-                  <ContextMenuRadioItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </ContextMenuRadioItem>
-                ))}
-              </ContextMenuRadioGroup>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSeparator />
-          <ContextMenuItem
-            onSelect={() =>
-              void showManager().catch((err) => {
-                console.error("打开管理器失败", err);
-                toast.error("打开管理器失败");
-              })
-            }
-          >
-            在管理器中显示
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => void handleArchive()}>归档</ContextMenuItem>
+          <ContextNoteMenuFlags m={noteMenuModel} />
+          <ContextMenuItem onSelect={showManagerSafe}>在管理器中显示</ContextMenuItem>
+          <ContextMenuItem onSelect={noteMenuModel.archive}>归档</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
             className="text-destructive focus:text-destructive"
-            onSelect={() => void handleDelete()}
+            onSelect={noteMenuModel.remove}
           >
             删除
           </ContextMenuItem>
@@ -899,130 +999,44 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
         onOpenChange={setVersionOpen}
         onRestored={refreshMeta}
       />
+      <ConfirmDialog
+        open={confirmTrash}
+        onOpenChange={setConfirmTrash}
+        danger
+        title="移入回收站"
+        description="该便签将移入回收站，可在回收站中恢复。"
+        confirmText="移入回收站"
+        onConfirm={() => void handleDelete()}
+      />
       <Dialog open={taskMenu !== null} onOpenChange={(v) => !v && setTaskMenu(null)}>
         <DialogContent className="max-w-xs gap-2 p-3 text-sm">
           <DialogHeader>
             <DialogTitle className="text-sm">任务：{taskMenu?.lineText}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-1">
-            {[
-              {
-                label: "🍅 设为当前番茄任务",
-                act: () =>
-                  taskMenu &&
-                  guardTask(pomodoroStart(noteId, taskMenu.taskKey, taskMenu.lineText)),
-              },
-              {
-                label: "✔️ 完成任务",
-                act: () =>
-                  taskMenu &&
-                  guardTask(
-                    pomodoroCompleteTask(noteId, taskMenu.taskKey, taskMenu.lineText),
-                  ),
-              },
-              {
-                label: "📅 加入今日计划",
-                act: () =>
-                  taskMenu &&
-                  guardTask(
-                    dailyTaskCreate({
-                      date: localDateKey(new Date()),
-                      startTime: null,
-                      endTime: null,
-                      title: taskMenu.lineText,
-                      note: `来自便签：${detail?.title || noteId.slice(0, 8)}`,
-                      estimatePomodoros: 0,
-                      priority: "medium",
-                      repeatRule: "none",
-                      tags: null,
-                      isPrivate: Boolean(detail?.isPrivate),
-                      focusMin: null,
-                    }),
-                    "已加入今日计划",
-                  ),
-              },
-              ...[1, 2, 3, 5, 8].map((n) => ({
-                label: `🍅 预计番茄数：${n}`,
-                act: () =>
-                  taskMenu &&
-                  guardTask(taskMetaUpdate({
-                    noteId,
-                    taskKey: taskMenu.taskKey,
-                    lineText: taskMenu.lineText,
-                    estimate: n,
-                  })),
-              })),
-              // 本任务专注时长：null = 恢复全局默认（设置里的番茄分钟数）
-              ...[
-                { label: "⏱ 专注 15 分钟", v: 15 },
-                { label: "⏱ 专注 25 分钟（默认）", v: 25 },
-                { label: "⏱ 专注 30 分钟", v: 30 },
-                { label: "⏱ 专注 45 分钟", v: 45 },
-                { label: "⏱ 专注 60 分钟", v: 60 },
-                { label: "⏱ 恢复默认时长", v: null },
-              ].map((o) => ({
-                label: o.label,
-                act: () =>
-                  taskMenu &&
-                  guardTask(taskMetaUpdate({
-                    noteId,
-                    taskKey: taskMenu.taskKey,
-                    lineText: taskMenu.lineText,
-                    focusMin: o.v,
-                  })),
-              })),
-              ...[
-                { label: "⬆ 优先级：高", v: "high" },
-                { label: "➖ 优先级：中", v: "medium" },
-                { label: "⬇ 优先级：低", v: "low" },
-              ].map((o) => ({
-                label: o.label,
-                act: () =>
-                  taskMenu &&
-                  guardTask(taskMetaUpdate({
-                    noteId,
-                    taskKey: taskMenu.taskKey,
-                    lineText: taskMenu.lineText,
-                    priority: o.v,
-                  })),
-              })),
-              {
-                label: "✖️ 跳过今天",
-                act: () =>
-                  taskMenu &&
-                  guardTask(taskMetaUpdate({
-                    noteId,
-                    taskKey: taskMenu.taskKey,
-                    lineText: taskMenu.lineText,
-                    status: "skipped",
-                  })),
-              },
-              {
-                label: "↺ 清除跳过状态",
-                act: () =>
-                  taskMenu &&
-                  guardTask(taskMetaUpdate({
-                    noteId,
-                    taskKey: taskMenu.taskKey,
-                    lineText: taskMenu.lineText,
-                    clearSkip: true,
-                  })),
-              },
-            ].map((item) => (
-              <Button
-                key={item.label}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="justify-start"
-                onClick={() => {
-                  item.act();
-                  setTaskMenu(null);
-                }}
-              >
-                {item.label}
-              </Button>
-            ))}
+            {taskMenu
+              ? buildTaskMenuActions(taskMenu, {
+                  noteId,
+                  noteTitle: detail?.title || "",
+                  isPrivate: Boolean(detail?.isPrivate),
+                  today,
+                  guardTask,
+                }).map((item) => (
+                  <Button
+                    key={item.label}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => {
+                      item.act();
+                      setTaskMenu(null);
+                    }}
+                  >
+                    {item.label}
+                  </Button>
+                ))
+              : null}
           </div>
         </DialogContent>
       </Dialog>

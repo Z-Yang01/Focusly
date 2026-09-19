@@ -220,6 +220,8 @@ pub fn count_todos(content: &str) -> (i64, i64) {
     (total, done)
 }
 
+/// 部分更新：None 字段不写库。`..Default::default()`（touch=false）配合结构体更新语法使用。
+#[derive(Default)]
 pub struct NoteUpdate {
     pub id: String,
     pub title: Option<String>,

@@ -233,6 +233,19 @@
   chunk 加载延迟不产生白闪（Suspense fallback 为主题底色空壳）
 - 启动开窗查询不再加载正文（随性能链路批 all_active_with_windows 瘦身生效）
 
+### 代码质量清理批（2026-09-19）
+
+#### Changed（内部质量）
+- NoteWindow 菜单去重：顶部 DropdownMenu 与右键 ContextMenu 的置顶/所有桌面/全屏行为/
+  在管理器中显示/归档/删除收敛为共享动作模型（NoteMenuModel），两组件族渲染同一份配置防漂移；
+  `showManager().catch` 四处重复错误处理收口为 `showManagerSafe()`；
+  任务操作菜单 100+ 行 JSX 内联数组抽为数据驱动的 `buildTaskMenuActions()`（只在任务非空时构建）
+- 原生 `confirm()` 全量替换为项目内 `ConfirmDialog`（components/ui/confirm-dialog.tsx，
+  shadcn Dialog 封装，danger 红色确认键）：NoteCard/NoteWindow/TrashView×3（清空回收站的双重确认
+  合并为一条，说明文案保留两次确认的全部信息）/VersionHistoryPanel/TaskDialog/TimelineView×2/
+  ImageManagerDialog/QuickCaptureWindow/SettingsDialog×2 共 14 处——WebView 内观感统一、不再阻塞渲染
+- NoteUpdate 实现 `Default`（touch 默认 false），服务层 5 处 15×None 手写样板改结构体更新语法
+
 ## [0.1.0] - 2026-09-16
 
 ### 初始功能

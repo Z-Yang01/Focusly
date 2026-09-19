@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, GitCompare, History, RefreshCw, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -143,10 +144,15 @@ export function VersionHistoryPanel({
   );
   const stats = useMemo(() => diffStats(diff), [diff]);
 
-  const handleRestore = async () => {
+  const [confirmRestore, setConfirmRestore] = useState(false);
+
+  const handleRestore = () => {
     if (!selected || busy) return;
-    if (!confirm(`确定恢复到此版本（${describeTime(selected.createdAt)}）？当前内容会先自动备份。`))
-      return;
+    setConfirmRestore(true);
+  };
+
+  const doRestore = async () => {
+    if (!selected || busy) return;
     setBusy(true);
     try {
       await restoreVersion(selected.id);
@@ -268,7 +274,7 @@ export function VersionHistoryPanel({
                   <GitCompare />
                   {view === "diff" ? "退出对比" : "与此版本对比"}
                 </Button>
-                <Button size="sm" disabled={!selected || busy} onClick={() => void handleRestore()}>
+                <Button size="sm" disabled={!selected || busy} onClick={handleRestore}>
                   <RotateCcw />
                   恢复此版本
                 </Button>
@@ -277,6 +283,19 @@ export function VersionHistoryPanel({
           </div>
         )}
       </DialogContent>
+
+      <ConfirmDialog
+        open={confirmRestore}
+        onOpenChange={setConfirmRestore}
+        title="恢复到此版本"
+        description={
+          selected
+            ? `恢复到 ${describeTime(selected.createdAt)} 的版本？当前内容会先自动备份。`
+            : ""
+        }
+        confirmText="恢复"
+        onConfirm={() => void doRestore()}
+      />
     </Dialog>
   );
 }

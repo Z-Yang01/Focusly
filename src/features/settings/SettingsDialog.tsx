@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { isSoundEnabled, setSoundEnabled } from "@/lib/sound";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -211,7 +212,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       const path = Array.isArray(picked) ? picked[0] : picked;
       if (!path) return;
       // 导入会覆盖同 id 便签与设置（"不会丢"红线）：先确认，再自动做导入前备份
-      if (!window.confirm("导入将覆盖与文件中同 id 的现有便签/提醒/设置。\n已自动创建导入前备份，确认继续？")) return;
+      setPendingImportPath(path);
+    } catch (err) {
+      console.error("导入失败", err);
+      toast.error(`导入失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const doImport = async (path: string) => {
+    try {
       try {
         await backupNow();
       } catch (e) {
@@ -252,12 +261,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   };
 
   const [soundOn, setSoundOn] = useState(isSoundEnabled());
+  // 待确认事项：导入覆盖 / 放弃未保存的快捷键修改（原生 confirm → ConfirmDialog）
+  const [pendingImportPath, setPendingImportPath] = useState<string | null>(null);
+  const [confirmDiscardShortcuts, setConfirmDiscardShortcuts] = useState(false);
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
         // 有未保存的快捷键修改时，Esc/点遮罩不静默丢弃
-        if (!v && hasStaged && !window.confirm("有未保存的快捷键修改，确定放弃并关闭？")) return;
+        if (!v && hasStaged) {
+          setConfirmDiscardShortcuts(true);
+          return;
+        }
         onOpenChange(v);
       }}
     >
@@ -488,6 +503,27 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </div>
           </TabsContent>
         </Tabs>
+
+        <ConfirmDialog
+          open={pendingImportPath !== null}
+          onOpenChange={(v) => !v && setPendingImportPath(null)}
+          danger
+          title="导入数据"
+          description="导入将覆盖与文件中同 id 的现有便签/提醒/设置；执行前会自动创建导入前备份。确认继续？"
+          confirmText="导入"
+          onConfirm={() => {
+            if (pendingImportPath) void doImport(pendingImportPath);
+          }}
+        />
+        <ConfirmDialog
+          open={confirmDiscardShortcuts}
+          onOpenChange={setConfirmDiscardShortcuts}
+          danger
+          title="放弃未保存的快捷键修改？"
+          description="关闭设置后将丢失未应用的快捷键修改。"
+          confirmText="放弃并关闭"
+          onConfirm={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );

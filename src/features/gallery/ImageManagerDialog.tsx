@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, ExternalLink, Images, Info, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -165,17 +166,14 @@ function DuplicatesTab() {
   );
 }
 
-/** 区块二：孤儿清理（confirm 前置 → 执行 → "已清理 N 个文件"） */
+/** 区块二：孤儿清理（确认前置 → 执行 → "已清理 N 个文件"） */
 function OrphansTab() {
   const [busy, setBusy] = useState(false);
   const [cleaned, setCleaned] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const run = useCallback(async () => {
-    const ok = window.confirm(
-      "将删除 images/ 目录下所有未被便签引用的图片文件（不涉及数据库记录与便签本身）。确定清理？",
-    );
-    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
@@ -206,10 +204,20 @@ function OrphansTab() {
         </div>
       ) : null}
 
-      <Button onClick={() => void run()} disabled={busy} className="w-full">
+      <Button onClick={() => setConfirmOpen(true)} disabled={busy} className="w-full">
         {busy ? <RefreshCw className="animate-spin" /> : <Trash2 />}
         {busy ? "清理中…" : "扫描并清理孤儿文件"}
       </Button>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        danger
+        title="清理孤儿图片文件"
+        description="将删除 images/ 目录下所有未被便签引用的图片文件（不涉及数据库记录与便签本身）。"
+        confirmText="清理"
+        onConfirm={() => void run()}
+      />
     </div>
   );
 }

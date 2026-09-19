@@ -92,18 +92,8 @@ pub fn update_content(app: &AppHandle, id: &str, title: &str, content: &str) -> 
                 id: id.to_string(),
                 title: Some(title.to_string()),
                 content: Some(content.to_string()),
-                is_pinned: None,
-                is_always_on_top: None,
-                show_on_all_desktops: None,
-                desktop_pin_state: None,
-                fullscreen_behavior: None,
-                monitor_id: None,
-                is_private: None,
-                locked: None,
-                readonly_flag: None,
-                scale: None,
-                pin_mode: None,
                 touch: true,
+                ..Default::default()
             },
         )?;
         // 内容变更：快照 + 重建 FTS 索引（失败不阻塞保存主流程）
@@ -142,20 +132,11 @@ pub fn set_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> AppResult
             c,
             &NoteUpdate {
                 id: id.to_string(),
-                title: None,
-                content: None,
                 is_pinned: (field == "pinned").then_some(value),
                 is_always_on_top: (field == "always_on_top").then_some(value),
                 show_on_all_desktops: (field == "all_desktops").then_some(value),
-                desktop_pin_state: None,
-                fullscreen_behavior: None,
-                monitor_id: None,
-                is_private: None,
-                locked: None,
-                readonly_flag: None,
-                scale: None,
-                pin_mode: None,
                 touch: true,
+                ..Default::default()
             },
         )
     })?;
@@ -179,20 +160,8 @@ pub fn set_fullscreen_behavior(app: &AppHandle, id: &str, behavior: &str) -> App
             c,
             &NoteUpdate {
                 id: id.to_string(),
-                title: None,
-                content: None,
-                is_pinned: None,
-                is_always_on_top: None,
-                show_on_all_desktops: None,
-                desktop_pin_state: None,
                 fullscreen_behavior: Some(behavior.to_string()),
-                monitor_id: None,
-                is_private: None,
-                locked: None,
-                readonly_flag: None,
-                scale: None,
-                pin_mode: None,
-                touch: false,
+                ..Default::default()
             },
         )
     })?;
@@ -325,20 +294,10 @@ pub fn set_privacy_flag(app: &AppHandle, id: &str, flag: &str, value: bool) -> A
             c,
             &NoteUpdate {
                 id: id.to_string(),
-                title: None,
-                content: None,
-                is_pinned: None,
-                is_always_on_top: None,
-                show_on_all_desktops: None,
-                desktop_pin_state: None,
-                fullscreen_behavior: None,
-                monitor_id: None,
                 is_private: (field == "is_private").then_some(value),
                 locked: (field == "locked").then_some(value),
                 readonly_flag: (field == "readonly").then_some(value),
-                scale: None,
-                pin_mode: None,
-                touch: false,
+                ..Default::default()
             },
         )
     })?;
@@ -395,20 +354,8 @@ pub fn set_pin_mode(app: &AppHandle, id: &str, mode: &str) -> AppResult<Note> {
             c,
             &crate::db::notes::NoteUpdate {
                 id: id.to_string(),
-                title: None,
-                content: None,
-                is_pinned: None,
-                is_always_on_top: None,
-                show_on_all_desktops: None,
-                desktop_pin_state: None,
-                fullscreen_behavior: None,
-                monitor_id: None,
-                is_private: None,
-                locked: None,
-                readonly_flag: None,
                 pin_mode: Some(mode.to_string()),
-                scale: None,
-                touch: false,
+                ..Default::default()
             },
         )
     })?;
