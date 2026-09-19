@@ -1171,14 +1171,14 @@ mod tests {
         )
         .unwrap();
         // 标记已通知，顺延后应复位（新的一天需要重新到点通知）
-        mark_notified(&conn, &[a.id.clone()]).unwrap();
+        mark_notified(&conn, std::slice::from_ref(&a.id)).unwrap();
         let n = postpone_to(&conn, &[a.id.clone(), "nonexistent".into()], "2026-09-19").unwrap();
         assert_eq!(n, 1, "模板与不存在的 id 被忽略");
         let moved = get(&conn, &a.id).unwrap();
         assert_eq!(moved.date, "2026-09-19");
         assert!(!moved.start_notified, "顺延后通知标记复位");
         // 非法目标日期报错
-        assert!(postpone_to(&conn, &[a.id.clone()], "bad").is_err());
+        assert!(postpone_to(&conn, std::slice::from_ref(&a.id), "bad").is_err());
     }
 
     #[test]
