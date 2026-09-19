@@ -56,7 +56,7 @@ Focusly/
 │       ├── state.rs            # AppState（db/paths/scheduler/快捷键映射/全屏隐藏集）
 │       ├── error.rs            # AppError 统一错误（序列化为 {kind,message}）
 │       ├── db/                 # SQLite 层：连接 + migrations + DAO（SQL 只在这里）
-│       │   ├── migrations.rs   #   PRAGMA user_version 迁移（v1 基础7表 / v2 回收站·版本·私密·FTS5 / v3 布局预设 / v4 快捕快捷键 / v5 番茄钟 / v6 图钉三态 / v7 覆盖索引 / v8 今日任务 / v9 每任务专注时长）
+│       │   ├── migrations.rs   #   PRAGMA user_version 迁移（v1 基础7表 / v2 回收站·版本·私密·FTS5 / v3 布局预设 / v4 快捕快捷键 / v5 番茄钟 / v6 图钉三态 / v7 覆盖索引 / v8 今日任务 / v9 每任务专注时长 / v10 待办排序 / v11 提醒锚点）
 │       │   ├── notes.rs / reminders.rs / images.rs / tags.rs / settings.rs / shortcuts.rs
 │       │   ├── daily_tasks.rs  #   今日任务 DAO（CRUD/按日列表/重复物化/统计/搜索）
 │       │   ├── pomodoro_sessions.rs / task_meta.rs  #   番茄会话 DAO / 便签任务元数据 DAO

@@ -141,18 +141,18 @@ npm run icon           # 重新生成全套应用图标（assets/icon.png → ic
 
 见 [AGENTS.md](./AGENTS.md)「职责划分」与「架构决策记录」。
 
-### 7. 测试结果（2026-09-18 门禁实测）
+### 7. 测试结果（2026-09-19 门禁实测）
 
 | 项 | 结果 |
 |---|---|
 | `npx tsc --noEmit` | ✅ 0 错误 |
-| `npm test`（vitest） | ✅ 14 文件 248 用例全部通过 |
-| `cargo test`（src-tauri/） | ✅ 198 用例全部通过 |
+| `npm test`（vitest） | ✅ 16 文件 275 用例全部通过 |
+| `cargo test`（src-tauri/） | ✅ 207 用例全部通过（连跑 3 次稳定） |
 | `cargo clippy --all-targets` | ✅ 0 告警（`cargo fmt --check` 同步 clean） |
 | `npm run lint`（eslint） | ✅ 通过（--max-warnings 200） |
-| `npm run contract-audit` | ✅ 96 个 Rust 命令与前端封装逐一对照，无漂移 |
-| 桌面端 E2E | ✅ CDP 驱动真实 UI 验收（迁移 v8 / 时间轴 / 番茄 / 搜索分区 / 高 DPI 便签），记录见 PROGRESS.md |
-| 备份恢复演练 | ✅ 5 份轮转 + 文件头校验 + 临时目录独立打开 |
+| `npm run contract-audit` | ✅ 99 个 Rust 命令与前端封装逐一对照，无漂移 |
+| 桌面端 E2E | ✅ CDP 驱动真实 UI 验收：拖拽排序持久、复盘报表渲染、时间轴专注块、任务完成联动停番茄（数据库副本上执行） |
+| 备份恢复演练 | ✅ 演练测试（备份→破坏→还原→比对）+ 真实备份目录 5 份轮转、`SQLite format 3` 头校验 |
 
 > 2026-09-15 静态契约审计期的历史结果与 MSVC 工具链安装步骤已随门禁全绿失效，见 git 历史。
 
