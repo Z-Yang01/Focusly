@@ -280,8 +280,25 @@ fn fire_due(app: &AppHandle) {
         if let Err(e) = state.db.tx(|c| {
             crate::db::reminders::set_status(c, &r.id, "triggered", true)?;
             if repeat != RepeatType::Once {
-                if let Some(next) = crate::db::reminders::next_occurrence(repeat, t, Utc::now()) {
-                    crate::db::reminders::create(c, &r.note_id, &fmt(next), repeat)?;
+                // 月/年重复必须从原始锚点重算并透传锚点（v11）：若从刚触发的 remind_at
+                // 推进，月末 clamp 后日号会永久漂移（1-31 → 2-28 → 3-28…）。
+                // v11 前的旧行 anchor_at 为 NULL → 退化为以自身 remind_at 为锚（维持旧行为）。
+                let anchor = r
+                    .anchor_at
+                    .as_deref()
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                    .map(|d| d.with_timezone(&Utc))
+                    .unwrap_or(t);
+                if let Some(next) =
+                    crate::db::reminders::next_occurrence(repeat, t, anchor, Utc::now())
+                {
+                    crate::db::reminders::create_with_anchor(
+                        c,
+                        &r.note_id,
+                        &fmt(next),
+                        repeat,
+                        r.anchor_at.as_deref().unwrap_or(&r.remind_at),
+                    )?;
                 }
             }
             Ok(())

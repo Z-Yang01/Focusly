@@ -121,4 +121,31 @@ describe("applyTaskOrder", () => {
     expect(r.content.split("\n")[1]).toContain("甲");
     expect(r.content.split("\n")[2]).toContain("乙");
   });
+
+  it("重复文本任务：key 按原序派生且拖动后保持稳定（回写不错行）", () => {
+    const content = "- [ ] 买牛奶\n- [ ] 买牛奶\n- [ ] 别的";
+    const r0 = applyTaskOrder(content, []);
+    // 同文本 key 出现序号不同
+    expect(new Set(r0.displayKeyOrder).size).toBe(3);
+    const [k1, k2, k3] = r0.displayKeyOrder;
+    // 把第 1 个"买牛奶"拖到最后：key → 展示行映射随之移动
+    const r = applyTaskOrder(content, [k2, k3, k1]);
+    expect(r.displayLineByKey.get(k1)).toBe(2);
+    expect(r.displayLineByKey.get(k2)).toBe(0);
+    // 原文行映射永不因拖动改变（回写锚点）
+    expect(r.originalLineByKey.get(k1)).toBe(0);
+    expect(r.originalLineByKey.get(k2)).toBe(1);
+    // 展示正文行 0 现在是第二个"买牛奶"（k2），其回写行是 1
+    expect(r.content.split("\n")[0]).toContain("买牛奶");
+  });
+
+  it("单元素池不可拖（reorderableKeys 不含），跨池拖动可被 poolByKey 拒绝", () => {
+    const content = "# 标题\n- [ ] 甲\n\n段落\n- [ ] 乙\n- [ ] 丙";
+    const r = applyTaskOrder(content, []);
+    expect(r.reorderableKeys.size).toBe(2); // 乙丙池可拖；甲单元素池不可
+    const poolJia = r.poolByKey.get(r.displayKeyOrder[0]);
+    const poolYi = r.poolByKey.get(r.displayKeyOrder[1]);
+    expect(poolJia).not.toBe(poolYi);
+    expect(r.poolByKey.get(r.displayKeyOrder[2])).toBe(poolYi);
+  });
 });

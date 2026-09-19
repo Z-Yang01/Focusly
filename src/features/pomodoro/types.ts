@@ -4,8 +4,10 @@
 export {
   POMODORO_EVENTS,
   type DailyStat,
+  type FocusReport,
   type PomodoroFinishedEvent,
   type PomodoroPhase,
+  type PomodoroSession,
   type StatePayload,
   type StatsToday,
   type TaskMeta,

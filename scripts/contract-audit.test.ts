@@ -317,14 +317,16 @@ describe("端到端（真实仓库文件）", () => {
   });
 
   it("[快照] Rust 注册命令总数（增删命令须双端同步后更新此快照）", () => {
-    expect(registered.size).toBe(97);
+    expect(registered.size).toBe(99);
     expect(registered).toContain("create_note");
     expect(registered).toContain("task_meta_update");
     expect(registered).toContain("task_meta_reorder");
+    expect(registered).toContain("pomodoro_stats_report");
+    expect(registered).toContain("pomodoro_sessions_by_date");
   });
 
   it("[快照] 前端调用命令总数", () => {
-    expect(invoked.size).toBe(96);
+    expect(invoked.size).toBe(98);
   });
 
   it("P0：前端调用 ⊆ Rust 注册（无缺失）", () => {

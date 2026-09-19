@@ -323,15 +323,25 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
     void refreshTaskMeta();
   }, [refreshTaskMeta]);
 
-  /** 待办拖拽排序落位：按展示序写 task_meta.sort_order（不动正文），完成后刷新 meta */
+  /** 待办拖拽排序落位：按展示序写 task_meta.sort_order（不动正文）。
+   *  同池校验（跨池拖动拒绝）+ 乐观本地更新（连续快速拖动不丢前一次结果）。 */
   const handleTaskDrop = useCallback(
     (e: { dragKey: string; targetKey: string; before: boolean }) => {
       const storedKeys = taskMetaList
         .filter((m) => m.sortOrder != null)
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
         .map((m) => m.taskKey);
-      const current = applyTaskOrder(content, storedKeys).displayKeyOrder;
-      const next = moveKey(current, e.dragKey, e.targetKey, e.before);
+      const info = applyTaskOrder(content, storedKeys);
+      const dragPool = info.poolByKey.get(e.dragKey);
+      if (dragPool === undefined || dragPool !== info.poolByKey.get(e.targetKey)) return;
+      const next = moveKey(info.displayKeyOrder, e.dragKey, e.targetKey, e.before);
+      // 乐观更新：立即把新序写进本地 meta（invoke 返回前再拖一次也基于新序计算）
+      setTaskMetaList((prev) => {
+        const order = new Map(next.map((k, i) => [k, i + 1]));
+        return prev.map((m) =>
+          order.has(m.taskKey) ? { ...m, sortOrder: order.get(m.taskKey) ?? null } : m,
+        );
+      });
       void taskMetaReorder(noteId, next)
         .then(refreshTaskMeta)
         .catch((err) => console.error("保存待办排序失败", err));

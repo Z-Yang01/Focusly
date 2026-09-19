@@ -1,9 +1,12 @@
 /** 待办拖动排序的展示层纯函数。
  *  原则：待办真相源 = 正文复选框，本模块绝不修改存储正文——
- *  只为 MarkdownView 生成"展示用正文"（任务文本在任务行槽位间换位，行数与结构不变），
- *  并提供 key → 原始行号 映射，保证勾选回写仍命中原始正文行。
- *  兼容性约束：只有"单行简单项"可拖；带续行/嵌套子列表的任务项不可拖。
- *  可重排的池 = 紧邻的任务行（隔空行/隔非任务行即分池，池内独立重排）。 */
+ *  只为 MarkdownView 生成"展示用正文"（任务文本在任务行槽位间换位，行数与结构不变）。
+ *  key 稳定性约束：taskKey 按"原始正文序"派生（taskKey.ts 的同文本出现序号依赖解析顺序），
+ *  因此消费方必须对原始 content 做 assignTaskKeys，再用本模块的 displayLineByKey /
+ *  originalLineByKey 对齐展示行与原文行——禁止对重排后的文本重新派生 key。
+ *  可拖性约束：只有"单行简单项"可拖（带续行/嵌套子列表的任务项不可拖）；
+ *  池 = 紧邻的任务行（隔空行/隔非任务行即分池）；单元素池不可拖（无从换位），
+ *  跨池拖动一律拒绝（displayLineByKey 消费方以 poolByKey 校验同池）。 */
 
 import { assignTaskKeys } from "./taskKey";
 import { parseTodos } from "./todo";
@@ -19,11 +22,15 @@ const indentOf = (s: string) => s.length - s.trimStart().length;
 export interface TaskOrderInfo {
   /** 展示用正文（未启用重排或无可重排块时与输入相同） */
   content: string;
-  /** taskKey → 原始正文行号（0-based）。展示层勾选/菜单回传原始行号用 */
+  /** taskKey → 原始正文行号（0-based）。勾选回写用 */
   originalLineByKey: Map<string, number>;
-  /** 展示顺序的全部任务 key（按块顺序拼接） */
+  /** taskKey → 展示行号（0-based）。展示层定位任务态用 */
+  displayLineByKey: Map<string, number>;
+  /** taskKey → 池序号。跨池拖动校验用（同池才可落位） */
+  poolByKey: Map<string, number>;
+  /** 展示顺序的全部任务 key（按池顺序拼接） */
   displayKeyOrder: string[];
-  /** 所在任务块为"单行简单项"、可参与拖拽的 key 集合 */
+  /** 可参与拖拽的 key（所在池 ≥2 个任务且自身为单行简单项） */
   reorderableKeys: Set<string>;
 }
 
@@ -95,19 +102,18 @@ function analyzeSlots(lines: string[]): TaskSlot[] {
   return slots;
 }
 
-/** 计算展示用正文与映射。
+/** 计算展示用正文与各映射。
  *  storedKeys = task_meta.sort_order 升序的 key 列表（未排序传 []）。 */
 export function applyTaskOrder(content: string, storedKeys: string[]): TaskOrderInfo {
   const lines = content.split("\n");
   const slots = analyzeSlots(lines);
   const originalLineByKey = new Map(slots.map((s) => [s.key, s.line]));
 
-  // 相邻（可隔空行）任务行构成一个池；池内出现非简单项则整池回退内容顺序
+  // 紧邻任务行构成池；隔空行/非任务行分池
   const pools: TaskSlot[][] = [];
   let current: TaskSlot[] = [];
   for (const slot of slots) {
     if (current.length === 0 || slot.line === current[current.length - 1].line + 1) {
-      // 首个或紧邻；隔空行的下一个任务行也延续池（下方统一处理）
       current.push(slot);
     } else {
       pools.push(current);
@@ -117,32 +123,40 @@ export function applyTaskOrder(content: string, storedKeys: string[]): TaskOrder
   if (current.length > 0) pools.push(current);
 
   const reorderableKeys = new Set<string>();
+  const poolByKey = new Map<string, number>();
+  const displayLineByKey = new Map<string, number>();
   const out = [...lines];
   const displayKeyOrder: string[] = [];
 
-  for (const pool of pools) {
-    if (pool.some((s) => !s.simple)) {
-      for (const s of pool) displayKeyOrder.push(s.key);
-      continue;
-    }
+  pools.forEach((pool, poolIdx) => {
     const contentKeys = pool.map((s) => s.key);
-    const display = mergeOrderedKeys(contentKeys, storedKeys);
-    const changed = display.some((k, j) => k !== contentKeys[j]);
-    if (changed && pool.length > 1) {
-      const textByKey = new Map(pool.map((s) => [s.key, lines[s.line]]));
-      for (let j = 0; j < pool.length; j++) {
-        out[pool[j].line] = textByKey.get(display[j]) ?? lines[pool[j].line];
+    // 单元素池无从换位：保持内容序，不标记可拖
+    const display = pool.length > 1 ? mergeOrderedKeys(contentKeys, storedKeys) : contentKeys;
+    if (pool.length > 1) {
+      const changed = display.some((k, j) => k !== contentKeys[j]);
+      if (changed) {
+        const textByKey = new Map(pool.map((s) => [s.key, lines[s.line]]));
+        for (let j = 0; j < pool.length; j++) {
+          out[pool[j].line] = textByKey.get(display[j]) ?? lines[pool[j].line];
+        }
+      }
+      for (const k of display) {
+        reorderableKeys.add(k);
       }
     }
-    for (const k of display) {
+    for (let j = 0; j < pool.length; j++) {
+      const k = display[j];
       displayKeyOrder.push(k);
-      reorderableKeys.add(k);
+      poolByKey.set(k, poolIdx);
+      displayLineByKey.set(k, pool[j].line);
     }
-  }
+  });
 
   return {
     content: out.join("\n"),
     originalLineByKey,
+    displayLineByKey,
+    poolByKey,
     displayKeyOrder,
     reorderableKeys,
   };

@@ -351,6 +351,47 @@ export interface DailyStat {
   focusSec: number;
 }
 
+/** 复盘报表（pomodoro_stats_report，周/月窗口聚合；与 Rust FocusReport serde camelCase 对应） */
+export interface FocusReport {
+  /** 窗口内逐日零填充（升序） */
+  days: DailyStat[];
+  focusCount: number;
+  focusSec: number;
+  interruptedCount: number;
+  /** focus 完成率 0..1；窗口内无 focus 会话为 null */
+  completionRate: number | null;
+  /** 绑定任务按累计专注时长前 5（私密快照已脱敏为「私密任务」） */
+  topTasks: {
+    label: string;
+    focusSec: number;
+    sessionCount: number;
+    /** daily（今日任务）| note（便签任务） */
+    kind: "daily" | "note";
+  }[];
+  /** 中断原因分布（manual | skip | task_done | app_exit | other） */
+  byReason: { reason: string; count: number }[];
+  /** focus 会话（含中断）开始小时分布 0..=23 */
+  byHour: { hour: number; count: number }[];
+}
+
+/** 番茄会话（pomodoro_sessions 行，pomodoro_sessions_by_date 返回）。
+ *  status: running | completed | interrupted；phase: focus | short_break | long_break */
+export interface PomodoroSession {
+  id: string;
+  noteId: string | null;
+  taskKey: string | null;
+  /** 私密便签会话在写入端已清空为空串 */
+  taskTextSnapshot: string | null;
+  phase: string;
+  plannedSec: number;
+  actualSec: number;
+  /** RFC3339 UTC */
+  startedAt: string;
+  endedAt: string | null;
+  status: string;
+  interruptReason: string | null;
+}
+
 /** 番茄钟事件名（Rust 侧 emit 同名） */
 export const POMODORO_EVENTS = {
   state: "pomodoro-state",

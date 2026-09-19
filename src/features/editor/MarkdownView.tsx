@@ -125,20 +125,21 @@ export function MarkdownView({
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState<{ key: string; before: boolean } | null>(null);
 
-  /** 0-based 行号 → 合并后的任务展示态（基于展示用正文） */
-  const taskByLine = useMemo(() => {
-    const empty = new Map<number, TaskDisplayState>();
+  /** 展示行号 → (合并任务态, 原始正文行号)。
+   *  key 分配必须基于原始 content（taskKey 的同文本出现序号按原序派生，与 task_meta
+   *  的绑定一致）；对重排后的 displayContent 重新派生会让同名任务错绑 meta / 错行回写。
+   *  展示行 = displayLineByKey[key]（重排只整行换位，不丢行），回写行 = 原文行号。 */
+  const taskInfoByLine = useMemo(() => {
+    const empty = new Map<number, { task: TaskDisplayState; originalLine: number }>();
     if (!enhanced) return empty;
-    const todos = assignTaskKeys(parseTodos(displayContent));
+    const todos = assignTaskKeys(parseTodos(content));
     const merged = mergeTaskMeta(todos, taskMetaList ?? [], today ?? localTodayStr(), runningTaskKey);
-    return new Map(merged.tasks.map((t) => [t.line, t]));
-  }, [enhanced, displayContent, taskMetaList, today, runningTaskKey]);
-
-  /** 展示行号 → 原始正文行号（勾选回写用；无重排时恒等） */
-  const originalLineOf = (line0: number, taskKey?: string): number => {
-    if (!orderInfo || taskKey === undefined) return line0;
-    return orderInfo.originalLineByKey.get(taskKey) ?? line0;
-  };
+    for (const t of merged.tasks) {
+      const displayLine = orderInfo?.displayLineByKey.get(t.taskKey) ?? t.line;
+      empty.set(displayLine, { task: t, originalLine: t.line });
+    }
+    return empty;
+  }, [enhanced, content, taskMetaList, today, runningTaskKey, orderInfo]);
 
   const components: Components = {
     a: (props: AnchorProps) => {
@@ -193,7 +194,8 @@ export function MarkdownView({
       const line = node.position?.start.line;
       const line0 = line !== undefined ? line - 1 : undefined;
 
-      const task = enhanced && line0 !== undefined ? taskByLine.get(line0) : undefined;
+      const taskInfo = enhanced && line0 !== undefined ? taskInfoByLine.get(line0) : undefined;
+      const task = taskInfo?.task;
       // 合并态：running > done > skipped > todo（未启用增强时退化为 markdown 勾选态）
       const status: EffectiveStatus = task
         ? task.status
@@ -202,6 +204,16 @@ export function MarkdownView({
           : "todo";
       const isSkipped = status === "skipped";
       const isRunning = status === "running";
+
+      /** 勾选回写只认原始正文行号（taskKey → 原文行精确映射）；
+       *  映射缺失时宁可 no-op 也绝不把展示行号当原文行写——正文真相源红线。 */
+      const toggleOriginal = (checkedNext: boolean) => {
+        if (!taskInfo) {
+          console.error("待办回写失败：任务行映射缺失", { line0, taskKey: task?.taskKey });
+          return;
+        }
+        onToggleTodo?.(taskInfo.originalLine, checkedNext);
+      };
 
       const inner = Children.toArray(children).filter(
         (c) => !(isValidElement(c) && (c.props as { type?: unknown }).type === "checkbox"),
@@ -227,14 +239,14 @@ export function MarkdownView({
           )}
           onClick={() => {
             if (line0 === undefined || !task) return;
-            onToggleTodo?.(originalLineOf(line0, task.taskKey), false); // 保持 markdown 源为未勾选
+            toggleOriginal(false); // 保持 markdown 源为未勾选
             onTaskMenu?.({ taskKey: task.taskKey, lineText: task.text, status: "todo" });
           }}
           onKeyDown={(e) => {
             if (e.key !== "Enter" && e.key !== " ") return;
             e.preventDefault();
             if (line0 === undefined || !task) return;
-            onToggleTodo?.(originalLineOf(line0, task.taskKey), false); // 保持 markdown 源为未勾选
+            toggleOriginal(false); // 保持 markdown 源为未勾选
             onTaskMenu?.({ taskKey: task.taskKey, lineText: task.text, status: "todo" });
           }}
         >
@@ -250,13 +262,13 @@ export function MarkdownView({
           className={cn("mt-0.5 inline-flex shrink-0", !disabled && "cursor-pointer")}
           onClick={() => {
             if (disabled || line0 === undefined) return;
-            onToggleTodo?.(originalLineOf(line0, task?.taskKey), status !== "done");
+            toggleOriginal(status !== "done");
           }}
           onKeyDown={(e) => {
             if (disabled || line0 === undefined) return;
             if (e.key !== "Enter" && e.key !== " ") return;
             e.preventDefault();
-            onToggleTodo?.(originalLineOf(line0, task?.taskKey), status !== "done");
+            toggleOriginal(status !== "done");
           }}
         >
           <Checkbox checked={status === "done"} disabled={disabled} className="pointer-events-none" />
@@ -290,13 +302,20 @@ export function MarkdownView({
       const handleDrop = (e: ReactDragEvent<HTMLLIElement>) => {
         e.preventDefault();
         if (dragKey && task && dragKey !== task.taskKey) {
-          onTaskDrop?.({
-            dragKey,
-            targetKey: task.taskKey,
-            before: dropHint?.key === task.taskKey ? dropHint.before : true,
-          });
+          // 直接按指针位置重算 before——不依赖 dropHint（dragleave 间隙可能已被清空）
+          const rect = e.currentTarget.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height / 2;
+          onTaskDrop?.({ dragKey, targetKey: task.taskKey, before });
         }
         setDragKey(null);
+        setDropHint(null);
+      };
+
+      // 仅在真正离开 li（relatedTarget 不在内部）时清提示，避免跨子元素移动闪烁
+      const handleDragLeave = (e: ReactDragEvent<HTMLLIElement>) => {
+        if (!dragKey) return;
+        const next = e.relatedTarget as Node | null;
+        if (next && e.currentTarget.contains(next)) return;
         setDropHint(null);
       };
 
@@ -311,7 +330,7 @@ export function MarkdownView({
           onContextMenu={handleContextMenu}
           onDragOver={canDrag || (dragKey && !!task) ? handleDragOver : undefined}
           onDrop={dragKey && !!task ? handleDrop : undefined}
-          onDragLeave={dragKey ? () => setDropHint(null) : undefined}
+          onDragLeave={dragKey ? handleDragLeave : undefined}
         >
           {canDrag && task && (
             <span

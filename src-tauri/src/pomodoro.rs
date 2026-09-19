@@ -92,6 +92,18 @@ pub enum PomodoroCmd {
     Stop {
         reason: String,
     },
+    /// 仅当当前运行会话绑定指定 task_key 时才停止：
+    /// "任务完成 → 停番茄"联动用，判定与停止在状态机内原子完成，防 Start 竞态误杀新会话。
+    StopIfTask {
+        task_key: String,
+        reason: String,
+    },
+    /// 私密翻转后的机内文本清洗：运行会话匹配便签/今日任务则清空 task_text 并重播。
+    /// DB 快照清理由调用方配合 DAO 完成（scrub_private_text / scrub_daily_task_text）。
+    ScrubText {
+        note_id: String,
+        task_key: String,
+    },
     AddMinutes(i64),
     /// 状态机内保留：命令层当前直调 pomodoro::complete_task，不经通道
     #[allow(dead_code)]
@@ -176,6 +188,49 @@ pub fn scrub_private_text(app: &AppHandle, note_id: &str) {
         .with(|c| pomodoro_sessions::clear_task_text_for_note(c, note_id))
     {
         log::error!("私密脱敏：清理便签 {note_id} 的会话任务文本失败: {e}");
+    }
+    // 3) 状态机：清空运行会话持有的明文（不清则 Pause/Resume/auto_next 会把明文
+    //    重新广播进事件、重新写入续阶段会话行）
+    if let Err(e) = send_cmd(
+        app,
+        PomodoroCmd::ScrubText {
+            note_id: note_id.to_string(),
+            task_key: String::new(),
+        },
+    ) {
+        log::error!("私密脱敏：便签 {note_id} 状态机文本清洗失败: {e}");
+    }
+}
+
+/// 私密防线（今日任务）：任务转私密时即时脱敏——
+/// 运行快照清文本（重播）、会话表该任务全部会话清文本快照、状态机内文本清空。
+pub fn scrub_daily_task_text(app: &AppHandle, daily_id: &str) {
+    let task_key = format!("daily:{daily_id}");
+    if let Ok(mut g) = snapshot_cell().lock() {
+        if g.task_key == task_key && !g.task_text.is_empty() {
+            g.task_text = String::new();
+            let _ = app.emit(
+                STATE_EVENT,
+                serde_json::to_value(&*g).unwrap_or_else(|_| json!({})),
+            );
+        }
+    }
+    use tauri::Manager;
+    let state = app.state::<AppState>();
+    if let Err(e) = state
+        .db
+        .with(|c| pomodoro_sessions::clear_task_text_for_daily(c, daily_id))
+    {
+        log::error!("私密脱敏：清理今日任务 {daily_id} 的会话任务文本失败: {e}");
+    }
+    if let Err(e) = send_cmd(
+        app,
+        PomodoroCmd::ScrubText {
+            note_id: String::new(),
+            task_key,
+        },
+    ) {
+        log::error!("私密脱敏：今日任务 {daily_id} 状态机文本清洗失败: {e}");
     }
 }
 
@@ -528,6 +583,30 @@ fn note_is_private(app: &AppHandle, note_id: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// 今日任务绑定（task_key="daily:<id>"）是否私密；非 daily 绑定恒 false。
+fn daily_task_is_private(app: &AppHandle, task_key: &str) -> bool {
+    let Some(id) = pomodoro_sessions::daily_task_id_of(task_key) else {
+        return false;
+    };
+    let state = app.state::<AppState>();
+    state
+        .db
+        .with(|c| crate::db::daily_tasks::get(c, id))
+        .map(|t| t.is_private)
+        .unwrap_or(false)
+}
+
+/// 任务文本入链前的统一脱敏：私密便签 / 私密今日任务 → 空串。
+/// 在 begin_phase 单点生效（落库快照 + 状态机 + 事件 + 通知全部继承），
+/// 同时覆盖 Start 与 auto_next 续阶段——中途转私后新阶段不会再把明文写回。
+fn effective_task_text(app: &AppHandle, note_id: &str, task_key: &str, text: &str) -> String {
+    if note_is_private(app, note_id) || daily_task_is_private(app, task_key) {
+        String::new()
+    } else {
+        text.to_string()
+    }
+}
+
 async fn loop_task(app: AppHandle, mut rx: UnboundedReceiver<CmdEnvelope>) {
     log::info!("番茄钟调度器已启动");
     let mut st = Machine::Idle;
@@ -595,12 +674,7 @@ fn handle_cmd(app: &AppHandle, st: &mut Machine, cmd: PomodoroCmd) {
             if matches!(st, Machine::Running(_)) {
                 stop_running(app, st, "switch_task");
             }
-            // 私密便签：任务文本全程置空（不入库/不进事件/不进通知）
-            let task_text = if note_is_private(app, &note_id) {
-                String::new()
-            } else {
-                task_text
-            };
+            // 私密脱敏在 begin_phase 单点生效（覆盖 Start / auto_next 两条入口）
             let settings = read_settings(app);
             begin_phase(
                 app,
@@ -641,6 +715,24 @@ fn handle_cmd(app: &AppHandle, st: &mut Machine, cmd: PomodoroCmd) {
         PomodoroCmd::Stop { reason } => {
             if matches!(st, Machine::Running(_)) {
                 stop_running(app, st, &reason);
+            }
+        }
+        PomodoroCmd::StopIfTask { task_key, reason } => {
+            if let Machine::Running(r) = st {
+                if r.task_key == task_key {
+                    stop_running(app, st, &reason);
+                }
+            }
+        }
+        PomodoroCmd::ScrubText { note_id, task_key } => {
+            if let Machine::Running(r) = st {
+                let hit = (!note_id.is_empty() && r.note_id == note_id)
+                    || (!task_key.is_empty() && r.task_key == task_key);
+                if hit && !r.task_text.is_empty() {
+                    r.task_text.clear();
+                    publish(app, st);
+                    update_tooltip(app, st);
+                }
             }
         }
         PomodoroCmd::AddMinutes(mins) => {
@@ -748,6 +840,8 @@ fn begin_phase(
     completed_in_cycle: u32,
     settings: &PomoSettings,
 ) {
+    // 私密脱敏单点：落库快照 / 状态机 / 事件 / 通知均从这里继承已脱敏文本
+    let task_text = effective_task_text(app, &note_id, &task_key, &task_text);
     let planned = planned_for(app, phase, &note_id, &task_key, settings);
     let id = uuid::Uuid::new_v4().to_string();
     let now = Utc::now();
