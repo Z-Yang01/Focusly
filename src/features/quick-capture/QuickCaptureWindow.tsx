@@ -295,7 +295,9 @@ export function QuickCaptureWindow() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hideWindow, save, saveTask]);
+    // tab 必须在依赖里：onKey 闭包直接读 tab，缺依赖会按旧页签分流 Ctrl+Enter
+    // （如任务页输入后 Ctrl+Tab 回速记页，Ctrl+Enter 会误存任务而非速记）。
+  }, [hideWindow, save, saveTask, tab]);
 
   /** 点击历史条目 = 追加到速记正文并切回速记页 */
   const appendToDraft = (entry: ClipboardEntry) => {
