@@ -220,8 +220,8 @@ pub fn normalize_task_text(s: &str) -> String {
 }
 
 /// 在正文中找到第 1 个"去掉行首缩进后、复选框后的文本规范化后恰等于 line_text"
-/// 的 `- [ ] ` 行，把该行的 `[ ]` 改为 `[x]`，返回新正文。
-/// 找不到或目标为空 / 该行已是 done 时返回 None。
+/// 的未完成任务行（- /* /+ bullet，与前端 parseTodos 同口径），把该行的 `[ ]` 改为 `[x]`，
+/// 返回新正文。找不到或目标为空 / 该行已是 done 时返回 None。
 pub fn mark_done_content_line(content: &str, line_text: &str) -> Option<String> {
     let target = normalize_task_text(line_text);
     if target.is_empty() {
@@ -234,12 +234,17 @@ pub fn mark_done_content_line(content: &str, line_text: &str) -> Option<String> 
         if !changed {
             let trimmed = line.trim_start();
             let indent_len = line.len() - trimmed.len();
-            if let Some(rest) = trimmed.strip_prefix("- [ ]") {
-                // 只匹配标准 "- [ ] "（后跟空格）形式
+            let rest = trimmed
+                .strip_prefix("- [ ]")
+                .or_else(|| trimmed.strip_prefix("* [ ]"))
+                .or_else(|| trimmed.strip_prefix("+ [ ]"));
+            if let Some(rest) = rest {
+                // 只匹配标准 "<bullet> [ ] "（后跟空格）形式；bullet 原样保留
                 if rest.starts_with(' ') && normalize_task_text(rest) == target {
                     l = format!(
-                        "{}- [x]{}",
+                        "{}{} [x]{}",
                         &line[..indent_len],
+                        &trimmed[..1],
                         rest.replacen("[ ]", "[x]", 1)
                     );
                     changed = true;
@@ -646,6 +651,17 @@ mod tests {
     fn mark_done_takes_first_duplicate() {
         let out = mark_done_content_line("- [ ] 重复\n- [ ] 重复", "重复").unwrap();
         assert_eq!(out, "- [x] 重复\n- [ ] 重复", "只改第一处");
+    }
+
+    /// bullet 口径与前端 parseTodos 一致：* / + 行同样可被完成回写，且 bullet 原样保留。
+    #[test]
+    fn mark_done_preserves_star_and_plus_bullets() {
+        let out = mark_done_content_line("* [ ] 星号任务", "星号任务").unwrap();
+        assert_eq!(out, "* [x] 星号任务");
+        let out2 = mark_done_content_line("+ [ ] 加号任务", "加号任务").unwrap();
+        assert_eq!(out2, "+ [x] 加号任务");
+        let out3 = mark_done_content_line("  * [ ] 缩进星号", "缩进星号").unwrap();
+        assert_eq!(out3, "  * [x] 缩进星号");
     }
 
     #[test]

@@ -28,5 +28,26 @@
 - 测试：cargo test 215+5 通过，clippy 0 警告（清理了移动后残留的 unused import），vitest 294 通过。
   既有搜索测试断言 tags 结果与排序（fts_finds_keyword_substring_and_highlights）覆盖了等价性。
 
+## 终止（2026-09-20 11:50）
+
+- **触发停止规则：本地时间 11:50 >= 08:10，不再开新轮；按 08:55 硬停条款，最终日志只写不提交。**
+- 原因：会话在 R3 后的休眠段（02:49→03:30）被中断，恢复时已过当日全部轮次窗口。
+- 本文件与 NIGHTLY_PROGRESS.md 的终止段留在工作区未提交（规则禁止 08:55 后 git 操作）；
+  后续可由人工并入或随下一批提交。
+
+## Round 4（11:55–12:05，用户指示继续后的日间续轮）
+- 审计闭环（R2 遗留线索）：前端 parseTodos 接受 `*`/`+` bullet，Rust 四处仅认 `-`——
+  extract_task_lines（勾选同步）是唯一对齐点。对齐方向选「Rust 向前端看齐」：
+  收紧前端会破坏已用 `* [ ]` 书写的存量便签，且 remark-gfm 预览本就渲染三类 bullet 为复选框。
+- 改动：count_todos（卡片徽标）、list("todo") SQL 过滤（9 个 LIKE 分支）、
+  todos_view::unchecked_task_text（今日/逾期/未来7天）、task_meta::mark_done_content_line
+  （完成回写，bullet 原样保留）四处放宽到 `-`/`*`/`+`；AGENTS.md 待办真相源契约行同步。
+- 测试：cargo 217 通过（新增 star_and_plus_bullets_count_as_tasks、
+  mark_done_preserves_star_and_plus_bullets，扩展 todo_count/filters），clippy 0，vitest 294，build 通过。
+- 备注：R1~R3 提交 + 本轮提交均在 auto/nightly/focusly-20260920-0115 分支；
+  两份日志文件随本轮一并入库。
+
+
+
 
 

@@ -90,9 +90,12 @@ pub fn list(conn: &Connection, filter: &str) -> AppResult<Vec<NoteSummary>> {
             vec![],
         ),
         "todo" => (
-            // - [X] 大写勾选与前端解析器/count_todos 同口径（GFM 允许两种写法）
+            // bullet/大小写口径与前端 parseTodos、count_todos 一致：
+            // - /* /+ 三种 bullet，[ ]/[x]/[X]（GFM 合法写法）
             "WHERE status = 'active' AND deleted_at IS NULL \
-             AND (content LIKE '%- [ ]%' OR content LIKE '%- [x]%' OR content LIKE '%- [X]%')"
+             AND (content LIKE '%- [ ]%' OR content LIKE '%- [x]%' OR content LIKE '%- [X]%' \
+               OR content LIKE '%* [ ]%' OR content LIKE '%* [x]%' OR content LIKE '%* [X]%' \
+               OR content LIKE '%+ [ ]%' OR content LIKE '%+ [x]%' OR content LIKE '%+ [X]%')"
                 .into(),
             vec![],
         ),
@@ -166,24 +169,25 @@ pub fn to_summary(conn: &Connection, note: Note) -> AppResult<NoteSummary> {
     })
 }
 
-/// 统计 markdown 任务列表（- [ ] / - [x]）。
+/// 统计 markdown 任务列表。bullet 口径与前端 parseTodos 一致：- / * / +，
+/// 勾选标记 [x]/[X]，未勾 [ ]（后跟空格或行尾）。
 pub fn count_todos(content: &str) -> (i64, i64) {
+    const OPEN: [&str; 3] = ["- [ ]", "* [ ]", "+ [ ]"];
+    const DONE: [&str; 6] = ["- [x]", "- [X]", "* [x]", "* [X]", "+ [x]", "+ [X]"];
     let mut total = 0i64;
     let mut done = 0i64;
     for line in content.lines() {
         let t = line.trim_start();
-        if let Some(rest) = t.strip_prefix("- [ ]") {
-            if rest.starts_with(' ') || rest.is_empty() {
-                total += 1;
-            }
-        } else if let Some(rest) = t.strip_prefix("- [x]") {
-            if rest.starts_with(' ') || rest.is_empty() {
-                total += 1;
-                done += 1;
-            }
-        } else if let Some(rest) = t.strip_prefix("- [X]") {
-            if rest.starts_with(' ') || rest.is_empty() {
-                total += 1;
+        let (rest, is_done) = match DONE.iter().find_map(|p| t.strip_prefix(p)) {
+            Some(rest) => (rest, true),
+            None => match OPEN.iter().find_map(|p| t.strip_prefix(p)) {
+                Some(rest) => (rest, false),
+                None => continue,
+            },
+        };
+        if rest.starts_with(' ') || rest.is_empty() {
+            total += 1;
+            if is_done {
                 done += 1;
             }
         }
@@ -657,6 +661,10 @@ mod tests {
     fn todo_count() {
         assert_eq!(count_todos("- [ ] a\n- [x] b\n正文\n- [X] c"), (3, 2));
         assert_eq!(count_todos("没有任务"), (0, 0));
+        // GFM bullet 口径与前端 parseTodos 一致：* / + 同样识别
+        assert_eq!(count_todos("* [ ] 星号\n+ [ ] 加号"), (2, 0));
+        assert_eq!(count_todos("* [x] 星勾\n+ [X] 加大写勾"), (2, 2));
+        assert_eq!(count_todos("- [ ]无空格"), (0, 0), "复选框后无空格不计数");
     }
 
     #[test]
@@ -738,6 +746,16 @@ mod tests {
         let todo = list(&conn, "todo").unwrap();
         assert_eq!(todo.len(), 1, "大写 - [X] 也应进待办视图");
         assert_eq!((todo[0].todo_total, todo[0].todo_done), (1, 1));
+
+        // * / + bullet 同口径
+        create(&conn, "D", "* [ ] 星号待办").unwrap();
+        create(&conn, "E", "+ [x] 加号已完成").unwrap();
+        let todo = list(&conn, "todo").unwrap();
+        assert_eq!(todo.len(), 3, "C/D/E 都应进待办视图（内容含任务行即算）");
+        let d = todo.iter().find(|n| n.note.title == "D").unwrap();
+        assert_eq!((d.todo_total, d.todo_done), (1, 0));
+        let e = todo.iter().find(|n| n.note.title == "E").unwrap();
+        assert_eq!((e.todo_total, e.todo_done), (1, 1));
     }
 
     /// 回归：pin_mode 不依赖 scale，单独更新也必须落库（set_pin_mode 命令路径）。

@@ -56,10 +56,14 @@ fn extract_due(text: &str) -> Option<NaiveDate> {
     found
 }
 
-/// 一行是否为未完成任务行（`- [ ] ` 前缀），返回复选框后的文本。
+/// 一行是否为未完成任务行（- /* /+ bullet 的 `[ ] ` 前缀，与前端 parseTodos 同口径），
+/// 返回复选框后的文本。
 fn unchecked_task_text(line: &str) -> Option<&str> {
     let t = line.trim_start();
-    let rest = t.strip_prefix("- [ ]")?;
+    let rest = t
+        .strip_prefix("- [ ]")
+        .or_else(|| t.strip_prefix("* [ ]"))
+        .or_else(|| t.strip_prefix("+ [ ]"))?;
     if rest.is_empty() || rest.starts_with(' ') {
         Some(rest)
     } else {
@@ -243,6 +247,38 @@ mod tests {
             .chain(v.today.iter())
             .chain(v.next7days.iter())
             .all(|e| e.summary.note.title != "无日期便签"));
+    }
+
+    /// bullet 口径与前端 parseTodos 一致：* / + 的未完成任务行同样进到期视图。
+    #[test]
+    fn star_and_plus_bullets_count_as_tasks() {
+        let conn = setup();
+        notes::create(
+            &conn,
+            "星号逾期",
+            &format!("* [ ] 星号任务 ^{}", offset_date(-1)),
+        )
+        .unwrap();
+        notes::create(
+            &conn,
+            "加号今日",
+            &format!("+ [ ] 加号任务 ^{}", offset_date(0)),
+        )
+        .unwrap();
+        // 已勾选的 * [x] 不算未完成
+        notes::create(
+            &conn,
+            "星号已完成",
+            &format!("* [x] 已勾选 ^{}", offset_date(-2)),
+        )
+        .unwrap();
+
+        let v = get_due_view(&conn).unwrap();
+        assert_eq!(v.overdue.len(), 1);
+        assert_eq!(v.overdue[0].summary.note.title, "星号逾期");
+        assert_eq!(v.today.len(), 1);
+        assert_eq!(v.today[0].summary.note.title, "加号今日");
+        assert!(v.next7days.is_empty(), "已勾选行不算未完成任务");
     }
 
     #[test]

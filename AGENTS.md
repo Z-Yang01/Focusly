@@ -108,7 +108,7 @@ Focusly/
 - **事件**（Rust → JS）：`notes-changed` / `settings-changed` / `reminder-fired` / `shortcut-error` / `notes-visibility` / `focus-search` / `open-settings`，常量在 `src/types/index.ts#EVENTS`；番茄事件组在 `#POMODORO_EVENTS`。Rust 侧事件名常量统一在 `events.rs`，两端一一对应。
 - **窗口 label**：`manager` | `note-<uuid>`。新窗口一律 `visible:false` 创建，前端就绪后调 `note_window_ready` 再显示（防白闪）。
 - **时间**：`remind_at` 全程 RFC3339 UTC（`to_rfc3339_opts(Secs, false)`），Rust 侧统一经 `reminder::fmt/parse`。
-- **待办真相源**：正文里的 `- [ ] / - [x]`，可被搜索/统计/导入导出，不存 HTML。
+- **待办真相源**：正文里的任务清单行（GFM：`-`/`*`/`+` bullet × `[ ]`/`[x]`/`[X]` 标记，全链路同口径），可被搜索/统计/导入导出，不存 HTML。
 
 ## 架构决策记录
 
