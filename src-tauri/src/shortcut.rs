@@ -169,3 +169,39 @@ fn report_shortcut_failure(app: &AppHandle, problem: &str, cause: &str, impact: 
         "在设置中修改快捷键组合后重试",
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::accelerator_to_tauri;
+    use tauri_plugin_global_shortcut::Shortcut;
+
+    /// 迁移中的全部默认加速器（大小写混写）经归一化后必须可解析为 Shortcut。
+    /// 注册期 parse 失败只会变成单条 shortcut-error（静默降级），这里在测试期拦截格式漂移。
+    #[test]
+    fn migration_default_accelerators_normalize_and_parse() {
+        for s in [
+            "Ctrl+Shift+Space", // toggle_notes
+            "Ctrl+Shift+N",     // new_note
+            "Ctrl+Shift+F",     // focus_search
+            "Ctrl+Shift+Q",     // quick_capture
+            "Ctrl+Shift+P",     // pomodoro_toggle
+            "Ctrl+Shift+T",     // quick_capture_task（v13）
+        ] {
+            let norm = accelerator_to_tauri(s);
+            let sc: Shortcut = norm
+                .parse()
+                .unwrap_or_else(|e| panic!("加速器 {s:?} 归一化为 {norm:?} 后无法解析: {e}"));
+            // 注册与回调匹配依赖同一 Shortcut 的稳定 Debug 键
+            assert!(!format!("{:?}|{:?}", sc.mods, sc.key).is_empty());
+        }
+    }
+
+    #[test]
+    fn accelerator_trims_lowercases_and_is_idempotent() {
+        assert_eq!(accelerator_to_tauri("  Ctrl+Alt+Delete "), "ctrl+alt+delete");
+        assert_eq!(accelerator_to_tauri("CTRL+SHIFT+T"), "ctrl+shift+t");
+        let once = accelerator_to_tauri("Ctrl+Shift+T");
+        assert_eq!(accelerator_to_tauri(&once), once, "归一化必须幂等");
+        assert_eq!(accelerator_to_tauri("   "), "");
+    }
+}

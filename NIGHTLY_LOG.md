@@ -47,6 +47,16 @@
 - 备注：R1~R3 提交 + 本轮提交均在 auto/nightly/focusly-20260920-0115 分支；
   两份日志文件随本轮一并入库。
 
+## Round 5（12:10–12:15）
+- a11y 扫描结论：25/25 icon 按钮均有 aria-label/title（3 处疑似缺口实为扫描窗口截断），
+  `<img>` 均有 alt，toast 已有 aria-live + error role=alert——前端 a11y 基线良好，无需改动。
+- 改动：shortcut.rs（此前零测试）补 2 用例——迁移六条默认加速器经 accelerator_to_tauri
+  归一化后必须 parse 成功为 Shortcut（注册期该失败只是静默 shortcut-error，测试期拦截格式漂移）；
+  归一化 trim/小写/幂等。CHANGELOG.md 补记夜间系列 R1–R4 条目（合并回 main 前的文档收尾）。
+- 测试：cargo 219 通过，clippy 0（修正测试模块位置触发的 items-after-test-module），
+  vitest 294，build 通过。
+
+
 
 
 

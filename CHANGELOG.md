@@ -246,6 +246,30 @@
   ImageManagerDialog/QuickCaptureWindow/SettingsDialog×2 共 14 处——WebView 内观感统一、不再阻塞渲染
 - NoteUpdate 实现 `Default`（touch 默认 false），服务层 5 处 15×None 手写样板改结构体更新语法
 
+### 夜间自动化优化批（2026-09-20，auto/nightly 分支 R1–R4）
+
+#### Fixed
+- 【口径】待办任务行识别全链路对齐 GFM：`*`/`+` bullet（与 `-` 同权）纳入 Rust 侧四处——
+  `count_todos`（卡片徽标）、待办视图 SQL 过滤、到期视图 `unchecked_task_text`（今日/逾期/未来7天）、
+  完成回写 `mark_done_content_line`（bullet 原样保留）。此前仅前端解析器与勾选状态同步识别，
+  用 `* [ ]` 书写的便签在卡片徽标/待办视图/到期视图不可见、番茄"完成任务"无法回写正文；
+  上批已修的 `- [X]` 大写属同一类问题。AGENTS.md「待办真相源」契约行同步
+
+#### Changed（性能）
+- 清空回收站批量化：单事务删全部行（FTS/task_meta 同事务，个别失败跳过不阻塞其余），
+  窗口关闭/提醒取消/番茄解绑/图片清理逐条 best-effort，只发一次 notes-changed——
+  此前 N 条 = N 事务 + N 事件 + N 次前端失效级联；返回值改为实际删除数
+- 搜索结果标签 N+1 消除：标签批量聚合提升为 `db::tags::for_notes` 共用，
+  FTS 与 LIKE 降级两路径每次搜索最多 50 命中从 50 次查询降为 1 次
+
+#### a11y
+- 提醒横幅容器补 `role="alert"`（出现即被读屏播报）
+
+#### Tests
+- Rust +4 用例：`*`/`+` bullet 到期视图、完成回写 bullet 保留、count_todos/filters 扩展、
+  快捷键默认加速器归一化可解析契约（shortcut.rs 此前零测试）
+- 每轮全量验证：cargo test 217 + 契约 5、clippy 0 警告、vitest 294、tsc/vite build
+
 ## [0.1.0] - 2026-09-16
 
 ### 初始功能
