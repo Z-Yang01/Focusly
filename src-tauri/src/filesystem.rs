@@ -21,7 +21,6 @@ pub struct AppPaths {
 /// 2. 便携模式：exe 旁有 `portable.marker` → 数据写在 `<exe目录>/data/`
 /// 3. 开发模式（target/debug 或 target/release）→ 回退 %APPDATA%
 /// 4. 兜底：%APPDATA%
-/// 4. 兜底：%APPDATA%
 ///
 /// 这样安装到哪、数据就在哪，卸载重装数据不丢。
 pub fn resolve_data_root(app: &tauri::AppHandle) -> PathBuf {

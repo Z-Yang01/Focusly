@@ -67,6 +67,19 @@
   - 事件路径零改动——notes-changed content 事件仍被跳过，打字风暴优化不受影响。
 - 测试：vitest 294、build、cargo 219、clippy 0 全绿。
 
+## Round 7（12:30–12:33，收尾轮）
+- 清扫：filesystem.rs 数据目录策略注释重复行；command-palette filterCommands 补 3 个契约用例
+  （大小写不敏感、多空白与首尾空白等价、同输入结果稳定）。
+- 测试：vitest 297（+3）、build、cargo 219、clippy 0 全绿。
+
+## 收尾总结（12:35）
+- 共 7 轮（夜间 3 + 用户指示继续后的日间 4），全部四件套验证后逐轮提交，
+  分支 auto/nightly/focusly-20260920-0115 领先 main 7 个提交，待人工审阅合并
+  （合并时 CHANGELOG 已备好「夜间自动化优化批」条目，可直接随分支带入）。
+- 提交清单：29c8518 / a5e9937 / fa3bf85 / 89f4c46 / 8346430 / b20fedc / 本轮。
+- 备忘清单（focusly-deferred-optimizations）待同步：版本恢复编辑器不刷新已在 R6 修复。
+
+
 
 
 

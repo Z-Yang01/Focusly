@@ -47,6 +47,20 @@ describe("filterCommands", () => {
     expect(hit).not.toContain("theme.dark");
   });
 
+  it("大小写不敏感（title/keywords/group 统一小写匹配）", () => {
+    const hit = ids("THEME 浅色");
+    expect(hit).toContain("theme.light");
+    expect(hit).not.toContain("theme.dark");
+  });
+
+  it("多空白与首尾空白不改变结果（trim + 按空白拆词）", () => {
+    expect(ids("  theme    浅色  ")).toEqual(ids("theme 浅色"));
+  });
+
+  it("同一输入多次过滤结果稳定（纯函数，无动态顺序）", () => {
+    expect(ids("速记")).toEqual(ids("速记"));
+  });
+
   it("无法命中的输入只剩搜索命令", () => {
     expect(ids("zzqxqq")).toEqual(["search.current"]);
   });
