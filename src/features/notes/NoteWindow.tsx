@@ -574,7 +574,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
 
   // 便签变更：仅刷新 flags / images / tags / nextReminder，不覆盖正在编辑的标题与正文。
   // content 事件（自动保存/版本恢复）跳过——正文保存不改 flags/图片/标签/提醒；
-  // 本窗自身保存本地已是最新，版本恢复走 VersionHistoryPanel 的 onRestored 显式刷新。
+  // 本窗自身保存本地已是最新，版本恢复走下方 reloadAfterRestore 显式重载。
   useEffect(() => {
     const off = onNotesChanged((e) => {
       if (e.reason === "content") return;
@@ -584,6 +584,21 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
       void off.then((f) => f());
     };
   }, [refreshMeta]);
+
+  // 版本恢复后整篇重载：编辑器文本此前停留在恢复前内容，继续输入会把旧内容存回去
+  // 覆盖刚恢复的版本。adoptExternal 先把自动保存基线推到恢复内容，避免恢复被再存一遍。
+  const reloadAfterRestore = useCallback(async () => {
+    try {
+      const d = await getNote(noteId);
+      setDetail(d);
+      autosave.adoptExternal(d.title, d.content);
+      setTitle(d.title);
+      setContent(d.content);
+    } catch (err) {
+      console.error("恢复版本后重载便签失败", err);
+      toast.error("重载恢复内容失败，请关闭窗口后重新打开");
+    }
+  }, [noteId, autosave, setDetail]);
 
   // 提醒触发：显示横幅（仅属于本便签的提醒才播放提示音并弹横幅）
   useEffect(() => {
@@ -997,7 +1012,7 @@ export function NoteWindow({ noteId }: NoteWindowProps) {
         noteId={noteId}
         open={versionOpen}
         onOpenChange={setVersionOpen}
-        onRestored={refreshMeta}
+        onRestored={() => void reloadAfterRestore()}
       />
       <ConfirmDialog
         open={confirmTrash}

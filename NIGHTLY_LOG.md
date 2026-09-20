@@ -56,6 +56,18 @@
 - 测试：cargo 219 通过，clippy 0（修正测试模块位置触发的 items-after-test-module），
   vitest 294，build 通过。
 
+## Round 6（12:20–12:25）
+- 修复备忘清单标注「风险高、暂不做」的版本恢复编辑器不刷新问题——找到不碰事件链路的安全做法：
+  - useNoteAutoSave 新增 `adoptExternal(title, content)`：清除防抖、把 latest/baseline 基线
+    同时推到外部内容、复位 saved 标记（调用方先 adopt 再 setTitle/setContent，防抖 effect
+    比对基线后判定无脏，不会把恢复内容再存一遍）。
+  - NoteWindow 版本恢复回调从 refreshMeta（只刷元数据）改为 reloadAfterRestore：
+    getNote 整篇重载 + adopt + setTitle/setContent。失败可见（toast + 错误日志）。
+  - 语义确认：恢复确认框承诺「当前内容会先自动备份」，故放弃本地未保存修改符合预期语义。
+  - 事件路径零改动——notes-changed content 事件仍被跳过，打字风暴优化不受影响。
+- 测试：vitest 294、build、cargo 219、clippy 0 全绿。
+
+
 
 
 

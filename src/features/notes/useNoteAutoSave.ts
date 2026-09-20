@@ -17,6 +17,8 @@ export interface NoteAutoSaveState {
   error: string | null;
   lastSavedAt: Date | null;
   saveNow: () => Promise<void>;
+  /** 采纳外部改写（如版本恢复）为新基线：清除防抖与脏标记，不触发保存 */
+  adoptExternal: (title: string, content: string) => void;
 }
 
 export function useNoteAutoSave({
@@ -95,6 +97,19 @@ export function useNoteAutoSave({
 
   saveNowRef.current = saveNow;
 
+  // 外部改写（版本恢复）：先把基线推到目标值再让调用方更新 title/content 状态，
+  // 这样防抖 effect 比对基线后不会把恢复内容再存一遍；进行中的防抖直接取消。
+  const adoptExternal = useCallback(
+    (t: string, c: string) => {
+      clearTimer();
+      latestRef.current = { title: t, content: c };
+      baselineRef.current = { title: t, content: c };
+      setSaved(true);
+      setError(null);
+    },
+    [clearTimer],
+  );
+
   // 防抖自动保存
   useEffect(() => {
     if (title === baselineRef.current.title && content === baselineRef.current.content) return;
@@ -142,5 +157,5 @@ export function useNoteAutoSave({
     [],
   );
 
-  return { saved, saving, error, lastSavedAt, saveNow };
+  return { saved, saving, error, lastSavedAt, saveNow, adoptExternal };
 }
