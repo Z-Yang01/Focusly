@@ -79,7 +79,7 @@ function TabSwitcher({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }
           aria-label={t.label}
           onClick={() => onChange(t.key)}
           className={cn(
-            "relative z-10 inline-flex h-6 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition-colors",
+            "relative z-10 inline-flex h-6 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors",
             tab === t.key ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >
@@ -118,6 +118,8 @@ export function QuickCaptureWindow() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const taskInputRef = useRef<HTMLInputElement>(null);
   const readyRef = useRef(false);
+  /** appendToDraft 后待光标落位的正文长度（null = 无待办） */
+  const pendingCaretRef = useRef<number | null>(null);
   /** 上次入库的剪贴板文本：相同内容不重复入库 */
   const lastClipRef = useRef<string | null>(null);
 
@@ -131,7 +133,8 @@ export function QuickCaptureWindow() {
     }
   }, []);
 
-  /** 剪贴板写入捕获：窗口聚焦时读当前剪贴板文本，与上次不同才入库（失败静默） */
+  /** 剪贴板写入捕获：读当前剪贴板文本，与上次不同才入库（失败静默）。
+   *  聚焦瞬间调一次 + 聚焦期间 1s 轮询（见 onFocusChanged effect）。 */
   const captureClipboard = useCallback(async () => {
     try {
       const text = await readText();
@@ -176,23 +179,43 @@ export function QuickCaptureWindow() {
     void refreshEntries();
   }, [captureClipboard, refreshEntries]);
 
-  // 窗口聚焦：捕获剪贴板 + 把焦点还给正文输入框 + 复位保存反馈
+  // 窗口聚焦：捕获剪贴板并开启轮询（抓住"开窗之后才复制"的内容），失焦/隐藏即停；
+  // 同时把焦点还给输入框、复位保存反馈
+  const clipPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
+    const stopPoll = () => {
+      if (clipPollRef.current !== null) {
+        clearInterval(clipPollRef.current);
+        clipPollRef.current = null;
+      }
+    };
     const un = getCurrentWebviewWindow().onFocusChanged(({ payload: focused }) => {
+      stopPoll();
       if (!focused) return;
       setSavedFlash(false);
       void captureClipboard();
+      clipPollRef.current = setInterval(() => void captureClipboard(), 1000);
       if (tab === "write") textareaRef.current?.focus();
       if (tab === "task") taskInputRef.current?.focus();
     });
     return () => {
       void un.then((f) => f());
+      stopPoll();
     };
   }, [captureClipboard, tab]);
 
-  // 切页聚焦：速记页 → 正文；任务页 → 标题输入
+  // 切页聚焦：速记页 → 正文（从历史填入时光标落到末尾）；任务页 → 标题输入
   useEffect(() => {
-    if (tab === "write") textareaRef.current?.focus();
+    if (tab === "write") {
+      const el = textareaRef.current;
+      el?.focus();
+      if (el && pendingCaretRef.current !== null) {
+        const pos = pendingCaretRef.current;
+        el.setSelectionRange(pos, pos);
+        el.scrollTop = el.scrollHeight;
+        pendingCaretRef.current = null;
+      }
+    }
     if (tab === "task") taskInputRef.current?.focus();
   }, [tab]);
 
@@ -240,19 +263,21 @@ export function QuickCaptureWindow() {
       setTaskTitle("");
       setTaskTime("");
       setSavedFlash(true);
-      setTimeout(() => void hideWindow(), 600);
+      await new Promise((resolve) => setTimeout(resolve, duration.normal));
+      await hideWindow();
     } catch (err) {
       console.error("保存今日任务失败", err);
       setSaveError(true);
     } finally {
       setTaskSaving(false);
+      setSavedFlash(false);
     }
   }, [taskSaving, taskTitle, taskTime, hideWindow]);
 
-  /** 保存 = 建行 → 写标题/正文 → 打「收件箱」标签 → "已保存"闪现 → 隐藏。空内容不保存直接关闭。 */
+  /** 保存 = 建行 → 写标题/正文 → 打「收件箱」标签 → "已保存"闪现 → 隐藏。标题与正文都为空才不保存直接关闭。 */
   const save = useCallback(async () => {
     if (saving) return;
-    if (!content.trim()) {
+    if (!content.trim() && !title.trim()) {
       await hideWindow();
       return;
     }
@@ -278,9 +303,19 @@ export function QuickCaptureWindow() {
     }
   }, [content, title, saving, hideWindow]);
 
-  // 全局键：Esc 关闭（草稿保留）；Ctrl+Enter 保存并关闭；Ctrl+Tab 切换页签
+  // 全局键：Esc 关闭（草稿保留）；Ctrl+Enter 保存并关闭；Ctrl+Tab / Ctrl+Shift+Tab 顺/逆切页签
   useEffect(() => {
+    const cycle = (back: boolean) =>
+      setTab((t) => {
+        const keys: Tab[] = ["write", "task", "history"];
+        const i = keys.indexOf(t);
+        return keys[(i + (back ? keys.length - 1 : 1)) % keys.length];
+      });
     const onKey = (e: KeyboardEvent) => {
+      // 确认弹窗打开时让弹窗独占键盘：Esc 只关弹窗，Ctrl+Enter 不触保存
+      if (confirmClear) return;
+      // 中文输入法组合期间按键归 IME 处理（Esc 关候选词窗不应把整个速记箱藏掉）
+      if (e.isComposing || e.key === "Process") return;
       if (e.key === "Escape") {
         e.preventDefault();
         void hideWindow();
@@ -290,18 +325,20 @@ export function QuickCaptureWindow() {
         else void save();
       } else if (e.key === "Tab" && e.ctrlKey) {
         e.preventDefault();
-        setTab((t) => (t === "write" ? "task" : t === "task" ? "history" : "write"));
+        cycle(e.shiftKey);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // tab 必须在依赖里：onKey 闭包直接读 tab，缺依赖会按旧页签分流 Ctrl+Enter
     // （如任务页输入后 Ctrl+Tab 回速记页，Ctrl+Enter 会误存任务而非速记）。
-  }, [hideWindow, save, saveTask, tab]);
+  }, [hideWindow, save, saveTask, tab, confirmClear]);
 
-  /** 点击历史条目 = 追加到速记正文并切回速记页 */
+  /** 点击历史条目 = 追加到速记正文并切回速记页，光标落到末尾 */
   const appendToDraft = (entry: ClipboardEntry) => {
-    setContent((c) => (c.trim() ? `${c.replace(/\n+$/, "")}\n${entry.content}` : entry.content));
+    const next = content.trim() ? `${content.replace(/\n+$/, "")}\n${entry.content}` : entry.content;
+    pendingCaretRef.current = next.length;
+    setContent(next);
     setSaveError(false);
     setTab("write");
   };
@@ -357,7 +394,15 @@ export function QuickCaptureWindow() {
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="标题（可选）"
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
+              // 标题里回车 = 跳到正文，符合单行输入框的直觉
+              if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                textareaRef.current?.focus();
+              }
+            }}
+            placeholder="标题（可选，回车进正文）"
             className="h-9 shrink-0 rounded-none border-x-0 border-t-0 px-3 text-sm shadow-none focus-visible:ring-0"
           />
           <Textarea
@@ -378,8 +423,16 @@ export function QuickCaptureWindow() {
             ref={taskInputRef}
             value={taskTitle}
             onChange={(e) => setTaskTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
+              // 任务页只有标题一个必填项：单行回车即保存，无需 Ctrl
+              if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                void saveTask();
+              }
+            }}
             autoFocus
-            placeholder="今天要做什么？（必填）"
+            placeholder="今天要做什么？（必填，回车保存）"
             className="h-9 shrink-0 rounded-none border-x-0 border-t-0 px-0 text-sm shadow-none focus-visible:ring-0"
           />
           <div className="mt-2 flex items-center gap-2">
@@ -387,10 +440,18 @@ export function QuickCaptureWindow() {
               type="time"
               value={taskTime}
               onChange={(e) => setTaskTime(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                // 选完时间顺手回车即提交，不必跳回标题框
+                if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                  void saveTask();
+                }
+              }}
               className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
               aria-label="开始时间（可选）"
             />
-            <span className="text-xs text-muted-foreground">开始时间可选；Ctrl+Enter 保存</span>
+            <span className="text-xs text-muted-foreground">开始时间可选；Enter 保存并关闭</span>
           </div>
           <Button
             type="button"

@@ -22,7 +22,7 @@
 //! / `quickcapture::remove_entry(&app, &id)` / `quickcapture::clear_entries(&app)`
 //! / `quickcapture::pin_entry(&app, &id)`。
 
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 
 use crate::db::clipboard;
 use crate::db::models::ClipboardEntry;
@@ -31,7 +31,8 @@ use crate::state::AppState;
 
 /// 快速捕获窗口 label（前端按此路由到 QuickCaptureWindow）
 pub const LABEL: &str = "quick-capture";
-/// 窗口尺寸：物理像素
+/// 窗口尺寸：逻辑像素（CSS px）。高 DPI 缩放下按 scale_factor 换算物理像素，
+/// 否则 175% 屏上物理 440px 只剩 ~251 CSS px，布局会被整体压扁。
 pub const WIDTH: i32 = 440;
 pub const HEIGHT: i32 = 260;
 /// 距屏幕顶部的边距（物理像素）
@@ -73,7 +74,6 @@ pub fn open_task(app: &AppHandle) -> AppResult<()> {
 
 /// 创建窗口（不可见），定位到主屏顶部居中。`task=true` 时 URL 携带初始「任务」tab。
 fn create_window(app: &AppHandle, task: bool) -> AppResult<()> {
-    let (x, y) = top_position(app);
     let url = if task { "index.html?mode=task" } else { "index.html" };
     let win = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App(url.into()))
         .title("快速捕获")
@@ -86,19 +86,21 @@ fn create_window(app: &AppHandle, task: bool) -> AppResult<()> {
         .focused(true)
         .visible(false)
         .build()?;
-    let _ = win.set_size(PhysicalSize::new(WIDTH as u32, HEIGHT as u32));
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let _ = win.set_size(LogicalSize::new(WIDTH as f64, HEIGHT as f64));
+    let (x, y) = top_position(app, (WIDTH as f64 * scale) as i32);
     let _ = win.set_position(PhysicalPosition::new(x, y));
-    log::info!("快速捕获窗口已创建 label={LABEL} pos=({x},{y})");
+    log::info!("快速捕获窗口已创建 label={LABEL} pos=({x},{y}) scale={scale}");
     Ok(())
 }
 
-/// 主屏顶部居中坐标；取不到主屏时回退 (0, 48)。
-fn top_position(app: &AppHandle) -> (i32, i32) {
+/// 主屏顶部居中坐标（物理像素）；取不到主屏时回退 (0, 48)。
+fn top_position(app: &AppHandle, win_w: i32) -> (i32, i32) {
     if let Ok(Some(m)) = app.primary_monitor() {
         let pos = m.position();
         let size = m.size();
         return (
-            top_center_x(pos.x, size.width as i32, WIDTH),
+            top_center_x(pos.x, size.width as i32, win_w),
             pos.y + TOP_MARGIN,
         );
     }
